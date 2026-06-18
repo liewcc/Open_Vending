@@ -150,6 +150,21 @@
   #btn-download:active { background: #aa3333; }
   #btn-download:disabled { background: #45475a; color: #6c7086; cursor: default; }
 
+  #btn-update {
+    padding: 9px 14px;
+    background: #313552;
+    color: #6c7086;
+    border: none;
+    border-radius: 6px;
+    cursor: default;
+    font-size: 12px;
+    font-weight: 600;
+    transition: background .15s, color .15s;
+  }
+  #btn-update.available { background: #1e6b8a; color: #fff; cursor: pointer; }
+  #btn-update.available:hover { background: #1a5a75; }
+  #btn-update.up-to-date { background: #2d4a3e; color: #a6e3a1; }
+
   /* ── Main Panel ── */
   #main {
     flex: 1;
@@ -254,6 +269,7 @@
   </div>
 
   <button id="btn-download" disabled onclick="redownload()">Re-download</button>
+  <button id="btn-update" disabled onclick="triggerUpdate()">Checking...</button>
 </aside>
 
 <!-- Main Panel -->
@@ -287,6 +303,7 @@
   const badge      = document.getElementById('status-badge')
   const statusText = document.getElementById('status-text')
   const btnDl      = document.getElementById('btn-download')
+  const btnUpdate  = document.getElementById('btn-update')
   const placeholder= document.getElementById('placeholder')
   const tableWrap  = document.getElementById('table-wrap')
   const fileInfo   = document.getElementById('file-info')
@@ -371,6 +388,37 @@
     const name = filePath.replace(/\\/g, '/').split('/').pop()
     fileInfo.textContent = name
   })
+
+  window.api.onUpdateStatus(({ status }) => {
+    if (status === 'available') {
+      btnUpdate.textContent = 'Relaunch to Update'
+      btnUpdate.className = 'available'
+      btnUpdate.disabled = false
+    } else if (status === 'up-to-date') {
+      btnUpdate.textContent = 'Up to Date'
+      btnUpdate.className = 'up-to-date'
+      btnUpdate.disabled = true
+    } else {
+      btnUpdate.textContent = 'Check Failed'
+      btnUpdate.disabled = true
+    }
+  })
+
+  window.api.onUpdateProgress(state => {
+    if (state === 'downloading') {
+      btnUpdate.textContent = 'Downloading...'
+      btnUpdate.className = ''
+      btnUpdate.disabled = true
+      btnDl.disabled = true
+    } else if (state === 'error') {
+      btnUpdate.textContent = 'Update Failed'
+      btnUpdate.disabled = true
+    }
+  })
+
+  function triggerUpdate() {
+    window.api.doUpdate()
+  }
 
   function redownload() {
     btnDl.disabled = true

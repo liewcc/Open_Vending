@@ -9,6 +9,9 @@ contextBridge.exposeInMainWorld('api', {
   onNeedsCredentials: cb => ipcRenderer.on('needs-credentials', ()      => cb()),
   startDownload:      ()           => ipcRenderer.send('start-download'),
   saveCredentials:    (u, p)       => ipcRenderer.send('save-credentials', { username: u, password: p }),
+  doUpdate:           ()           => ipcRenderer.send('do-update'),
+  onUpdateStatus:     cb => ipcRenderer.on('update-status',   (_, d) => cb(d)),
+  onUpdateProgress:   cb => ipcRenderer.on('update-progress', (_, s) => cb(s)),
 
   parseExcel(filePath) {
     const wb = xlsx.readFile(filePath)

@@ -2,11 +2,83 @@ const { app, BrowserWindow, ipcMain, safeStorage } = require('electron')
 const { spawn } = require('child_process')
 const path = require('path')
 const fs   = require('fs')
+const os   = require('os')
 
 const ROOT      = path.join(__dirname, '..')
 const CRED_FILE = path.join(app.getPath('userData'), 'credentials.enc')
 let win
 let cachedCreds = null
+
+const LOCAL_VERSION  = require('../package.json').version
+const REPO_PKG_URL   = 'https://raw.githubusercontent.com/liewcc/Open_Vending/main/package.json'
+const REPO_ZIP_URL   = 'https://github.com/liewcc/Open_Vending/archive/refs/heads/main.zip'
+const UPDATE_EXCLUDE = ['node_modules', 'python', 'browsers', 'node', 'db', '.claude', '.git']
+
+// ── Update helpers ────────────────────────────────────────────────────────────
+
+function semverGt(a, b) {
+  const pa = a.split('.').map(Number)
+  const pb = b.split('.').map(Number)
+  for (let i = 0; i < 3; i++) {
+    if ((pa[i] || 0) > (pb[i] || 0)) return true
+    if ((pa[i] || 0) < (pb[i] || 0)) return false
+  }
+  return false
+}
+
+async function checkForUpdate() {
+  try {
+    const res  = await fetch(REPO_PKG_URL)
+    const pkg  = await res.json()
+    return { status: semverGt(pkg.version, LOCAL_VERSION) ? 'available' : 'up-to-date' }
+  } catch {
+    return { status: 'error' }
+  }
+}
+
+async function doUpdate() {
+  try {
+    win.webContents.send('update-progress', 'downloading')
+
+    const tmpDir  = path.join(os.tmpdir(), `ov-update-${Date.now()}`)
+    const zipPath = path.join(tmpDir, 'update.zip')
+    fs.mkdirSync(tmpDir, { recursive: true })
+
+    const res = await fetch(REPO_ZIP_URL)
+    const buf = await res.arrayBuffer()
+    fs.writeFileSync(zipPath, Buffer.from(buf))
+
+    // Updater script: waits for this process to exit, extracts, copies, relaunches
+    const updaterPs1 = path.join(tmpDir, 'updater.ps1')
+    const excludeList = UPDATE_EXCLUDE.map(e => `'${e}'`).join(',')
+    fs.writeFileSync(updaterPs1, `
+$pid_  = ${process.pid}
+$zip   = '${zipPath.replace(/\\/g, '\\\\')}'
+$tmp   = '${tmpDir.replace(/\\/g, '\\\\')}'
+$app   = '${ROOT.replace(/\\/g, '\\\\')}'
+$vbs   = '${path.join(ROOT, 'run.vbs').replace(/\\/g, '\\\\')}'
+
+while (Get-Process -Id $pid_ -ErrorAction SilentlyContinue) { Start-Sleep -Milliseconds 300 }
+
+Expand-Archive -Path $zip -DestinationPath "$tmp\\extracted" -Force
+$src = (Get-ChildItem "$tmp\\extracted" | Select-Object -First 1).FullName
+$excl = @(${excludeList})
+Get-ChildItem $src | Where-Object { $_.Name -notin $excl } | ForEach-Object {
+  Copy-Item $_.FullName (Join-Path $app $_.Name) -Recurse -Force
+}
+Start-Process 'wscript.exe' -ArgumentList $vbs
+`)
+
+    spawn('powershell.exe',
+      ['-NoProfile', '-WindowStyle', 'Hidden', '-File', updaterPs1],
+      { detached: true, stdio: 'ignore' }
+    ).unref()
+
+    app.quit()
+  } catch (err) {
+    win.webContents.send('update-progress', 'error')
+  }
+}
 
 // ── Credential helpers ────────────────────────────────────────────────────────
 
@@ -100,6 +172,8 @@ app.whenReady().then(() => {
     } else {
       win.webContents.send('needs-credentials')
     }
+
+    checkForUpdate().then(result => win.webContents.send('update-status', result))
   })
 })
 
@@ -118,3 +192,5 @@ ipcMain.on('save-credentials', (_, { username, password }) => {
 ipcMain.on('start-download', () => {
   if (cachedCreds) runDownload(cachedCreds)
 })
+
+ipcMain.on('do-update', () => doUpdate())
