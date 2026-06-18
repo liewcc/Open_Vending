@@ -1,5 +1,7 @@
 # Open Vending
 
+**English** | [简体中文](README.zh-CN.md)
+
 DVends replenishment report automation tool.
 
 ## Installation
