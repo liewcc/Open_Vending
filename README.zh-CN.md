@@ -2,7 +2,7 @@
 
 [English](README.md) | **简体中文**
 
-<img src="asset/image/1.png" width="50%">
+<p align="center"><img src="asset/image/1.png" width="50%"></p>
 
 ## 安装
 
