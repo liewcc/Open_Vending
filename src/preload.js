@@ -15,6 +15,8 @@ contextBridge.exposeInMainWorld('api', {
   openExternal:       url          => shell.openExternal(url),
   getSettings:        ()           => ipcRenderer.invoke('get-settings'),
   setSetting:         (key, val)   => ipcRenderer.send('set-setting', { key, val }),
+  onDiffReady:        cb => ipcRenderer.on('diff-ready', (_, count) => cb(count)),
+  getDiffs:           ()           => ipcRenderer.invoke('get-diffs'),
 
   parseExcel(filePath) {
     const wb = xlsx.readFile(filePath)

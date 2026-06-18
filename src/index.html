@@ -236,6 +236,19 @@
   }
   .toggle-row:last-child { border-bottom: none; }
 
+  .interval-input {
+    width: 64px;
+    padding: 5px 8px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 13px;
+    text-align: right;
+    outline: none;
+    color: #374151;
+  }
+  .interval-input:focus { border-color: #e05c5c; }
+  .interval-input:disabled { background: #f3f4f6; color: #9ca3af; }
+
   .toggle-label { font-size: 13px; font-weight: 500; color: #374151; }
   .toggle-desc  { font-size: 11px; color: #9ca3af; margin-top: 3px; }
 
@@ -260,6 +273,82 @@
   }
   input:checked + .slider { background: #e05c5c; }
   input:checked + .slider:before { transform: translateX(18px); }
+
+  /* ── Changes badge ── */
+  #changes-section { display: none; }
+
+  #btn-changes {
+    padding: 8px 12px;
+    background: #3a2d10;
+    color: #f9e2af;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: background .15s;
+    width: 100%;
+  }
+  #btn-changes:hover { background: #4a3a18; }
+
+  #changes-dot {
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    background: #f9e2af;
+    color: #3a2d10;
+    font-size: 10px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  /* ── Diff panel ── */
+  #diff-panel {
+    flex: 1;
+    display: none;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  #diff-toolbar {
+    padding: 14px 20px;
+    background: #fff;
+    border-bottom: 1px solid #e5e7eb;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  #btn-back {
+    padding: 5px 12px;
+    background: #f3f4f6;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #374151;
+    cursor: pointer;
+  }
+  #btn-back:hover { background: #e5e7eb; }
+
+  #diff-wrap {
+    flex: 1;
+    overflow: auto;
+  }
+
+  #diff-table thead tr { background: #92400e; }
+
+  #diff-table tbody tr { background: #fffbeb; }
+  #diff-table tbody tr:nth-child(even) { background: #fef3c7; }
+  #diff-table tbody tr:hover { background: #fde68a; }
+
+  .val-old { color: #b91c1c; text-decoration: line-through; }
+  .val-new { color: #15803d; font-weight: 600; }
 
   /* ── Main Panel ── */
   #main {
@@ -372,6 +461,14 @@
     <div id="log"></div>
   </div>
 
+  <div id="changes-section">
+    <div class="label">Latest Scan</div>
+    <button id="btn-changes" onclick="showDiffView()">
+      <div id="changes-dot">0</div>
+      <span id="changes-text">changes detected</span>
+    </button>
+  </div>
+
   <button id="btn-download" disabled onclick="redownload()">Re-download</button>
   <button id="btn-github" onclick="window.api.openExternal('https://github.com/liewcc/Open_Vending')">
     <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
@@ -406,6 +503,50 @@
         <span class="slider"></span>
       </label>
     </div>
+  </div>
+
+  <h3>Database Setting</h3>
+  <div class="config-card">
+    <div class="toggle-row">
+      <div>
+        <div class="toggle-label">Auto Scan</div>
+        <div class="toggle-desc">Periodically re-download and track data changes in SQLite</div>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="tog-auto-dl" onchange="applyAutoDownload(this.checked)">
+        <span class="slider"></span>
+      </label>
+    </div>
+    <div class="toggle-row">
+      <div>
+        <div class="toggle-label">Interval (minutes)</div>
+        <div class="toggle-desc">How often to check for new data</div>
+      </div>
+      <input type="number" id="inp-interval" class="interval-input" min="1" max="1440" value="30"
+             onchange="applySetting('autoDownloadInterval', Math.max(1, parseInt(this.value) || 30))">
+    </div>
+  </div>
+</div>
+
+<!-- Diff Panel -->
+<div id="diff-panel">
+  <div id="diff-toolbar">
+    <button id="btn-back" onclick="showMainView()">← Back</button>
+    <h2 style="font-size:14px;font-weight:600;color:#374151;flex:1">Changes Detected</h2>
+    <span id="diff-count-label" style="font-size:11px;color:#9ca3af"></span>
+  </div>
+  <div id="diff-wrap">
+    <table id="diff-table">
+      <thead>
+        <tr>
+          <th>Row</th>
+          <th>Field</th>
+          <th>Previous</th>
+          <th>Current</th>
+        </tr>
+      </thead>
+      <tbody id="diff-tbody"></tbody>
+    </table>
   </div>
 </div>
 
@@ -464,6 +605,8 @@
 
     const thead = document.getElementById('thead')
     const tbody = document.getElementById('tbody')
+    thead.innerHTML = ''
+    tbody.innerHTML = ''
 
     const hRow = document.createElement('tr')
     rows[0].forEach(h => {
@@ -534,7 +677,13 @@
   window.api.getSettings().then(s => {
     document.getElementById('tog-menubar').checked = s.menuBar
     document.getElementById('tog-console').checked = s.showConsole
+    document.getElementById('tog-auto-dl').checked = s.autoDownload
+    document.getElementById('inp-interval').value = s.autoDownloadInterval ?? 30
   })
+
+  function applyAutoDownload(checked) {
+    applySetting('autoDownload', checked)
+  }
 
   function toggleConfig() {
     configVisible = !configVisible
@@ -576,6 +725,41 @@
 
   function triggerUpdate() {
     window.api.doUpdate()
+  }
+
+  // ── Diff view ───────────────────────────────────────────────────────────────
+  const diffPanel    = document.getElementById('diff-panel')
+  const changesSection = document.getElementById('changes-section')
+
+  window.api.onDiffReady(count => {
+    if (count === 0) { changesSection.style.display = 'none'; return }
+    document.getElementById('changes-dot').textContent  = count
+    document.getElementById('changes-text').textContent = `change${count > 1 ? 's' : ''} detected`
+    changesSection.style.display = 'block'
+  })
+
+  async function showDiffView() {
+    const diffs = await window.api.getDiffs()
+    const tbody = document.getElementById('diff-tbody')
+    tbody.innerHTML = ''
+    diffs.forEach(d => {
+      const tr = document.createElement('tr')
+      tr.innerHTML = `<td>${d.row}</td><td>${d.col}</td>
+        <td><span class="val-old">${d.old}</span></td>
+        <td><span class="val-new">${d.new}</span></td>`
+      tbody.appendChild(tr)
+    })
+    document.getElementById('diff-count-label').textContent = `${diffs.length} field change${diffs.length > 1 ? 's' : ''}`
+    document.getElementById('main').style.display    = 'none'
+    document.getElementById('config-panel').style.display = 'none'
+    btnGear.classList.remove('active')
+    configVisible = false
+    diffPanel.style.display = 'flex'
+  }
+
+  function showMainView() {
+    diffPanel.style.display              = 'none'
+    document.getElementById('main').style.display = 'flex'
   }
 
   function redownload() {

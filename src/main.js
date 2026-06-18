@@ -7,12 +7,15 @@ const os   = require('os')
 const ROOT          = path.join(__dirname, '..')
 const CRED_FILE     = path.join(app.getPath('userData'), 'credentials.enc')
 const SETTINGS_FILE = path.join(app.getPath('userData'), 'settings.json')
-const DEFAULT_SETTINGS = { menuBar: false, showConsole: false }
+const DEFAULT_SETTINGS = { menuBar: false, showConsole: false, autoDownload: false, autoDownloadInterval: 30 }
 const ICON_PNG = path.join(ROOT, 'asset', 'image', 'icon_nobg.png')
 let win
 let tray = null
 let cachedCreds = null
 let settings = DEFAULT_SETTINGS
+let isDownloading = false
+let autoDownloadTimer = null
+let lastDiffs = []
 
 function loadSettings() {
   try { return { ...DEFAULT_SETTINGS, ...JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8')) } }
@@ -135,9 +138,21 @@ function createWindow() {
   win.loadFile(path.join(__dirname, 'index.html'))
 }
 
+// ── Auto-download timer ───────────────────────────────────────────────────────
+
+function setupAutoDownload() {
+  if (autoDownloadTimer) { clearInterval(autoDownloadTimer); autoDownloadTimer = null }
+  if (!settings.autoDownload || !(settings.autoDownloadInterval > 0)) return
+  autoDownloadTimer = setInterval(() => {
+    if (cachedCreds && !isDownloading) runDownload(cachedCreds)
+  }, settings.autoDownloadInterval * 60 * 1000)
+}
+
 // ── Download ──────────────────────────────────────────────────────────────────
 
 function runDownload(creds) {
+  if (isDownloading) return
+  isDownloading = true
   const pythonExe = path.join(ROOT, 'python', 'python.exe')
   const script    = path.join(ROOT, 'open_vending.py')
 
@@ -157,6 +172,11 @@ function runDownload(creds) {
     data.toString().trim().split('\n').forEach(line => {
       line = line.trim()
       if (!line) return
+      if (line.startsWith('DIFFS: ')) {
+        try { lastDiffs = JSON.parse(line.slice(7)) } catch { lastDiffs = [] }
+        win.webContents.send('diff-ready', lastDiffs.length)
+        return
+      }
       win.webContents.send('py-out', line)
       const m = line.match(/^FILE: (.+)$/)
       if (m) win.webContents.send('file-ready', m[1].trim())
@@ -168,11 +188,13 @@ function runDownload(creds) {
   })
 
   proc.on('error', err => {
+    isDownloading = false
     win.webContents.send('py-out', 'ERROR: ' + err.message)
     win.webContents.send('py-done', false)
   })
 
   proc.on('close', code => {
+    isDownloading = false
     win.webContents.send('py-done', code === 0)
   })
 }
@@ -209,6 +231,7 @@ app.whenReady().then(() => {
     }
 
     checkForUpdate().then(result => win.webContents.send('update-status', result))
+    setupAutoDownload()
   })
 })
 
@@ -231,6 +254,7 @@ ipcMain.on('start-download', () => {
 ipcMain.on('do-update', () => doUpdate())
 
 ipcMain.handle('get-settings', () => settings)
+ipcMain.handle('get-diffs',   () => lastDiffs)
 
 ipcMain.on('set-setting', (_, { key, val }) => {
   settings[key] = val
@@ -238,5 +262,8 @@ ipcMain.on('set-setting', (_, { key, val }) => {
   if (key === 'menuBar') {
     win.setMenuBarVisibility(val)
     win.setAutoHideMenuBar(!val)
+  }
+  if (key === 'autoDownload' || key === 'autoDownloadInterval') {
+    setupAutoDownload()
   }
 })
