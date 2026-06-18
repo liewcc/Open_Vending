@@ -2,6 +2,8 @@
 
 [English](README.md) | **简体中文**
 
+![Open Vending](asset/image/1.png)
+
 DVends 补货报告自动化工具。
 
 ## 安装
