@@ -4,10 +4,22 @@ const path = require('path')
 const fs   = require('fs')
 const os   = require('os')
 
-const ROOT      = path.join(__dirname, '..')
-const CRED_FILE = path.join(app.getPath('userData'), 'credentials.enc')
+const ROOT          = path.join(__dirname, '..')
+const CRED_FILE     = path.join(app.getPath('userData'), 'credentials.enc')
+const SETTINGS_FILE = path.join(app.getPath('userData'), 'settings.json')
+const DEFAULT_SETTINGS = { menuBar: false, showConsole: false }
 let win
 let cachedCreds = null
+let settings = DEFAULT_SETTINGS
+
+function loadSettings() {
+  try { return { ...DEFAULT_SETTINGS, ...JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8')) } }
+  catch { return { ...DEFAULT_SETTINGS } }
+}
+
+function saveSettings() {
+  fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings))
+}
 
 const LOCAL_VERSION  = require('../package.json').version
 const REPO_PKG_URL   = 'https://raw.githubusercontent.com/liewcc/Open_Vending/main/package.json'
@@ -127,6 +139,7 @@ function runDownload(creds) {
   const script    = path.join(ROOT, 'open_vending.py')
 
   const proc = spawn(pythonExe, [script, '--headless'], {
+    windowsHide: !settings.showConsole,
     env: {
       ...process.env,
       PLAYWRIGHT_BROWSERS_PATH: path.join(ROOT, 'browsers'),
@@ -164,7 +177,10 @@ function runDownload(creds) {
 // ── App lifecycle ─────────────────────────────────────────────────────────────
 
 app.whenReady().then(() => {
+  settings = loadSettings()
   createWindow()
+  win.setMenuBarVisibility(settings.menuBar)
+  win.setAutoHideMenuBar(!settings.menuBar)
   win.webContents.once('did-finish-load', () => {
     cachedCreds = loadCredentials()
     if (cachedCreds) {
@@ -194,3 +210,14 @@ ipcMain.on('start-download', () => {
 })
 
 ipcMain.on('do-update', () => doUpdate())
+
+ipcMain.handle('get-settings', () => settings)
+
+ipcMain.on('set-setting', (_, { key, val }) => {
+  settings[key] = val
+  saveSettings()
+  if (key === 'menuBar') {
+    win.setMenuBarVisibility(val)
+    win.setAutoHideMenuBar(!val)
+  }
+})

@@ -12,6 +12,8 @@ contextBridge.exposeInMainWorld('api', {
   doUpdate:           ()           => ipcRenderer.send('do-update'),
   onUpdateStatus:     cb => ipcRenderer.on('update-status',   (_, d) => cb(d)),
   onUpdateProgress:   cb => ipcRenderer.on('update-progress', (_, s) => cb(s)),
+  getSettings:        ()           => ipcRenderer.invoke('get-settings'),
+  setSetting:         (key, val)   => ipcRenderer.send('set-setting', { key, val }),
 
   parseExcel(filePath) {
     const wb = xlsx.readFile(filePath)
