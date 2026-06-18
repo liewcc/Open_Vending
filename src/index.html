@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'">
+<title>Open Vending</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 13px;
+    display: flex;
+    height: 100vh;
+    overflow: hidden;
+    background: #f0f2f5;
+  }
+
+  /* ── Side Panel ── */
+  #side {
+    width: 240px;
+    min-width: 240px;
+    background: #1e2235;
+    color: #cdd6f4;
+    display: flex;
+    flex-direction: column;
+    padding: 20px 16px;
+    gap: 16px;
+  }
+
+  #side h1 {
+    font-size: 15px;
+    font-weight: 600;
+    color: #fff;
+    letter-spacing: .3px;
+  }
+
+  #side h1 span { color: #e05c5c; }
+
+  .label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: #6c7086;
+    margin-bottom: 6px;
+  }
+
+  #status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    padding: 4px 10px;
+    border-radius: 20px;
+    background: #313552;
+    color: #cdd6f4;
+  }
+
+  #status-badge .dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: #a6adc8;
+    flex-shrink: 0;
+  }
+
+  #status-badge.running .dot { background: #f9e2af; animation: pulse 1s infinite; }
+  #status-badge.ok  .dot { background: #a6e3a1; }
+  #status-badge.err .dot { background: #f38ba8; }
+
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+  /* ── Credential Modal ── */
+  #cred-overlay {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,.55);
+    z-index: 100;
+    align-items: center;
+    justify-content: center;
+  }
+  #cred-overlay.show { display: flex; }
+
+  #cred-card {
+    background: #fff;
+    border-radius: 10px;
+    padding: 32px 28px;
+    width: 340px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  #cred-card h2 { font-size: 15px; font-weight: 600; color: #111; }
+  #cred-card p  { font-size: 12px; color: #6b7280; line-height: 1.5; }
+
+  .field { display: flex; flex-direction: column; gap: 5px; }
+  .field label { font-size: 11px; font-weight: 600; color: #374151; }
+  .field input {
+    padding: 8px 10px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 13px;
+    outline: none;
+  }
+  .field input:focus { border-color: #e05c5c; }
+
+  #cred-error { font-size: 11px; color: #e05c5c; min-height: 14px; }
+
+  #btn-save {
+    padding: 10px;
+    background: #e05c5c;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  #btn-save:hover { background: #cc4444; }
+
+  #log {
+    flex: 1;
+    overflow-y: auto;
+    background: #181926;
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-family: 'Consolas', monospace;
+    font-size: 11px;
+    line-height: 1.6;
+    color: #a6adc8;
+    word-break: break-word;
+  }
+
+  #log .err { color: #f38ba8; }
+
+  #btn-download {
+    padding: 9px 14px;
+    background: #e05c5c;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 600;
+    transition: background .15s;
+  }
+
+  #btn-download:hover  { background: #cc4444; }
+  #btn-download:active { background: #aa3333; }
+  #btn-download:disabled { background: #45475a; color: #6c7086; cursor: default; }
+
+  /* ── Main Panel ── */
+  #main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  #toolbar {
+    padding: 14px 20px;
+    background: #fff;
+    border-bottom: 1px solid #e5e7eb;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  #toolbar h2 { font-size: 14px; font-weight: 600; color: #374151; flex: 1; }
+  #file-info  { font-size: 11px; color: #9ca3af; }
+
+  #placeholder {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: #9ca3af;
+    gap: 8px;
+  }
+
+  #placeholder svg { opacity: .3; }
+  #placeholder p   { font-size: 13px; }
+
+  #table-wrap {
+    flex: 1;
+    overflow: auto;
+    display: none;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+
+  thead tr { background: #c0392b; color: #fff; }
+  thead th {
+    padding: 9px 12px;
+    text-align: left;
+    font-weight: 600;
+    white-space: nowrap;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+  }
+
+  tbody tr:nth-child(even) { background: #f9fafb; }
+  tbody tr:hover           { background: #fef2f2; }
+
+  tbody td {
+    padding: 7px 12px;
+    border-bottom: 1px solid #f3f4f6;
+    white-space: nowrap;
+  }
+</style>
+</head>
+<body>
+
+<!-- Credential Modal -->
+<div id="cred-overlay">
+  <div id="cred-card">
+    <h2>Welcome to Open Vending</h2>
+    <p>Enter your DVends portal credentials. They are encrypted and stored locally on this machine only.</p>
+    <div class="field">
+      <label>Username</label>
+      <input id="inp-user" type="text" placeholder="DVends username" autocomplete="username">
+    </div>
+    <div class="field">
+      <label>Password</label>
+      <input id="inp-pass" type="password" placeholder="DVends password" autocomplete="current-password">
+    </div>
+    <div id="cred-error"></div>
+    <button id="btn-save" onclick="saveCredentials()">Save & Connect</button>
+  </div>
+</div>
+
+<!-- Side Panel -->
+<aside id="side">
+  <h1>Open<span>Vending</span></h1>
+
+  <div>
+    <div class="label">Status</div>
+    <div id="status-badge" class="running">
+      <div class="dot"></div>
+      <span id="status-text">Starting...</span>
+    </div>
+  </div>
+
+  <div style="flex:1;display:flex;flex-direction:column;gap:6px;min-height:0">
+    <div class="label">Log</div>
+    <div id="log"></div>
+  </div>
+
+  <button id="btn-download" disabled onclick="redownload()">Re-download</button>
+</aside>
+
+<!-- Main Panel -->
+<main id="main">
+  <div id="toolbar">
+    <h2>Replenishment Report</h2>
+    <span id="file-info"></span>
+  </div>
+
+  <div id="placeholder">
+    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+      <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+      <polyline points="14 2 14 8 20 8"/>
+      <line x1="16" y1="13" x2="8" y2="13"/>
+      <line x1="16" y1="17" x2="8" y2="17"/>
+      <polyline points="10 9 9 9 8 9"/>
+    </svg>
+    <p id="placeholder-text">Downloading report...</p>
+  </div>
+
+  <div id="table-wrap">
+    <table id="data-table">
+      <thead id="thead"></thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+</main>
+
+<script>
+  const log        = document.getElementById('log')
+  const badge      = document.getElementById('status-badge')
+  const statusText = document.getElementById('status-text')
+  const btnDl      = document.getElementById('btn-download')
+  const placeholder= document.getElementById('placeholder')
+  const tableWrap  = document.getElementById('table-wrap')
+  const fileInfo   = document.getElementById('file-info')
+  const pText      = document.getElementById('placeholder-text')
+
+  function addLog(msg) {
+    const div = document.createElement('div')
+    if (msg.startsWith('ERROR:')) div.className = 'err'
+    div.textContent = msg.replace(/^STATUS: /, '')
+    log.appendChild(div)
+    log.scrollTop = log.scrollHeight
+  }
+
+  function setStatus(state, text) {
+    badge.className = state
+    statusText.textContent = text
+  }
+
+  function renderTable(rows) {
+    if (!rows || rows.length < 2) return
+
+    const thead = document.getElementById('thead')
+    const tbody = document.getElementById('tbody')
+
+    const hRow = document.createElement('tr')
+    rows[0].forEach(h => {
+      const th = document.createElement('th')
+      th.textContent = h
+      hRow.appendChild(th)
+    })
+    thead.appendChild(hRow)
+
+    rows.slice(1).forEach(row => {
+      const tr = document.createElement('tr')
+      rows[0].forEach((_, i) => {
+        const td = document.createElement('td')
+        td.textContent = row[i] ?? ''
+        tr.appendChild(td)
+      })
+      tbody.appendChild(tr)
+    })
+
+    placeholder.style.display = 'none'
+    tableWrap.style.display = 'block'
+  }
+
+  window.api.onNeedsCredentials(() => {
+    document.getElementById('cred-overlay').classList.add('show')
+    document.getElementById('inp-user').focus()
+  })
+
+  function saveCredentials() {
+    const u = document.getElementById('inp-user').value.trim()
+    const p = document.getElementById('inp-pass').value
+    if (!u || !p) {
+      document.getElementById('cred-error').textContent = 'Please enter both username and password.'
+      return
+    }
+    document.getElementById('cred-overlay').classList.remove('show')
+    window.api.saveCredentials(u, p)
+  }
+
+  document.getElementById('inp-pass').addEventListener('keydown', e => {
+    if (e.key === 'Enter') saveCredentials()
+  })
+
+  window.api.onLog(msg => addLog(msg))
+
+  window.api.onDone(ok => {
+    if (ok) {
+      setStatus('ok', 'Ready')
+    } else {
+      setStatus('err', 'Failed')
+      pText.textContent = 'Download failed. Check the log.'
+    }
+    btnDl.disabled = false
+  })
+
+  window.api.onFileReady(filePath => {
+    const rows = window.api.parseExcel(filePath)
+    renderTable(rows)
+    const name = filePath.replace(/\\/g, '/').split('/').pop()
+    fileInfo.textContent = name
+  })
+
+  function redownload() {
+    btnDl.disabled = true
+    setStatus('running', 'Downloading...')
+    document.getElementById('thead').innerHTML = ''
+    document.getElementById('tbody').innerHTML = ''
+    placeholder.style.display = 'flex'
+    tableWrap.style.display   = 'none'
+    pText.textContent = 'Downloading report...'
+    window.api.startDownload()
+  }
+</script>
+
+</body>
+</html>

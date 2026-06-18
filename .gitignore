@@ -1,0 +1,24 @@
+# Runtime dependencies (installed by setup.bat)
+node_modules/
+python/
+browsers/
+node/
+
+# Downloaded data
+db/
+*.xlsx
+
+# Setup artifacts
+setup.log
+get-pip.py
+node_tmp/
+
+# AI agent communication files
+.claude/
+memory/
+MEMORY.md
+HANDOFF.md
+
+# OS
+Thumbs.db
+desktop.ini
