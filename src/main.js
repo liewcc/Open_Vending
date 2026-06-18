@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, safeStorage } = require('electron')
+const { app, BrowserWindow, ipcMain, safeStorage, Tray, Menu } = require('electron')
 const { spawn } = require('child_process')
 const path = require('path')
 const fs   = require('fs')
@@ -8,7 +8,9 @@ const ROOT          = path.join(__dirname, '..')
 const CRED_FILE     = path.join(app.getPath('userData'), 'credentials.enc')
 const SETTINGS_FILE = path.join(app.getPath('userData'), 'settings.json')
 const DEFAULT_SETTINGS = { menuBar: false, showConsole: false }
+const ICON_PNG = path.join(ROOT, 'asset', 'image', 'icon_nobg.png')
 let win
+let tray = null
 let cachedCreds = null
 let settings = DEFAULT_SETTINGS
 
@@ -121,6 +123,7 @@ function createWindow() {
     height: 800,
     minWidth: 900,
     minHeight: 600,
+    icon: ICON_PNG,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -185,6 +188,16 @@ app.on('second-instance', () => {
 app.whenReady().then(() => {
   settings = loadSettings()
   createWindow()
+
+  tray = new Tray(ICON_PNG)
+  tray.setToolTip('Open Vending')
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: 'Show', click: () => { win.show(); win.focus() } },
+    { type: 'separator' },
+    { label: 'Quit', click: () => app.quit() }
+  ]))
+  tray.on('double-click', () => { win.show(); win.focus() })
+
   win.setMenuBarVisibility(settings.menuBar)
   win.setAutoHideMenuBar(!settings.menuBar)
   win.webContents.once('did-finish-load', () => {

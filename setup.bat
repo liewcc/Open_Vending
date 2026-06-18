@@ -152,6 +152,26 @@ echo [OK] npm install done >> "%LOG%"
 
 :done
 echo Setup completed: %DATE% %TIME% >> "%LOG%"
+
+REM Create desktop shortcut (write PS1 to temp to avoid inline quoting hell)
+echo Creating desktop shortcut...
+set "OV_PS1=%TEMP%\ov_shortcut.ps1"
+set "OV_VBS=%ROOT%run.vbs"
+set "OV_ICO=%ROOT%asset\image\icon.ico"
+set "OV_WD=%ROOT:~0,-1%"
+(
+  echo $desk = [Environment]::GetFolderPath^('Desktop'^)
+  echo $s = ^(New-Object -ComObject WScript.Shell^).CreateShortcut^($desk + '\Open Vending.lnk'^)
+  echo $s.TargetPath = 'wscript.exe'
+  echo $s.Arguments = '%OV_VBS%'
+  echo $s.WorkingDirectory = '%OV_WD%'
+  echo $s.IconLocation = '%OV_ICO%'
+  echo $s.Save^(^)
+) > "%OV_PS1%"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%OV_PS1%" >> "%LOG%" 2>&1
+del "%OV_PS1%"
+echo [OK] Desktop shortcut created
+echo [OK] Desktop shortcut created >> "%LOG%"
 echo.
 echo  ============================================
 echo   Setup complete! Run run.bat to start.
