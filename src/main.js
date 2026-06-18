@@ -176,6 +176,12 @@ function runDownload(creds) {
 
 // ── App lifecycle ─────────────────────────────────────────────────────────────
 
+if (!app.requestSingleInstanceLock()) app.quit()
+
+app.on('second-instance', () => {
+  if (win) { if (win.isMinimized()) win.restore(); win.focus() }
+})
+
 app.whenReady().then(() => {
   settings = loadSettings()
   createWindow()
