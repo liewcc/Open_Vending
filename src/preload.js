@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer } = require('electron')
+const { contextBridge, ipcRenderer, shell } = require('electron')
 const path = require('path')
 const xlsx = require(path.join(__dirname, '..', 'node_modules', 'xlsx'))
 
@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('api', {
   doUpdate:           ()           => ipcRenderer.send('do-update'),
   onUpdateStatus:     cb => ipcRenderer.on('update-status',   (_, d) => cb(d)),
   onUpdateProgress:   cb => ipcRenderer.on('update-progress', (_, s) => cb(s)),
+  openExternal:       url          => shell.openExternal(url),
   getSettings:        ()           => ipcRenderer.invoke('get-settings'),
   setSetting:         (key, val)   => ipcRenderer.send('set-setting', { key, val }),
 
