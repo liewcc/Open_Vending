@@ -971,6 +971,7 @@
       tbody.appendChild(tr)
     })
     document.getElementById('diff-count-label').textContent = `${diffs.length} field change${diffs.length > 1 ? 's' : ''}`
+    btnChanges.classList.remove('show')
     showPanel('diff')
   }
 
