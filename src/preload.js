@@ -15,12 +15,26 @@ contextBridge.exposeInMainWorld('api', {
   openExternal:       url          => shell.openExternal(url),
   getSettings:        ()           => ipcRenderer.invoke('get-settings'),
   setSetting:         (key, val)   => ipcRenderer.send('set-setting', { key, val }),
-  onDiffReady:        cb => ipcRenderer.on('diff-ready', (_, count) => cb(count)),
+  onDiffReady:        cb => ipcRenderer.on('diff-ready',        (_, count) => cb(count)),
+  onDownloadStarted:  cb => ipcRenderer.on('download-started',  ()         => cb()),
   getDiffs:           ()           => ipcRenderer.invoke('get-diffs'),
+  launchBrowser:        ()               => ipcRenderer.send('launch-browser'),
+  closeBrowser:         ()               => ipcRenderer.send('close-browser'),
+  onBrowserState:       cb => ipcRenderer.on('browser-state', (_, state) => cb(state)),
+  getRestockHistory:    (machine, lane)  => ipcRenderer.invoke('get-restock-history', { machine, lane }),
 
   parseExcel(filePath) {
     const wb = xlsx.readFile(filePath)
-    const ws = wb.Sheets[wb.SheetNames[0]]
-    return xlsx.utils.sheet_to_json(ws, { header: 1, defval: '' })
+    let allRows = null
+    for (const name of wb.SheetNames) {
+      const rows = xlsx.utils.sheet_to_json(wb.Sheets[name], { header: 1, defval: '' })
+      if (!rows.length) continue
+      if (allRows === null) {
+        allRows = [['Machine', ...rows[0]], ...rows.slice(1).map(r => [name, ...r])]
+      } else {
+        allRows = allRows.concat(rows.slice(1).map(r => [name, ...r]))
+      }
+    }
+    return allRows || []
   }
 })

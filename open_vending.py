@@ -16,12 +16,17 @@ from playwright.async_api import async_playwright
 USERNAME = os.environ.get('OV_USERNAME', '')
 PASSWORD = os.environ.get('OV_PASSWORD', '')
 
-DB_DIR = Path(__file__).parent / "db"
+DB_DIR  = Path(__file__).parent / "db"
+LOG_DIR = Path(__file__).parent / "log"
 DB_DIR.mkdir(exist_ok=True)
 
-HEADLESS = "--headless" in sys.argv
+HEADLESS   = "--headless" in sys.argv
+LOGIN_ONLY = "--login-only" in sys.argv
 
-LOGIN_URL  = "https://vendingportal.azurewebsites.net/SuperAdmin/SPLogin.aspx"
+BROWSER_STOP = DB_DIR / ".browser_stop"
+
+_DEFAULT_LOGIN_URL = "https://vendingportal.azurewebsites.net/SuperAdmin/SPLogin.aspx"
+LOGIN_URL  = os.environ.get('OV_LANDING_URL') or _DEFAULT_LOGIN_URL
 REPORT_URL = "https://vendingportal.azurewebsites.net/SuperAdmin/SPReplenishmentV2.aspx"
 
 
@@ -33,111 +38,111 @@ def status(msg):
 
 
 def import_to_sqlite(xlsx_path):
+    import shutil
     from openpyxl import load_workbook
 
     wb = load_workbook(xlsx_path, read_only=True, data_only=True)
-    ws = wb.active
-    rows = [list(row) for row in ws.iter_rows(values_only=True)]
-    wb.close()
-
-    if len(rows) < 2:
-        return []
-
-    headers = [str(h) if h is not None else f"col_{i}" for i, h in enumerate(rows[0])]
-    data_rows = rows[1:]
+    now = datetime.datetime.now().isoformat()
 
     conn = sqlite3.connect(str(SQLITE_DB))
-    # ponytail: bump this whenever the schema changes
-    SCHEMA_VERSION = 2
+    SCHEMA_VERSION = 3
     if conn.execute("PRAGMA user_version").fetchone()[0] < SCHEMA_VERSION:
         conn.executescript("""
             DROP TABLE IF EXISTS diffs;
             DROP TABLE IF EXISTS report_rows;
             DROP TABLE IF EXISTS snapshots;
+            DROP TABLE IF EXISTS current_state;
+            DROP TABLE IF EXISTS change_log;
+            CREATE TABLE current_state (
+                machine TEXT NOT NULL,
+                lane    TEXT NOT NULL,
+                restock INTEGER,
+                updated_at TEXT,
+                PRIMARY KEY (machine, lane)
+            );
+            CREATE TABLE change_log (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                detected_at  TEXT NOT NULL,
+                machine      TEXT NOT NULL,
+                lane         TEXT NOT NULL,
+                old_restock  INTEGER,
+                new_restock  INTEGER
+            );
         """)
-    conn.executescript("""
-        CREATE TABLE IF NOT EXISTS snapshots (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            downloaded_at TEXT NOT NULL,
-            filename TEXT NOT NULL,
-            row_count INTEGER NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS report_rows (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            snapshot_id INTEGER NOT NULL,
-            row_index INTEGER NOT NULL,
-            row_data TEXT NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS diffs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            detected_at TEXT NOT NULL,
-            new_snapshot_id INTEGER NOT NULL,
-            old_snapshot_id INTEGER NOT NULL,
-            row_index INTEGER NOT NULL,
-            col_name TEXT NOT NULL,
-            old_value TEXT,
-            new_value TEXT
-        );
-    """)
-    conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
-    conn.commit()
+        conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+        conn.commit()
 
-    now = datetime.datetime.now().isoformat()
-    cur = conn.execute(
-        "INSERT INTO snapshots (downloaded_at, filename, row_count) VALUES (?, ?, ?)",
-        (now, xlsx_path.name, len(data_rows))
-    )
-    new_id = cur.lastrowid
-
-    prev = conn.execute(
-        "SELECT id FROM snapshots WHERE id != ? ORDER BY id DESC LIMIT 1",
-        (new_id,)
-    ).fetchone()
-    old_id = prev[0] if prev else None
-
-    new_row_data = {}
-    for idx, row in enumerate(data_rows):
-        row_dict = {headers[i]: (str(v) if v is not None else '') for i, v in enumerate(row)}
-        row_json = json.dumps(row_dict, ensure_ascii=False)
-        conn.execute(
-            "INSERT INTO report_rows (snapshot_id, row_index, row_data) VALUES (?, ?, ?)",
-            (new_id, idx, row_json)
-        )
-        new_row_data[idx] = row_dict
-
-    diff_list = []
-    if old_id:
-        old_rows = conn.execute(
-            "SELECT row_index, row_data FROM report_rows WHERE snapshot_id = ?",
-            (old_id,)
-        ).fetchall()
-        old_row_data = {r[0]: json.loads(r[1]) for r in old_rows}
-
-        for row_idx, new_vals in new_row_data.items():
-            if row_idx not in old_row_data:
+    changes = []
+    for ws in wb.worksheets:
+        machine = ws.title
+        rows = list(ws.iter_rows(values_only=True))
+        if len(rows) < 2:
+            continue
+        # locate Restock column from header row
+        header = rows[0]
+        try:
+            restock_idx = next(i for i, h in enumerate(header) if h and str(h).strip().lower() == 'restock')
+        except StopIteration:
+            continue
+        for row in rows[1:]:
+            if not row or row[0] is None:
                 continue
-            old_vals = old_row_data[row_idx]
-            for col in headers:
-                old_v = old_vals.get(col, '')
-                new_v = new_vals.get(col, '')
-                if old_v != new_v:
-                    conn.execute(
-                        "INSERT INTO diffs"
-                        " (detected_at, new_snapshot_id, old_snapshot_id, row_index, col_name, old_value, new_value)"
-                        " VALUES (?, ?, ?, ?, ?, ?, ?)",
-                        (now, new_id, old_id, row_idx, col, old_v, new_v)
-                    )
-                    diff_list.append({'row': row_idx + 1, 'col': col, 'old': old_v, 'new': new_v})
+            lane = str(row[0])
+            restock = row[restock_idx] if restock_idx < len(row) else None
+            if restock is None:
+                continue
+            restock = int(restock) if isinstance(restock, float) else restock
 
+            existing = conn.execute(
+                "SELECT restock FROM current_state WHERE machine=? AND lane=?",
+                (machine, lane)
+            ).fetchone()
+
+            if existing is None:
+                conn.execute(
+                    "INSERT INTO current_state (machine, lane, restock, updated_at) VALUES (?,?,?,?)",
+                    (machine, lane, restock, now)
+                )
+            elif existing[0] != restock:
+                conn.execute(
+                    "INSERT INTO change_log (detected_at, machine, lane, old_restock, new_restock) VALUES (?,?,?,?,?)",
+                    (now, machine, lane, existing[0], restock)
+                )
+                conn.execute(
+                    "UPDATE current_state SET restock=?, updated_at=? WHERE machine=? AND lane=?",
+                    (restock, now, machine, lane)
+                )
+                changes.append({'machine': machine, 'lane': lane, 'old': existing[0], 'new': restock})
+
+    wb.close()
     conn.commit()
     conn.close()
 
-    if old_id:
-        status(f"DB: {len(diff_list)} field changes vs previous snapshot")
-    else:
-        status(f"DB: initialized with {len(data_rows)} rows")
+    # keep a persistent copy for next startup, then archive
+    shutil.copy2(str(xlsx_path), str(DB_DIR / "last_report.xlsx"))
+    tmp_dir = DB_DIR / "tmp"
+    tmp_dir.mkdir(exist_ok=True)
+    for f in DB_DIR.glob("*.xlsx"):
+        shutil.move(str(f), str(tmp_dir / f.name))
 
-    return diff_list
+    status(f"DB: {len(changes)} restock change(s) detected")
+    return changes
+
+
+async def watch_f9(page, stop_event):
+    trigger = DB_DIR / ".f9_trigger"
+    LOG_DIR.mkdir(exist_ok=True)
+    while not stop_event.is_set():
+        if trigger.exists():
+            try:
+                trigger.unlink()
+                html = await page.content()
+                out = LOG_DIR / "dom_debug.html"
+                out.write_text(html, encoding='utf-8')
+                status(f"F9: DOM saved -> {out}")
+            except Exception as e:
+                status(f"F9: capture failed: {e}")
+        await asyncio.sleep(0.3)
 
 
 async def login(page):
@@ -172,18 +177,11 @@ async def export_excel(page):
     await page.goto(REPORT_URL)
     await page.wait_for_load_state("networkidle")
 
-    all_values = await page.eval_on_selector(
-        "#checkbox",
-        "el => Array.from(el.options).map(o => o.value)"
-    )
-    await page.select_option("#checkbox", all_values)
-    status(f"Selected all {len(all_values)} franchises")
-
     status("Exporting Excel...")
     async with page.expect_download(timeout=30000) as dl:
         for sel in [
-            "input[value='EXPORT EXCEL']", "button:has-text('EXPORT EXCEL')",
-            "a:has-text('EXPORT EXCEL')", "input[value*='Excel']",
+            "input[value='Export Excel']", "#Exporttoexcel",
+            "input[value*='Excel']",
         ]:
             loc = page.locator(sel).first
             if await loc.count() > 0:
@@ -207,11 +205,29 @@ async def main():
         context = await browser.new_context(accept_downloads=True)
         page = await context.new_page()
 
+        stop_event = asyncio.Event()
+        f9_task = None
+        if not HEADLESS:
+            f9_task = asyncio.create_task(watch_f9(page, stop_event))
+
         await login(page)
-        xlsx_path = await export_excel(page)
+
+        if LOGIN_ONLY:
+            status("Browser ready — waiting")
+            while not BROWSER_STOP.exists():
+                await asyncio.sleep(0.5)
+            try: BROWSER_STOP.unlink()
+            except: pass
+        else:
+            xlsx_path = await export_excel(page)
+
+        stop_event.set()
+        if f9_task:
+            await f9_task
+
         await browser.close()
 
-        if not HEADLESS:
+        if not HEADLESS and not LOGIN_ONLY:
             input("\nPress Enter to exit...")
 
     if xlsx_path:

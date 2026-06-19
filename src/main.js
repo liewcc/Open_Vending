@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, safeStorage, Tray, Menu } = require('electron')
+const { app, BrowserWindow, ipcMain, safeStorage, Tray, Menu, globalShortcut, Notification } = require('electron')
 const { spawn } = require('child_process')
 const path = require('path')
 const fs   = require('fs')
@@ -7,15 +7,21 @@ const os   = require('os')
 const ROOT          = path.join(__dirname, '..')
 const CRED_FILE     = path.join(app.getPath('userData'), 'credentials.enc')
 const SETTINGS_FILE = path.join(app.getPath('userData'), 'settings.json')
-const DEFAULT_SETTINGS = { menuBar: false, showConsole: false, autoDownload: false, autoDownloadInterval: 30 }
+const LAST_REPORT   = path.join(ROOT, 'db', 'last_report.xlsx')
+const LAST_DIFFS    = path.join(ROOT, 'db', 'last_diffs.json')
+const DEFAULT_SETTINGS = { menuBar: false, showConsole: false, closeTray: false, notifyChanges: false, autoDownload: false, autoDownloadInterval: 30, headedBrowser: false, landingUrl: 'https://vendingportal.azurewebsites.net/SuperAdmin/SPLogin.aspx' }
+const F9_TRIGGER    = path.join(ROOT, 'db', '.f9_trigger')
+const BROWSER_STOP  = path.join(ROOT, 'db', '.browser_stop')
 const ICON_PNG = path.join(ROOT, 'asset', 'image', 'icon_nobg.png')
 let win
 let tray = null
+let quitting = false
 let cachedCreds = null
 let settings = DEFAULT_SETTINGS
 let isDownloading = false
 let autoDownloadTimer = null
 let lastDiffs = []
+let loginProc = null
 
 function loadSettings() {
   try { return { ...DEFAULT_SETTINGS, ...JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8')) } }
@@ -127,6 +133,12 @@ function createWindow() {
     minWidth: 900,
     minHeight: 600,
     icon: ICON_PNG,
+    titleBarStyle: 'hidden',
+    titleBarOverlay: {
+      color: '#1e2235',
+      symbolColor: '#cdd6f4',
+      height: 38
+    },
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -136,6 +148,26 @@ function createWindow() {
     backgroundColor: '#f0f2f5'
   })
   win.loadFile(path.join(__dirname, 'index.html'))
+
+  win.on('close', e => {
+    if (!quitting && settings.closeTray) {
+      e.preventDefault()
+      win.hide()
+    }
+  })
+}
+
+// ── F9 DOM capture shortcut ───────────────────────────────────────────────────
+
+function registerF9() {
+  if (globalShortcut.isRegistered('F9')) return
+  globalShortcut.register('F9', () => {
+    try { fs.writeFileSync(F9_TRIGGER, '') } catch { /* ignore */ }
+  })
+}
+
+function unregisterF9() {
+  globalShortcut.unregister('F9')
 }
 
 // ── Auto-download timer ───────────────────────────────────────────────────────
@@ -153,10 +185,12 @@ function setupAutoDownload() {
 function runDownload(creds) {
   if (isDownloading) return
   isDownloading = true
+  win.webContents.send('download-started')
   const pythonExe = path.join(ROOT, 'python', 'python.exe')
   const script    = path.join(ROOT, 'open_vending.py')
 
-  const proc = spawn(pythonExe, [script, '--headless'], {
+  const args = settings.headedBrowser ? [script] : [script, '--headless']
+  const proc = spawn(pythonExe, args, {
     windowsHide: !settings.showConsole,
     env: {
       ...process.env,
@@ -164,7 +198,8 @@ function runDownload(creds) {
       PYTHONNOUSERSITE: '1',
       PYTHONPATH: '',
       OV_USERNAME: creds.username,
-      OV_PASSWORD: creds.password
+      OV_PASSWORD: creds.password,
+      OV_LANDING_URL: settings.landingUrl || ''
     }
   })
 
@@ -174,7 +209,15 @@ function runDownload(creds) {
       if (!line) return
       if (line.startsWith('DIFFS: ')) {
         try { lastDiffs = JSON.parse(line.slice(7)) } catch { lastDiffs = [] }
+        try { fs.writeFileSync(LAST_DIFFS, JSON.stringify(lastDiffs)) } catch { }
         win.webContents.send('diff-ready', lastDiffs.length)
+        if (settings.notifyChanges && lastDiffs.length > 0) {
+          new Notification({
+            title: 'Open Vending — Restock Changes',
+            body: `${lastDiffs.length} restock change${lastDiffs.length > 1 ? 's' : ''} detected`,
+            icon: ICON_PNG
+          }).show()
+        }
         return
       }
       win.webContents.send('py-out', line)
@@ -197,6 +240,44 @@ function runDownload(creds) {
     isDownloading = false
     win.webContents.send('py-done', code === 0)
   })
+}
+
+// ── Login-only browser ────────────────────────────────────────────────────────
+
+function launchBrowser(creds) {
+  if (loginProc) return
+  const pythonExe = path.join(ROOT, 'python', 'python.exe')
+  const script    = path.join(ROOT, 'open_vending.py')
+  loginProc = spawn(pythonExe, [script, '--login-only'], {
+    windowsHide: false,
+    env: {
+      ...process.env,
+      PLAYWRIGHT_BROWSERS_PATH: path.join(ROOT, 'browsers'),
+      PYTHONNOUSERSITE: '1',
+      PYTHONPATH: '',
+      OV_USERNAME: creds.username,
+      OV_PASSWORD: creds.password,
+      OV_LANDING_URL: settings.landingUrl || ''
+    }
+  })
+  win.webContents.send('browser-state', 'running')
+  loginProc.stdout.on('data', data => {
+    data.toString().trim().split('\n').forEach(line => {
+      line = line.trim(); if (line) win.webContents.send('py-out', line)
+    })
+  })
+  loginProc.stderr.on('data', data => {
+    win.webContents.send('py-out', 'ERROR: ' + data.toString().trim())
+  })
+  loginProc.on('close', () => {
+    loginProc = null
+    win.webContents.send('browser-state', 'idle')
+  })
+}
+
+function closeBrowser() {
+  if (!loginProc) return
+  try { fs.writeFileSync(BROWSER_STOP, '') } catch { /* ignore */ }
 }
 
 // ── App lifecycle ─────────────────────────────────────────────────────────────
@@ -222,8 +303,21 @@ app.whenReady().then(() => {
 
   win.setMenuBarVisibility(settings.menuBar)
   win.setAutoHideMenuBar(!settings.menuBar)
+  if (settings.headedBrowser) registerF9()
   win.webContents.once('did-finish-load', () => {
     cachedCreds = loadCredentials()
+
+    // restore last known state before new scan starts
+    if (fs.existsSync(LAST_REPORT)) {
+      win.webContents.send('file-ready', LAST_REPORT)
+    }
+    if (fs.existsSync(LAST_DIFFS)) {
+      try {
+        lastDiffs = JSON.parse(fs.readFileSync(LAST_DIFFS, 'utf8'))
+        if (lastDiffs.length) win.webContents.send('diff-ready', lastDiffs.length)
+      } catch { }
+    }
+
     if (cachedCreds) {
       runDownload(cachedCreds)
     } else {
@@ -234,6 +328,9 @@ app.whenReady().then(() => {
     setupAutoDownload()
   })
 })
+
+app.on('before-quit', () => { quitting = true })
+app.on('will-quit', () => { globalShortcut.unregisterAll() })
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
@@ -266,4 +363,25 @@ ipcMain.on('set-setting', (_, { key, val }) => {
   if (key === 'autoDownload' || key === 'autoDownloadInterval') {
     setupAutoDownload()
   }
+  if (key === 'headedBrowser') {
+    val ? registerF9() : unregisterF9()
+  }
 })
+
+ipcMain.on('launch-browser', () => { if (cachedCreds) launchBrowser(cachedCreds) })
+ipcMain.on('close-browser',  () => closeBrowser())
+
+const QUERY_HISTORY = path.join(__dirname, 'query_history.py')
+ipcMain.handle('get-restock-history', (_, { machine, lane }) =>
+  new Promise(resolve => {
+    const pythonExe = path.join(ROOT, 'python', 'python.exe')
+    const proc = spawn(pythonExe, [QUERY_HISTORY, machine, String(lane)], {
+      windowsHide: true,
+      env: { ...process.env, PYTHONNOUSERSITE: '1', PYTHONPATH: '' }
+    })
+    let out = ''
+    proc.stdout.on('data', d => out += d)
+    proc.on('close', () => { try { resolve(JSON.parse(out.trim())) } catch { resolve([]) } })
+    proc.on('error', () => resolve([]))
+  })
+)
