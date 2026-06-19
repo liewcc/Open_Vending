@@ -1001,12 +1001,16 @@
     const P = { t: 32, r: 24, b: 56, l: 48 }
     const pw = W - P.l - P.r, ph = H - P.t - P.b
 
-    if (!pts.length) return `<svg viewBox="0 0 ${W} ${H}" style="width:100%">
+    const toMs = iso => new Date((iso || '').replace(' ', 'T')).getTime()
+
+    // Sort ascending by time; guards against DB clock skew or out-of-order rows
+    const sp = [...(pts || [])].filter(p => p && p.t).sort((a, b) => toMs(a.t) - toMs(b.t))
+
+    if (!sp.length) return `<svg viewBox="0 0 ${W} ${H}" style="width:100%">
       <text x="${W/2}" y="${H/2}" text-anchor="middle" fill="#9ca3af" font-size="12">No data available</text></svg>`
 
-    const toMs  = iso => new Date(iso.replace(' ', 'T')).getTime()
-    const times = pts.map(p => toMs(p.t))
-    const vals  = pts.map(p => p.v)
+    const times = sp.map(p => toMs(p.t))
+    const vals  = sp.map(p => p.v)
     const tMin = Math.min(...times), tMax = Math.max(...times)
     const vMax = Math.max(...vals, 1)
 
@@ -1020,13 +1024,13 @@
     for (let v = 0; v <= vMax; v += yStep) yTicks.push(v)
 
     // X ticks (≤5)
-    const stride = Math.max(1, Math.floor(pts.length / 5))
+    const stride = Math.max(1, Math.floor(sp.length / 5))
     const xIdxs = new Set()
-    for (let i = 0; i < pts.length; i += stride) xIdxs.add(i)
-    xIdxs.add(pts.length - 1)
+    for (let i = 0; i < sp.length; i += stride) xIdxs.add(i)
+    xIdxs.add(sp.length - 1)
 
     const fmtTime = iso => {
-      const d = new Date(iso.replace(' ', 'T'))
+      const d = new Date((iso || '').replace(' ', 'T'))
       const pad = n => String(n).padStart(2, '0')
       const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
       const sameDay = d.toDateString() === new Date().toDateString()
@@ -1049,28 +1053,28 @@
     // area
     const botY = P.t + ph
     const areaPts = `${f1(sx(times[0]))},${botY} ` +
-      pts.map(p => `${f1(sx(toMs(p.t)))},${f1(sy(p.v))}`).join(' ') +
+      sp.map(p => `${f1(sx(toMs(p.t)))},${f1(sy(p.v))}`).join(' ') +
       ` ${f1(sx(times[times.length-1]))},${botY}`
     s += `<polygon points="${areaPts}" fill="#e05c5c" fill-opacity="0.08"/>`
 
     // line
-    if (pts.length > 1) {
-      const poly = pts.map(p => `${f1(sx(toMs(p.t)))},${f1(sy(p.v))}`).join(' ')
+    if (sp.length > 1) {
+      const poly = sp.map(p => `${f1(sx(toMs(p.t)))},${f1(sy(p.v))}`).join(' ')
       s += `<polyline points="${poly}" fill="none" stroke="#e05c5c" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`
     }
 
     // dots + value labels
-    pts.forEach((p, i) => {
+    sp.forEach(p => {
       const x = f1(sx(toMs(p.t))), y = f1(sy(p.v))
       s += `<circle cx="${x}" cy="${y}" r="4" fill="#e05c5c" stroke="#fff" stroke-width="1.5"/>`
-      if (pts.length <= 12)
+      if (sp.length <= 12)
         s += `<text x="${x}" y="${+y-9}" text-anchor="middle" font-size="10" font-weight="600" fill="#374151">${p.v}</text>`
     })
 
     // X labels
     ;[...xIdxs].forEach(i => {
       const x = f1(sx(times[i]))
-      s += `<text x="${x}" y="${P.t+ph+16}" text-anchor="middle" font-size="9" fill="#9ca3af">${fmtTime(pts[i].t)}</text>`
+      s += `<text x="${x}" y="${P.t+ph+16}" text-anchor="middle" font-size="9" fill="#9ca3af">${fmtTime(sp[i].t)}</text>`
     })
 
     // axis titles

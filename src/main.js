@@ -212,11 +212,13 @@ function runDownload(creds) {
         try { fs.writeFileSync(LAST_DIFFS, JSON.stringify(lastDiffs)) } catch { }
         win.webContents.send('diff-ready', lastDiffs.length)
         if (settings.notifyChanges && lastDiffs.length > 0) {
-          new Notification({
+          const notif = new Notification({
             title: 'Open Vending — Restock Changes',
             body: `${lastDiffs.length} restock change${lastDiffs.length > 1 ? 's' : ''} detected`,
             icon: ICON_PNG
-          }).show()
+          })
+          notif.on('click', () => { win.show(); win.focus() })
+          notif.show()
         }
         return
       }
@@ -299,7 +301,7 @@ app.whenReady().then(() => {
     { type: 'separator' },
     { label: 'Quit', click: () => app.quit() }
   ]))
-  tray.on('double-click', () => { win.show(); win.focus() })
+  tray.on('click', () => { win.show(); win.focus() })
 
   win.setMenuBarVisibility(settings.menuBar)
   win.setAutoHideMenuBar(!settings.menuBar)
