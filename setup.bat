@@ -34,8 +34,8 @@ if exist "%PY%" (
     goto :install_pip
 )
 
-echo [1/6] Downloading Python %PYTHON_VERSION%...
-echo [1/6] Downloading Python >> "%LOG%"
+echo [1/7] Downloading Python %PYTHON_VERSION%...
+echo [1/7] Downloading Python >> "%LOG%"
 powershell -NoProfile -Command "Invoke-WebRequest -Uri '%PYTHON_URL%' -OutFile '%ROOT%%PYTHON_ZIP%' -UseBasicParsing" >> "%LOG%" 2>&1
 if not exist "%ROOT%%PYTHON_ZIP%" (
     echo [ERROR] Python download failed >> "%LOG%"
@@ -58,8 +58,8 @@ if exist "%PYTHON_DIR%\Lib\site-packages\pip" (
     goto :install_packages
 )
 
-echo [2/6] Installing pip...
-echo [2/6] Installing pip >> "%LOG%"
+echo [2/7] Installing pip...
+echo [2/7] Installing pip >> "%LOG%"
 powershell -NoProfile -Command "Invoke-WebRequest -Uri 'https://bootstrap.pypa.io/get-pip.py' -OutFile '%ROOT%get-pip.py' -UseBasicParsing" >> "%LOG%" 2>&1
 if not exist "%ROOT%get-pip.py" (
     echo [ERROR] pip download failed >> "%LOG%"
@@ -73,8 +73,8 @@ echo [OK] pip ready >> "%LOG%"
 
 REM Step 3: Python packages
 :install_packages
-echo [3/6] Installing Python dependencies...
-echo [3/6] Installing Python dependencies >> "%LOG%"
+echo [3/7] Installing Python dependencies...
+echo [3/7] Installing Python dependencies >> "%LOG%"
 "%PY%" -m pip install -r "%ROOT%requirements.txt" --no-warn-script-location --isolated >> "%LOG%" 2>&1
 if errorlevel 1 (
     echo [ERROR] pip install failed >> "%LOG%"
@@ -91,8 +91,8 @@ if exist "%BROWSERS_DIR%" (
     goto :install_node
 )
 
-echo [4/6] Downloading Chromium browser (approx 150MB)...
-echo [4/6] Downloading Chromium >> "%LOG%"
+echo [4/7] Downloading Chromium browser (approx 150MB)...
+echo [4/7] Downloading Chromium >> "%LOG%"
 set "PLAYWRIGHT_BROWSERS_PATH=%BROWSERS_DIR%"
 "%PY%" -m playwright install chromium >> "%LOG%" 2>&1
 if errorlevel 1 (
@@ -111,8 +111,8 @@ if exist "%NPM%" (
     goto :npm_install
 )
 
-echo [5/6] Downloading Node.js v%NODE_VERSION%...
-echo [5/6] Downloading Node.js >> "%LOG%"
+echo [5/7] Downloading Node.js v%NODE_VERSION%...
+echo [5/7] Downloading Node.js >> "%LOG%"
 powershell -NoProfile -Command "Invoke-WebRequest -Uri '%NODE_URL%' -OutFile '%ROOT%%NODE_ZIP%' -UseBasicParsing" >> "%LOG%" 2>&1
 if not exist "%ROOT%%NODE_ZIP%" (
     echo [ERROR] Node.js download failed >> "%LOG%"
@@ -133,11 +133,11 @@ REM Step 6: npm packages
 if exist "%ROOT%node_modules\electron" if exist "%ROOT%node_modules\xlsx" (
     echo [OK] npm packages ready, skipping install
     echo [OK] npm packages ready >> "%LOG%"
-    goto :done
+    goto :install_font
 )
 
-echo [6/6] Installing Electron + xlsx (approx 100MB)...
-echo [6/6] npm install >> "%LOG%"
+echo [6/7] Installing Electron + xlsx (approx 100MB)...
+echo [6/7] npm install >> "%LOG%"
 set "PATH=%NODE_DIR%;%PATH%"
 pushd "%ROOT%"
 "%NPM%" install --no-fund --no-audit >> "%LOG%" 2>&1
@@ -149,6 +149,46 @@ if errorlevel 1 (
 )
 echo [OK] Electron + xlsx ready
 echo [OK] npm install done >> "%LOG%"
+
+REM Step 7: Material Symbols icon font
+:install_font
+if exist "%ROOT%src\font\material-symbols.css" (
+    echo [OK] Material Symbols icon font ready, skipping download
+    echo [OK] Material Symbols icon font ready >> "%LOG%"
+    goto :done
+)
+
+echo [7/7] Downloading Material Symbols icon font...
+echo [7/7] Downloading Material Symbols icon font >> "%LOG%"
+
+set "FONT_PS1=%TEMP%\ov_font.ps1"
+(
+  echo $fontDir = Join-Path "%ROOT%" "src\font"
+  echo if ^(-not ^(Test-Path $fontDir^)^) { New-Item -ItemType Directory -Path $fontDir -Force ^| Out-Null }
+  echo $url = "https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200^&display=block"
+  echo $ua = "Mozilla/5.0 ^(Windows NT 10.0; Win64; x64^) AppleWebKit/537.36 ^(KHTML, like Gecko^) Chrome/120.0.0.0 Safari/537.36"
+  echo $css = Invoke-RestMethod -Uri $url -UserAgent $ua
+  echo $matches = [regex]::Matches^($css, 'url\^(^(https://[^^^)]+\.woff2^)\^)'^)
+  echo foreach ^($m in $matches^) {
+  echo     $wUrl = $m.Groups[1].Value
+  echo     $fName = Split-Path $wUrl -Leaf
+  echo     $dPath = Join-Path $fontDir $fName
+  echo     Invoke-WebRequest -Uri $wUrl -OutFile $dPath -UseBasicParsing -UserAgent $ua
+  echo     $css = $css.Replace^($wUrl, $fName^)
+  echo }
+  echo Set-Content -Path ^(Join-Path $fontDir "material-symbols.css"^) -Value $css -Encoding utf8
+) > "%FONT_PS1%"
+
+powershell -NoProfile -ExecutionPolicy Bypass -File "%FONT_PS1%" >> "%LOG%" 2>&1
+if errorlevel 1 (
+    echo [ERROR] Font download failed >> "%LOG%"
+    echo [ERROR] Font download failed. See setup.log for details.
+    del "%FONT_PS1%"
+    goto :fail
+)
+del "%FONT_PS1%"
+echo [OK] Material Symbols icon font ready
+echo [OK] Material Symbols icon font ready >> "%LOG%"
 
 :done
 echo Setup completed: %DATE% %TIME% >> "%LOG%"
