@@ -8,6 +8,10 @@ node/
 db/
 *.xlsx
 
+# Auto-downloaded at runtime
+log/
+src/font/
+
 # Setup artifacts
 setup.log
 get-pip.py
