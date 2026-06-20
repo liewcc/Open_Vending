@@ -10,7 +10,6 @@ db/
 
 # Auto-downloaded at runtime
 log/
-src/font/
 
 # Setup artifacts
 setup.log

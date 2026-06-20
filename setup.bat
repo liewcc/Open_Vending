@@ -152,7 +152,7 @@ echo [OK] npm install done >> "%LOG%"
 
 REM Step 7: Material Symbols icon font
 :install_font
-if exist "%ROOT%src\font\material-symbols.css" (
+if exist "%ROOT%src\font\*.woff2" (
     echo [OK] Material Symbols icon font ready, skipping download
     echo [OK] Material Symbols icon font ready >> "%LOG%"
     goto :done

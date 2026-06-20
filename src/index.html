@@ -195,53 +195,25 @@
 
   #log .err { color: #f38ba8; }
 
-  #btn-download, #btn-pick {
-    padding: 9px 14px;
-    background: #e05c5c;
-    color: #fff;
+  .side-icon-btn {
+    width: 40px; height: 40px;
+    background: #313552;
     border: none;
     border-radius: 6px;
-    cursor: pointer;
-    font-size: 12px;
-    font-weight: 600;
-    transition: background .15s;
-  }
-
-  #btn-download:hover, #btn-pick:hover  { background: #cc4444; }
-  #btn-download:active, #btn-pick:active { background: #aa3333; }
-  #btn-download:disabled, #btn-pick:disabled { background: #45475a; color: #6c7086; cursor: default; }
-
-  #btn-update {
-    padding: 9px 14px;
-    background: #313552;
-    color: #6c7086;
-    border: none;
-    border-radius: 6px;
-    cursor: default;
-    font-size: 12px;
-    font-weight: 600;
-    transition: background .15s, color .15s;
-  }
-  #btn-update.available { background: #1e6b8a; color: #fff; cursor: pointer; }
-  #btn-update.available:hover { background: #1a5a75; }
-  #btn-update.up-to-date { background: #2d4a3e; color: #a6e3a1; }
-
-  #btn-github {
-    padding: 9px 14px;
-    background: #313552;
     color: #a6adc8;
-    border: none;
-    border-radius: 6px;
     cursor: pointer;
-    font-size: 12px;
-    font-weight: 600;
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 6px;
     transition: background .15s, color .15s;
   }
-  #btn-github:hover { background: #414568; color: #cdd6f4; }
+  .side-icon-btn:hover:not(:disabled) { background: #414568; color: #cdd6f4; }
+  .side-icon-btn:disabled { background: #2a2d45; color: #45475a; cursor: default; }
+  .side-icon-btn.available { background: #1e6b8a; color: #fff; cursor: pointer; }
+  .side-icon-btn.available:hover { background: #1a5a75; }
+  .side-icon-btn.up-to-date { background: #2d4a3e; color: #a6e3a1; }
+  .side-icon-btn .icon { font-size: 20px; }
+  #btn-actions { display: grid; grid-template-columns: repeat(3, 40px); gap: 8px; }
 
   /* ── Config Panel ── */
   #config-panel {
@@ -625,15 +597,15 @@
       </button>
     </div>
 
-    <button id="btn-download" disabled onclick="redownload()">Re-download</button>
-    <button id="btn-pick" onclick="showPickView()">Picking List</button>
-    <button id="btn-github" onclick="window.api.openExternal('https://github.com/liewcc/Open_Vending')">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
-        <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
-      </svg>
-      View on GitHub
-    </button>
-    <button id="btn-update" disabled onclick="triggerUpdate()">Checking...</button>
+    <div id="btn-actions">
+      <button id="btn-home" class="side-icon-btn" onclick="showPanel('main')" title="Back to main table" style="display:none"><span class="icon">table_view</span></button>
+      <button id="btn-download" class="side-icon-btn" disabled onclick="redownload()" title="Re-download"><span class="icon">cloud_sync</span></button>
+      <button id="btn-pick" class="side-icon-btn" onclick="showPickView()" title="Picking List"><span class="icon">shopping_basket</span></button>
+      <button id="btn-github" class="side-icon-btn" onclick="window.api.openExternal('https://github.com/liewcc/Open_Vending')" title="View on GitHub">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+      </button>
+      <button id="btn-update" class="side-icon-btn" disabled onclick="triggerUpdate()" title="Checking…"><span class="icon">update</span></button>
+    </div>
   </aside>
 
   <!-- Config Panel -->
@@ -952,6 +924,7 @@
   }
 
   function showPanel(which) {
+    document.getElementById('btn-home').style.display = which !== 'main' ? 'flex' : 'none'
     document.getElementById('main').style.display = which === 'main'   ? 'flex' : 'none'
     configPanel.style.display                     = which === 'config' ? 'flex' : 'none'
     diffPanel.style.display                       = which === 'diff'   ? 'flex' : 'none'
@@ -968,28 +941,20 @@
 
   window.api.onUpdateStatus(({ status }) => {
     if (status === 'available') {
-      btnUpdate.textContent = 'Relaunch to Update'
-      btnUpdate.className = 'available'
-      btnUpdate.disabled = false
+      btnUpdate.title = 'Relaunch to Update'; btnUpdate.className = 'side-icon-btn available'; btnUpdate.disabled = false;
     } else if (status === 'up-to-date') {
-      btnUpdate.textContent = 'Up to Date'
-      btnUpdate.className = 'up-to-date'
-      btnUpdate.disabled = true
+      btnUpdate.title = 'Up to date'; btnUpdate.className = 'side-icon-btn up-to-date'; btnUpdate.disabled = true;
     } else {
-      btnUpdate.textContent = 'Check Failed'
-      btnUpdate.disabled = true
+      btnUpdate.title = 'Check Failed'; btnUpdate.disabled = true;
     }
   })
 
   window.api.onUpdateProgress(state => {
     if (state === 'downloading') {
-      btnUpdate.textContent = 'Downloading...'
-      btnUpdate.className = ''
-      btnUpdate.disabled = true
+      btnUpdate.title = 'Downloading…'; btnUpdate.className = 'side-icon-btn'; btnUpdate.disabled = true;
       btnDl.disabled = true
     } else if (state === 'error') {
-      btnUpdate.textContent = 'Update Failed'
-      btnUpdate.disabled = true
+      btnUpdate.title = 'Update Failed'; btnUpdate.disabled = true;
     }
   })
 

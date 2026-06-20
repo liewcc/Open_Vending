@@ -1,6 +1,6 @@
 {
   "name": "open-vending",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "DVends Open Vending UI",
   "main": "src/main.js",
   "scripts": {
