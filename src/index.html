@@ -195,7 +195,7 @@
 
   #log .err { color: #f38ba8; }
 
-  #btn-download {
+  #btn-download, #btn-pick {
     padding: 9px 14px;
     background: #e05c5c;
     color: #fff;
@@ -207,9 +207,9 @@
     transition: background .15s;
   }
 
-  #btn-download:hover  { background: #cc4444; }
-  #btn-download:active { background: #aa3333; }
-  #btn-download:disabled { background: #45475a; color: #6c7086; cursor: default; }
+  #btn-download:hover, #btn-pick:hover  { background: #cc4444; }
+  #btn-download:active, #btn-pick:active { background: #aa3333; }
+  #btn-download:disabled, #btn-pick:disabled { background: #45475a; color: #6c7086; cursor: default; }
 
   #btn-update {
     padding: 9px 14px;
@@ -396,7 +396,7 @@
     gap: 12px;
   }
 
-  #btn-back {
+  #btn-back, #btn-pick-back {
     padding: 5px 12px;
     background: #f3f4f6;
     border: 1px solid #e5e7eb;
@@ -406,7 +406,7 @@
     color: #374151;
     cursor: pointer;
   }
-  #btn-back:hover { background: #e5e7eb; }
+  #btn-back:hover, #btn-pick-back:hover { background: #e5e7eb; }
 
   #diff-wrap {
     flex: 1;
@@ -541,6 +541,33 @@
     font-size: 12px;
     padding: 40px 0;
   }
+
+  /* ── Pick Panel Styles ── */
+  #pick-toolbar { display:flex; align-items:center; gap:12px; padding:9px 14px; background:#fff; border-bottom:0.5px solid #e2e4e9; font-size:12px; }
+  #pick-count { color:#6b7280; }
+  #pick-print-all { margin-left:auto; }
+  #pick-body { display:flex; flex:1; min-height:0; }
+  #pick-machine-list { width:210px; border-right:0.5px solid #e2e4e9; overflow-y:auto; background:#fafbfc; padding:8px; font-size:12px; }
+  #pick-detail { flex:1; overflow-y:auto; background:#fff; padding:0; min-width:0; }
+  .pick-team-hd { color:#9ca3af; font-size:10px; letter-spacing:.04em; margin:8px 4px 5px; text-transform:uppercase; }
+  .pick-mach { display:flex; align-items:center; gap:6px; padding:6px 8px; border-radius:6px; cursor:pointer; margin-bottom:2px; color:#1f2937; }
+  .pick-mach:hover { background:#eef1f5; }
+  .pick-mach.active { background:#fff; border:0.5px solid #185fa5; }
+  .pick-badge { margin-left:auto; border-radius:8px; padding:1px 7px; font-size:9.5px; white-space:nowrap; }
+  .pick-badge.daily { background:#e1f0e1; color:#3b6d11; }
+  .pick-badge.amber { background:#fae8d4; color:#854f0b; }
+  .pick-hd { padding:10px 14px; border-bottom:0.5px solid #eee; }
+  .pick-hd .nm { font-size:13px; font-weight:500; color:#1f2937; }
+  .pick-hd .sub { font-size:10.5px; color:#6b7280; margin-top:2px; }
+  table.pick-tbl { width:100%; border-collapse:collapse; font-size:11.5px; }
+  table.pick-tbl th { text-align:left; color:#9ca3af; font-size:10px; font-weight:500; padding:5px 14px; border-bottom:0.5px solid #eee; }
+  table.pick-tbl td { padding:5px 14px; border-bottom:0.5px solid #f3f3f3; }
+  tr.pick-out td { background:#fcebeb; }
+  td.bal-out { color:#a32d2d; }
+  .pick-out-tag { background:#f7c1c1; color:#791f1f; border-radius:7px; padding:0 6px; font-size:9px; margin-left:6px; }
+  .pick-hidden-note { padding:8px 14px; color:#9ca3af; font-size:10.5px; }
+  .pick-detail-foot { padding:8px 14px; border-top:0.5px solid #eee; }
+  .pick-empty { padding:18px 14px; color:#9ca3af; font-size:12px; }
 </style>
 </head>
 <body>
@@ -599,6 +626,7 @@
     </div>
 
     <button id="btn-download" disabled onclick="redownload()">Re-download</button>
+    <button id="btn-pick" onclick="showPickView()">Picking List</button>
     <button id="btn-github" onclick="window.api.openExternal('https://github.com/liewcc/Open_Vending')">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
         <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
@@ -724,6 +752,19 @@
     </div>
   </div>
 
+  <!-- Pick Panel -->
+  <div id="pick-panel" style="display:none; flex:1; flex-direction:column; min-width:0; background:#f0f2f5;">
+    <div id="pick-toolbar">
+      <input type="date" id="pick-date" onchange="renderPicks()">
+      <span id="pick-count"></span>
+      <button id="pick-print-all" disabled>Print all</button>
+    </div>
+    <div id="pick-body">
+      <div id="pick-machine-list"></div>
+      <div id="pick-detail"></div>
+    </div>
+  </div>
+
   <!-- Main Panel -->
   <main id="main">
     <div id="toolbar">
@@ -763,6 +804,7 @@
 
   let scanTimer = null
   let scanIntervalSec = 30 * 60
+  let lastFilePath = null;
 
   const fmtSec = s => {
     const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60
@@ -870,6 +912,7 @@
   })
 
   window.api.onFileReady(filePath => {
+    lastFilePath = filePath
     const rows = window.api.parseExcel(filePath)
     renderTable(rows)
     const name = filePath.replace(/\\/g, '/').split('/').pop()
@@ -912,6 +955,7 @@
     document.getElementById('main').style.display = which === 'main'   ? 'flex' : 'none'
     configPanel.style.display                     = which === 'config' ? 'flex' : 'none'
     diffPanel.style.display                       = which === 'diff'   ? 'flex' : 'none'
+    document.getElementById('pick-panel').style.display = which === 'pick'   ? 'flex' : 'none'
     btnGear.classList.toggle('active', which === 'config')
     configVisible = which === 'config'
   }
@@ -1095,6 +1139,53 @@
     tableWrap.style.display   = 'none'
     pText.textContent = 'Downloading report...'
     window.api.startDownload()
+  }
+
+  function showPickView() {
+    const di = document.getElementById('pick-date')
+    if (!di.value) { const d = new Date(); di.value = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` }
+    showPanel('pick')
+    renderPicks()
+  }
+  function renderPicks() {
+    const listEl = document.getElementById('pick-machine-list')
+    const detailEl = document.getElementById('pick-detail')
+    if (!lastFilePath) { listEl.innerHTML = '<div class="pick-empty">No report loaded yet.</div>'; detailEl.innerHTML=''; document.getElementById('pick-count').textContent=''; return }
+    const dateISO = document.getElementById('pick-date').value + 'T10:00:00'
+    const list = window.api.getTodayPicks(lastFilePath, dateISO)
+    document.getElementById('pick-count').textContent = `${list.length} machines to pick`
+    listEl.innerHTML = ''
+    if (!list.length) { listEl.innerHTML = '<div class="pick-empty">Nothing to pick for this date.</div>'; detailEl.innerHTML=''; return }
+    let curTeam = null
+    list.forEach(m => {
+      if (m.team !== curTeam) { curTeam = m.team; const h=document.createElement('div'); h.className='pick-team-hd'; h.textContent='Team '+m.team; listEl.appendChild(h) }
+      const row = document.createElement('div'); row.className='pick-mach'
+      const badgeClass = m.reason==='25%' ? 'amber' : 'daily'
+      const badgeText = m.reason==='25%' ? '≥25%' : (m.reason==='scheduled' ? 'Scheduled' : 'Daily')
+      row.innerHTML = `<span>${m.machine}</span><span class="pick-badge ${badgeClass}">${badgeText}</span>`
+      row.onclick = () => { document.querySelectorAll('.pick-mach.active').forEach(e=>e.classList.remove('active')); row.classList.add('active'); renderPickDetail(m.machine) }
+      listEl.appendChild(row)
+    })
+    detailEl.innerHTML = '<div class="pick-empty">Select a machine to view its picking list.</div>'
+  }
+  function renderPickDetail(machine) {
+    const detailEl = document.getElementById('pick-detail')
+    const pl = window.api.getPickList(lastFilePath, machine)
+    const team = window.api.teamOf(machine) || '—'
+    const dateStr = document.getElementById('pick-date').value
+    let html = `<div class="pick-hd"><div class="nm">${machine}</div><div class="sub">Picking date ${dateStr} &nbsp;·&nbsp; Restock team ${team}</div></div>`
+    if (!pl.rows.length) { html += '<div class="pick-empty">All lanes sufficiently stocked.</div>' }
+    else {
+      html += '<table class="pick-tbl"><thead><tr><th>No</th><th>Product</th><th>Bal</th><th>Lane</th><th>Restock</th></tr></thead><tbody>'
+      pl.rows.forEach(r => {
+        const tag = r.outOfStock ? '<span class="pick-out-tag">OUT</span>' : ''
+        html += `<tr class="${r.outOfStock?'pick-out':''}"><td>${r.no}</td><td>${r.product}${tag}</td><td class="${r.outOfStock?'bal-out':''}">${r.bal}</td><td>${r.lane}</td><td>${r.restock}</td></tr>`
+      })
+      html += '</tbody></table>'
+      html += `<div class="pick-hidden-note">${pl.hiddenCount} rows hidden (Restock 0 or Bal &gt; 10)</div>`
+    }
+    html += '<div class="pick-detail-foot"><button disabled>Print this list</button></div>'
+    detailEl.innerHTML = html
   }
 </script>
 
