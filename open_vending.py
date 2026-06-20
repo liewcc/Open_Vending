@@ -123,7 +123,8 @@ def import_to_sqlite(xlsx_path):
     tmp_dir = DB_DIR / "tmp"
     tmp_dir.mkdir(exist_ok=True)
     for f in DB_DIR.glob("*.xlsx"):
-        shutil.move(str(f), str(tmp_dir / f.name))
+        if f.name != "last_report.xlsx":
+            shutil.move(str(f), str(tmp_dir / f.name))
 
     status(f"DB: {len(changes)} restock change(s) detected")
     return changes
@@ -194,7 +195,6 @@ async def export_excel(page):
     await download.save_as(str(save_path))
 
     status(f"Saved to {save_path}")
-    print(f"FILE: {save_path}", flush=True)
     return save_path
 
 
@@ -232,6 +232,7 @@ async def main():
 
     if xlsx_path:
         diffs = import_to_sqlite(xlsx_path)
+        print(f"FILE: {DB_DIR / 'last_report.xlsx'}", flush=True)
         if diffs:
             print(f"DIFFS: {json.dumps(diffs, ensure_ascii=False)}", flush=True)
 

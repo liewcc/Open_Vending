@@ -53,41 +53,24 @@
 
   /* ── Side Panel ── */
   #side {
-    width: 240px;
-    min-width: 240px;
+    width: 56px;
+    min-width: 56px;
     background: #1e2235;
     color: #cdd6f4;
     display: flex;
     flex-direction: column;
-    padding: 20px 16px;
-    gap: 16px;
+    padding: 12px 10px;
+    gap: 12px;
   }
 
   #side-header {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: center;
   }
 
-  #side h1 {
-    font-size: 15px;
-    font-weight: 600;
-    color: #fff;
-    letter-spacing: .3px;
-  }
+  #side h1 { display: none; }
 
-  #btn-gear {
-    background: none;
-    border: none;
-    color: #6c7086;
-    cursor: pointer;
-    padding: 4px;
-    border-radius: 4px;
-    display: flex;
-    align-items: center;
-    transition: color .15s, background .15s;
-  }
-  #btn-gear:hover { color: #cdd6f4; background: #313552; }
   #btn-gear.active { color: #fff; background: #313552; }
 
   #side h1 span { color: #e05c5c; }
@@ -196,24 +179,25 @@
   #log .err { color: #f38ba8; }
 
   .side-icon-btn {
-    width: 40px; height: 40px;
-    background: #313552;
+    width: 36px; height: 36px;
+    background: none;
     border: none;
     border-radius: 6px;
-    color: #a6adc8;
+    color: #6c7086;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: background .15s, color .15s;
+    transition: color .15s, background .15s;
   }
-  .side-icon-btn:hover:not(:disabled) { background: #414568; color: #cdd6f4; }
-  .side-icon-btn:disabled { background: #2a2d45; color: #45475a; cursor: default; }
-  .side-icon-btn.available { background: #1e6b8a; color: #fff; cursor: pointer; }
-  .side-icon-btn.available:hover { background: #1a5a75; }
-  .side-icon-btn.up-to-date { background: #2d4a3e; color: #a6e3a1; }
-  .side-icon-btn .icon { font-size: 20px; }
-  #btn-actions { display: grid; grid-template-columns: repeat(3, 40px); gap: 8px; }
+  .side-icon-btn:hover:not(:disabled) { color: #cdd6f4; background: #313552; }
+  .side-icon-btn:disabled { color: #45475a; cursor: default; }
+  .side-icon-btn.available { color: #74c7ec; cursor: pointer; }
+  .side-icon-btn.available:hover { color: #89dceb; background: #313552; }
+  .side-icon-btn.up-to-date { color: #a6e3a1; }
+  .side-icon-btn .icon { font-size: 32px; font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24; }
+  #btn-actions { display: flex; flex-direction: column; gap: 4px; }
+  #btn-actions-bottom { display: flex; flex-direction: column; gap: 4px; margin-top: auto; }
 
   /* ── Config Panel ── */
   #config-panel {
@@ -546,6 +530,7 @@
 
 <div id="titlebar">
   <img src="../asset/image/icon_nobg.png" style="width:18px;height:18px;object-fit:contain;flex-shrink:0">
+  <span style="color:#fff;font-size:13px;font-weight:600;letter-spacing:.3px;-webkit-app-region:no-drag">Open<span style="color:#e05c5c">Vending</span></span>
   <div id="titlebar-status">
     <div id="status-badge" class="running"><div class="dot"></div></div>
     <span id="timer-badge">—</span>
@@ -587,22 +572,16 @@
 <div id="content-row">
   <!-- Side Panel -->
   <aside id="side">
-    <div id="side-header">
-      <h1>Open<span>Vending</span></h1>
-      <button id="btn-gear" onclick="toggleConfig()" title="Settings">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="12" r="3"/>
-          <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
-        </svg>
-      </button>
-    </div>
-
     <div id="btn-actions">
-      <button id="btn-home" class="side-icon-btn" onclick="showPanel('main')" title="Back to main table" style="display:none"><span class="icon">table_view</span></button>
+      <button id="btn-home" class="side-icon-btn" onclick="goHome()" title="Back to main table"><span class="icon">table_view</span></button>
       <button id="btn-download" class="side-icon-btn" disabled onclick="redownload()" title="Re-download"><span class="icon">cloud_sync</span></button>
+      <button id="btn-changes-list" class="side-icon-btn" onclick="showDiffView()" title="Changing List"><span class="icon">track_changes</span></button>
       <button id="btn-pick" class="side-icon-btn" onclick="showPickView()" title="Picking List"><span class="icon">shopping_basket</span></button>
+      <button id="btn-gear" class="side-icon-btn" onclick="toggleConfig()" title="Settings"><span class="icon">settings</span></button>
+    </div>
+    <div id="btn-actions-bottom">
       <button id="btn-github" class="side-icon-btn" onclick="window.api.openExternal('https://github.com/liewcc/Open_Vending')" title="View on GitHub">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
       </button>
       <button id="btn-update" class="side-icon-btn" disabled onclick="triggerUpdate()" title="Checking…"><span class="icon">update</span></button>
     </div>
@@ -923,8 +902,15 @@
     applySetting('autoDownload', checked)
   }
 
+  function goHome() {
+    showPanel('main')
+    if (lastFilePath) {
+      const rows = window.api.parseExcel(lastFilePath)
+      renderTable(rows)
+    }
+  }
+
   function showPanel(which) {
-    document.getElementById('btn-home').style.display = which !== 'main' ? 'flex' : 'none'
     document.getElementById('main').style.display = which === 'main'   ? 'flex' : 'none'
     configPanel.style.display                     = which === 'config' ? 'flex' : 'none'
     diffPanel.style.display                       = which === 'diff'   ? 'flex' : 'none'
@@ -1117,40 +1103,52 @@
     const detailEl = document.getElementById('pick-detail')
     if (!lastFilePath) { listEl.innerHTML = '<div class="pick-empty">No report loaded yet.</div>'; detailEl.innerHTML=''; document.getElementById('pick-count').textContent=''; return }
     const dateISO = document.getElementById('pick-date').value + 'T10:00:00'
-    const list = window.api.getTodayPicks(lastFilePath, dateISO)
-    document.getElementById('pick-count').textContent = `${list.length} machines to pick`
-    listEl.innerHTML = ''
-    if (!list.length) { listEl.innerHTML = '<div class="pick-empty">Nothing to pick for this date.</div>'; detailEl.innerHTML=''; return }
-    let curTeam = null
-    list.forEach(m => {
-      if (m.team !== curTeam) { curTeam = m.team; const h=document.createElement('div'); h.className='pick-team-hd'; h.textContent='Team '+m.team; listEl.appendChild(h) }
-      const row = document.createElement('div'); row.className='pick-mach'
-      const badgeClass = m.reason==='25%' ? 'amber' : 'daily'
-      const badgeText = m.reason==='25%' ? '≥25%' : (m.reason==='scheduled' ? 'Scheduled' : 'Daily')
-      row.innerHTML = `<span>${m.machine}</span><span class="pick-badge ${badgeClass}">${badgeText}</span>`
-      row.onclick = () => { document.querySelectorAll('.pick-mach.active').forEach(e=>e.classList.remove('active')); row.classList.add('active'); renderPickDetail(m.machine) }
-      listEl.appendChild(row)
-    })
-    detailEl.innerHTML = '<div class="pick-empty">Select a machine to view its picking list.</div>'
+    try {
+      const list = window.api.getTodayPicks(lastFilePath, dateISO)
+      document.getElementById('pick-count').textContent = `${list.length} machines to pick`
+      listEl.innerHTML = ''
+      if (!list.length) { listEl.innerHTML = '<div class="pick-empty">Nothing to pick for this date.</div>'; detailEl.innerHTML=''; return }
+      let curTeam = null
+      list.forEach(m => {
+        if (m.team !== curTeam) { curTeam = m.team; const h=document.createElement('div'); h.className='pick-team-hd'; h.textContent='Team '+m.team; listEl.appendChild(h) }
+        const row = document.createElement('div'); row.className='pick-mach'
+        const badgeClass = m.reason==='25%' ? 'amber' : 'daily'
+        const badgeText = m.reason==='25%' ? '≥25%' : (m.reason==='scheduled' ? 'Scheduled' : 'Daily')
+        row.innerHTML = `<span>${m.machine}</span><span class="pick-badge ${badgeClass}">${badgeText}</span>`
+        row.onclick = () => { document.querySelectorAll('.pick-mach.active').forEach(e=>e.classList.remove('active')); row.classList.add('active'); renderPickDetail(m.machine) }
+        listEl.appendChild(row)
+      })
+      detailEl.innerHTML = '<div class="pick-empty">Select a machine to view its picking list.</div>'
+    } catch (err) {
+      console.error(err)
+      listEl.innerHTML = `<div class="pick-empty" style="color:#e05c5c">Error loading picking list: ${err.message || err}</div>`
+      detailEl.innerHTML = ''
+      document.getElementById('pick-count').textContent = ''
+    }
   }
   function renderPickDetail(machine) {
     const detailEl = document.getElementById('pick-detail')
-    const pl = window.api.getPickList(lastFilePath, machine)
-    const team = window.api.teamOf(machine) || '—'
-    const dateStr = document.getElementById('pick-date').value
-    let html = `<div class="pick-hd"><div class="nm">${machine}</div><div class="sub">Picking date ${dateStr} &nbsp;·&nbsp; Restock team ${team}</div></div>`
-    if (!pl.rows.length) { html += '<div class="pick-empty">All lanes sufficiently stocked.</div>' }
-    else {
-      html += '<table class="pick-tbl"><thead><tr><th>No</th><th>Product</th><th>Bal</th><th>Lane</th><th>Restock</th></tr></thead><tbody>'
-      pl.rows.forEach(r => {
-        const tag = r.outOfStock ? '<span class="pick-out-tag">OUT</span>' : ''
-        html += `<tr class="${r.outOfStock?'pick-out':''}"><td>${r.no}</td><td>${r.product}${tag}</td><td class="${r.outOfStock?'bal-out':''}">${r.bal}</td><td>${r.lane}</td><td>${r.restock}</td></tr>`
-      })
-      html += '</tbody></table>'
-      html += `<div class="pick-hidden-note">${pl.hiddenCount} rows hidden (Restock 0 or Bal &gt; 10)</div>`
+    try {
+      const pl = window.api.getPickList(lastFilePath, machine)
+      const team = window.api.teamOf(machine) || '—'
+      const dateStr = document.getElementById('pick-date').value
+      let html = `<div class="pick-hd"><div class="nm">${machine}</div><div class="sub">Picking date ${dateStr} &nbsp;·&nbsp; Restock team ${team}</div></div>`
+      if (!pl.rows.length) { html += '<div class="pick-empty">All lanes sufficiently stocked.</div>' }
+      else {
+        html += '<table class="pick-tbl"><thead><tr><th>No</th><th>Product</th><th>Bal</th><th>Lane</th><th>Restock</th></tr></thead><tbody>'
+        pl.rows.forEach(r => {
+          const tag = r.outOfStock ? '<span class="pick-out-tag">OUT</span>' : ''
+          html += `<tr class="${r.outOfStock?'pick-out':''}"><td>${r.no}</td><td>${r.product}${tag}</td><td class="${r.outOfStock?'bal-out':''}">${r.bal}</td><td>${r.lane}</td><td>${r.restock}</td></tr>`
+        })
+        html += '</tbody></table>'
+        html += `<div class="pick-hidden-note">${pl.hiddenCount} rows hidden (Restock 0 or Bal &gt; 10)</div>`
+      }
+      html += '<div class="pick-detail-foot"><button disabled>Print this list</button></div>'
+      detailEl.innerHTML = html
+    } catch (err) {
+      console.error(err)
+      detailEl.innerHTML = `<div class="pick-empty" style="color:#e05c5c">Error loading detail: ${err.message || err}</div>`
     }
-    html += '<div class="pick-detail-foot"><button disabled>Print this list</button></div>'
-    detailEl.innerHTML = html
   }
 </script>
 

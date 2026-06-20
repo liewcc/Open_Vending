@@ -1,5 +1,5 @@
 {
-  "_note": "Generated from TABLE A new.xlsx. Key = report sheet name. scheduleDays empty => use 25% rule. team UNASSIGNED (UTARSL) pending confirmation. 9058/ISB/UOW Cafe excluded (no data in replenishment report).",
+  "_note": "Generated from TABLE A new.xlsx. Key = report sheet name. scheduleDays empty => use 25% rule. UTARSL assigned to team 9058 (confirmed 2026-06-20). 9058 KMS/KK machines excluded (different portal account). ISB/UOW Cafe excluded (JV machines, separate account).",
   "machines": {
     "KK3 M3": {
       "team": "5530",
@@ -226,25 +226,25 @@
       "scheduleDays": []
     },
     "UTARSL KA GF M3 Twin": {
-      "team": "UNASSIGNED",
+      "team": "9058",
       "scheduleDays": [
         "Fri"
       ]
     },
     "UTARSL KB L1 M3 Twin": {
-      "team": "UNASSIGNED",
+      "team": "9058",
       "scheduleDays": [
         "Fri"
       ]
     },
     "UTARSL KB L8 M3 Twin": {
-      "team": "UNASSIGNED",
+      "team": "9058",
       "scheduleDays": [
         "Fri"
       ]
     },
     "UTARSL KB L3A M4 Single": {
-      "team": "UNASSIGNED",
+      "team": "9058",
       "scheduleDays": [
         "Fri"
       ]
