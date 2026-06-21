@@ -293,6 +293,7 @@ app.on('second-instance', () => {
 app.whenReady().then(() => {
   settings = loadSettings()
   createWindow()
+  spawnPy([PICKING_HISTORY, 'init'], null)
 
   tray = new Tray(ICON_PNG)
   tray.setToolTip('Open Vending')
@@ -338,6 +339,24 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })
 
+function spawnPy(args, stdinData) {
+  return new Promise(resolve => {
+    const pythonExe = path.join(ROOT, 'python', 'python.exe')
+    const proc = spawn(pythonExe, args, {
+      windowsHide: true,
+      env: { ...process.env, PYTHONNOUSERSITE: '1', PYTHONPATH: '' }
+    })
+    let out = ''
+    if (stdinData !== null && stdinData !== undefined) {
+      proc.stdin.write(JSON.stringify(stdinData))
+      proc.stdin.end()
+    }
+    proc.stdout.on('data', d => out += d)
+    proc.on('close', () => { try { resolve(JSON.parse(out.trim())) } catch { resolve(null) } })
+    proc.on('error', () => resolve(null))
+  })
+}
+
 // ── IPC ───────────────────────────────────────────────────────────────────────
 
 ipcMain.on('save-credentials', (_, { username, password }) => {
@@ -374,6 +393,7 @@ ipcMain.on('launch-browser', () => { if (cachedCreds) launchBrowser(cachedCreds)
 ipcMain.on('close-browser',  () => closeBrowser())
 
 const QUERY_HISTORY = path.join(__dirname, 'query_history.py')
+const PICKING_HISTORY = path.join(__dirname, 'picking_history.py')
 ipcMain.handle('get-restock-history', (_, { machine, lane }) =>
   new Promise(resolve => {
     const pythonExe = path.join(ROOT, 'python', 'python.exe')
@@ -387,3 +407,10 @@ ipcMain.handle('get-restock-history', (_, { machine, lane }) =>
     proc.on('error', () => resolve([]))
   })
 )
+
+ipcMain.handle('init-picking-db',        ()         => spawnPy([PICKING_HISTORY, 'init'],         null))
+ipcMain.handle('auto-clear-picks',       ()         => spawnPy([PICKING_HISTORY, 'auto-clear'],   null))
+ipcMain.handle('get-pending-in-transit', ()         => spawnPy([PICKING_HISTORY, 'get-pending'],  null))
+ipcMain.handle('get-oos-counts',         ()         => spawnPy([PICKING_HISTORY, 'get-oos-counts'], null))
+ipcMain.handle('save-picks',             (_, picks) => spawnPy([PICKING_HISTORY, 'save-picks'],   picks))
+ipcMain.handle('mark-done',              (_, machines) => spawnPy([PICKING_HISTORY, 'mark-done'], machines))

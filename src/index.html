@@ -524,6 +524,12 @@
   .pick-hidden-note { padding:8px 14px; color:#9ca3af; font-size:10.5px; }
   .pick-detail-foot { padding:8px 14px; border-top:0.5px solid #eee; }
   .pick-empty { padding:18px 14px; color:#9ca3af; font-size:12px; }
+
+  #in-transit-panel { background:#fffbeb; border:0.5px solid #fbbf24; border-radius:8px; margin:10px; padding:12px 14px; font-size:12px; }
+  #in-transit-panel h4 { margin:0 0 8px; font-size:12px; font-weight:600; color:#92400e; }
+  .it-row { display:flex; align-items:center; gap:8px; padding:3px 0; }
+  .it-row label { display:flex; align-items:center; gap:6px; cursor:pointer; }
+  #in-transit-panel .it-actions { margin-top:10px; display:flex; gap:8px; }
 </style>
 </head>
 <body>
@@ -710,6 +716,7 @@
       <span id="pick-count"></span>
       <button id="pick-print-all" disabled>Print all</button>
     </div>
+    <div id="in-transit-panel" style="display:none;"></div>
     <div id="pick-body">
       <div id="pick-machine-list"></div>
       <div id="pick-detail"></div>
@@ -1092,19 +1099,47 @@
     window.api.startDownload()
   }
 
+  let currentPending = {}
+  let currentOos = {}
+
   function showPickView() {
     const di = document.getElementById('pick-date')
     if (!di.value) { const d = new Date(); di.value = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` }
     showPanel('pick')
     renderPicks()
   }
-  function renderPicks() {
+  async function renderPicks() {
     const listEl = document.getElementById('pick-machine-list')
     const detailEl = document.getElementById('pick-detail')
-    if (!lastFilePath) { listEl.innerHTML = '<div class="pick-empty">No report loaded yet.</div>'; detailEl.innerHTML=''; document.getElementById('pick-count').textContent=''; return }
+    const itPanel = document.getElementById('in-transit-panel')
+    if (!lastFilePath) { listEl.innerHTML = '<div class="pick-empty">No report loaded yet.</div>'; detailEl.innerHTML=''; document.getElementById('pick-count').textContent=''; itPanel.style.display='none'; return }
     const dateISO = document.getElementById('pick-date').value + 'T10:00:00'
     try {
-      const list = window.api.getTodayPicks(lastFilePath, dateISO)
+      // 36h safety net
+      await window.api.autoClearPicks()
+      const pendingRaw = await window.api.getPendingInTransit()
+      const oosRaw = await window.api.getOosCounts()
+      currentPending = pendingRaw || {}
+      currentOos = oosRaw || {}
+
+      // Render in-transit panel
+      const pendingMachines = Object.keys(currentPending)
+      if (pendingMachines.length > 0) {
+        let itHtml = '<h4>🧺 In-Transit (pending restock)</h4>'
+        pendingMachines.forEach(mach => {
+          const lanes = currentPending[mach]
+          const units = Object.values(lanes).reduce((a, v) => a + v, 0)
+          itHtml += `<div class="it-row"><label><input type="checkbox" value="${mach}"> ${mach} — ${units} unit${units !== 1 ? 's' : ''} in basket</label></div>`
+        })
+        itHtml += '<div class="it-actions"><button onclick="markInTransitDone()">Update Restock Status</button></div>'
+        itPanel.innerHTML = itHtml
+        itPanel.style.display = 'block'
+      } else {
+        itPanel.style.display = 'none'
+        itPanel.innerHTML = ''
+      }
+
+      const list = window.api.getTodayPicks(lastFilePath, dateISO, currentPending)
       document.getElementById('pick-count').textContent = `${list.length} machines to pick`
       listEl.innerHTML = ''
       if (!list.length) { listEl.innerHTML = '<div class="pick-empty">Nothing to pick for this date.</div>'; detailEl.innerHTML=''; return }
@@ -1126,10 +1161,18 @@
       document.getElementById('pick-count').textContent = ''
     }
   }
-  function renderPickDetail(machine) {
+  async function markInTransitDone() {
+    const checked = [...document.querySelectorAll('#in-transit-panel input[type=checkbox]:checked')].map(cb => cb.value)
+    if (!checked.length) return
+    await window.api.markDone(checked)
+    renderPicks()
+  }
+  async function renderPickDetail(machine) {
     const detailEl = document.getElementById('pick-detail')
     try {
-      const pl = window.api.getPickList(lastFilePath, machine)
+      const pendingByLane = (currentPending[machine]) || {}
+      const oosByLane     = (currentOos[machine])     || {}
+      const pl = window.api.getPickList(lastFilePath, machine, pendingByLane, oosByLane)
       const team = window.api.teamOf(machine) || '—'
       const dateStr = document.getElementById('pick-date').value
       let html = `<div class="pick-hd"><div class="nm">${machine}</div><div class="sub">Picking date ${dateStr} &nbsp;·&nbsp; Restock team ${team}</div></div>`
@@ -1143,12 +1186,31 @@
         html += '</tbody></table>'
         html += `<div class="pick-hidden-note">${pl.hiddenCount} rows hidden (Restock 0 or Bal &gt; 10)</div>`
       }
-      html += '<div class="pick-detail-foot"><button disabled>Print this list</button></div>'
+      html += `<div class="pick-detail-foot"><button id="btn-confirm-pick" onclick="confirmAndQueuePrint('${machine.replace(/'/g, "\\'")}')">Confirm &amp; Queue Print</button></div>`
       detailEl.innerHTML = html
     } catch (err) {
       console.error(err)
       detailEl.innerHTML = `<div class="pick-empty" style="color:#e05c5c">Error loading detail: ${err.message || err}</div>`
     }
+  }
+  async function confirmAndQueuePrint(machine) {
+    const pendingByLane = (currentPending[machine]) || {}
+    const oosByLane     = (currentOos[machine])     || {}
+    const pl = window.api.getPickList(lastFilePath, machine, pendingByLane, oosByLane)
+    const today = document.getElementById('pick-date').value
+    const picks = pl.rows.map(r => ({
+      machine,
+      lane_no:      String(r.laneNo),
+      product_id:   r.productId,
+      product_name: r.product,
+      picked_qty:   r.restock,
+      out_of_stock: r.outOfStock ? 1 : 0,
+      pick_date:    today
+    }))
+    await window.api.savePicks(picks)
+    const btn = document.getElementById('btn-confirm-pick')
+    if (btn) { btn.textContent = '✓ Queued'; btn.disabled = true }
+    setTimeout(() => renderPicks(), 2000)
   }
 </script>
 

@@ -39,17 +39,23 @@ contextBridge.exposeInMainWorld('api', {
   closeBrowser:         ()               => ipcRenderer.send('close-browser'),
   onBrowserState:       cb => ipcRenderer.on('browser-state', (_, state) => cb(state)),
   getRestockHistory:    (machine, lane)  => ipcRenderer.invoke('get-restock-history', { machine, lane }),
+  initPickingDb:        ()               => ipcRenderer.invoke('init-picking-db'),
+  autoClearPicks:       ()               => ipcRenderer.invoke('auto-clear-picks'),
+  getPendingInTransit:  ()               => ipcRenderer.invoke('get-pending-in-transit'),
+  getOosCounts:         ()               => ipcRenderer.invoke('get-oos-counts'),
+  savePicks:            (picks)          => ipcRenderer.invoke('save-picks', picks),
+  markDone:             (machines)       => ipcRenderer.invoke('mark-done', machines),
 
   parseExcel(filePath) {
     return parseRows(filePath)
   },
-  getTodayPicks(filePath, dateISO) {
+  getTodayPicks(filePath, dateISO, pendingByMachine) {
     const rows = parseRows(filePath)
-    return picking.machinesToPickToday(rows, routePlan, new Date(dateISO))
+    return picking.machinesToPickToday(rows, routePlan, new Date(dateISO), pendingByMachine || {})
   },
-  getPickList(filePath, machine) {
+  getPickList(filePath, machine, pendingByLane, oosByLane) {
     const rows = parseRows(filePath)
-    return picking.buildPickingList(rows, machine)
+    return picking.buildPickingList(rows, machine, pendingByLane || {}, oosByLane || {})
   },
   teamOf(machine) {
     return (routePlan.machines[machine] && routePlan.machines[machine].team) || null

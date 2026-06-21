@@ -32,9 +32,11 @@ function weekdayName(date) {
  * @param {any[][]} reportRows
  * @param {object} routePlan
  * @param {Date} date
+ * @param {object} pendingByMachine - {machineName: {laneNo: qty, ...}, ...}
  * @returns {object[]}
  */
-function machinesToPickToday(reportRows, routePlan, date) {
+function machinesToPickToday(reportRows, routePlan, date, pendingByMachine) {
+  if (!pendingByMachine) pendingByMachine = {};
   const machinesInPlan = (routePlan && routePlan.machines) ? routePlan.machines : {};
   const groups = {};
 
@@ -70,7 +72,12 @@ function machinesToPickToday(reportRows, routePlan, date) {
         restockSum += num(r[6]); // Restock is col 6
       }
 
-      const pctRaw = laneSum > 0 ? restockSum / laneSum : 0;
+      // In-transit deduction: sum all pending picked_qty for this machine
+      const lanePending = pendingByMachine[machineName] || {};
+      const inTransitSum = Object.values(lanePending).reduce((a, v) => a + v, 0);
+      const adjustedRestockSum = Math.max(0, restockSum - inTransitSum);
+
+      const pctRaw = laneSum > 0 ? adjustedRestockSum / laneSum : 0;
       const pct = Math.round(pctRaw * 100) / 100;
 
       const scheduleDays = machinePlan.scheduleDays || [];
@@ -94,6 +101,7 @@ function machinesToPickToday(reportRows, routePlan, date) {
           team: machinePlan.team || 'UNASSIGNED',
           reason,
           restockSum,
+          adjustedRestockSum,
           laneSum,
           pct
         });
@@ -136,9 +144,14 @@ function machinesToPickToday(reportRows, routePlan, date) {
  * Builds the picking list for a single machine.
  * @param {any[][]} reportRows
  * @param {string} machine
+ * @param {object} pendingByLane - {laneNo: qty, ...}
+ * @param {object} oosByLane - {laneNo: count, ...}
  * @returns {object}
  */
-function buildPickingList(reportRows, machine) {
+function buildPickingList(reportRows, machine, pendingByLane, oosByLane) {
+  if (!pendingByLane) pendingByLane = {};
+  if (!oosByLane) oosByLane = {};
+
   // Take only data rows whose column 0 === machine
   const machineRows = [];
   for (let i = 1; i < reportRows.length; i++) {
@@ -153,8 +166,12 @@ function buildPickingList(reportRows, machine) {
 
   for (const row of machineRows) {
     const restock = num(row[6]); // Restock is col 6
-    // Step B: drop rows where num(restock) === 0
-    if (restock === 0) {
+    const laneNo = String(row[1]); // No. column
+    const laneInTransit = pendingByLane[laneNo] || 0;
+    const actualRestock = Math.max(0, restock - laneInTransit);
+
+    // Step B: hide if actualRestock === 0
+    if (actualRestock === 0) {
       hiddenCount++;
       continue;
     }
@@ -166,10 +183,12 @@ function buildPickingList(reportRows, machine) {
       continue;
     }
 
-    // For each remaining row, Step A: set outOfStock = (num(balQty) === 0)
+    // Step A: out of stock
     const outOfStock = (bal === 0);
 
-    // ponytail: Step D fast-mover +1 deferred to phase 2 (needs restock-change history)
+    // Step D: fast-mover +1
+    const oos7 = oosByLane[laneNo] || 0;
+    const finalRestock = oos7 >= 2 ? actualRestock + 1 : actualRestock;
 
     visibleRows.push({
       no: row[1],
@@ -177,8 +196,9 @@ function buildPickingList(reportRows, machine) {
       product: row[3] !== undefined && row[3] !== null ? String(row[3]) : '',
       bal,
       lane: num(row[5]),
-      restock,
-      outOfStock
+      restock: finalRestock,
+      outOfStock,
+      laneNo
     });
   }
 
@@ -234,7 +254,7 @@ if (require.main === module) {
     }
   };
 
-  const results = machinesToPickToday(mockReport, mockRoutePlan, dateSat);
+  const results = machinesToPickToday(mockReport, mockRoutePlan, dateSat, {});
 
   // Expected qualifying machines:
   // - MachB: team 5530, priority 1, reason 'daily'
@@ -273,7 +293,7 @@ if (require.main === module) {
     ['MachX', '4', 'P4', 'D', '5', '10', '3'],   // balQty === 5 (<=10, restock>0) -> survive, outOfStock = false
   ];
 
-  const pickList = buildPickingList(mockReportList, 'MachX');
+  const pickList = buildPickingList(mockReportList, 'MachX', {}, {});
   assert.strictEqual(pickList.machine, 'MachX');
   assert.strictEqual(pickList.hiddenCount, 2);
   assert.strictEqual(pickList.rows.length, 2);
