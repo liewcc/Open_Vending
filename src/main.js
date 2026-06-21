@@ -74,26 +74,38 @@ async function doUpdate() {
     // Updater script: waits for this process to exit, extracts, copies, relaunches
     const updaterPs1 = path.join(tmpDir, 'updater.ps1')
     const excludeList = UPDATE_EXCLUDE.map(e => `'${e}'`).join(',')
+
+    // Escape single quotes in paths for PowerShell single-quoted strings
+    const escZip = zipPath.replace(/'/g, "''")
+    const escTmp = tmpDir.replace(/'/g, "''")
+    const escApp = ROOT.replace(/'/g, "''")
+    const escVbs = path.join(ROOT, 'run.vbs').replace(/'/g, "''")
+
     fs.writeFileSync(updaterPs1, `
 $pid_  = ${process.pid}
-$zip   = '${zipPath.replace(/\\/g, '\\\\')}'
-$tmp   = '${tmpDir.replace(/\\/g, '\\\\')}'
-$app   = '${ROOT.replace(/\\/g, '\\\\')}'
-$vbs   = '${path.join(ROOT, 'run.vbs').replace(/\\/g, '\\\\')}'
+$zip   = '${escZip}'
+$tmp   = '${escTmp}'
+$app   = '${escApp}'
+$vbs   = '${escVbs}'
 
 while (Get-Process -Id $pid_ -ErrorAction SilentlyContinue) { Start-Sleep -Milliseconds 300 }
 
-Expand-Archive -Path $zip -DestinationPath "$tmp\\extracted" -Force
-$src = (Get-ChildItem "$tmp\\extracted" | Select-Object -First 1).FullName
+Expand-Archive -Path $zip -DestinationPath (Join-Path $tmp 'extracted') -Force
+$src = (Get-ChildItem -Path (Join-Path $tmp 'extracted') | Select-Object -First 1).FullName
+
+if (-not $src -or -not (Test-Path $src)) {
+  exit
+}
+
 $excl = @(${excludeList})
-Get-ChildItem $src | Where-Object { $_.Name -notin $excl } | ForEach-Object {
+Get-ChildItem -Path $src | Where-Object { $_.Name -notin $excl } | ForEach-Object {
   Copy-Item $_.FullName (Join-Path $app $_.Name) -Recurse -Force
 }
-Start-Process 'wscript.exe' -ArgumentList $vbs
+Start-Process 'wscript.exe' -ArgumentList ('"{0}"' -f $vbs)
 `)
 
     spawn('powershell.exe',
-      ['-NoProfile', '-WindowStyle', 'Hidden', '-File', updaterPs1],
+      ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', updaterPs1],
       { detached: true, stdio: 'ignore' }
     ).unref()
 
