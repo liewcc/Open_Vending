@@ -936,9 +936,9 @@
     if (status === 'available') {
       btnUpdate.title = 'Relaunch to Update'; btnUpdate.className = 'side-icon-btn available'; btnUpdate.disabled = false;
     } else if (status === 'up-to-date') {
-      btnUpdate.title = 'Up to date'; btnUpdate.className = 'side-icon-btn up-to-date'; btnUpdate.disabled = true;
+      btnUpdate.title = 'Up to date'; btnUpdate.className = 'side-icon-btn'; btnUpdate.disabled = true;
     } else {
-      btnUpdate.title = 'Check Failed'; btnUpdate.disabled = true;
+      btnUpdate.title = 'Check Failed'; btnUpdate.className = 'side-icon-btn'; btnUpdate.disabled = true;
     }
   })
 
