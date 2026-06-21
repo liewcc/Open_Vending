@@ -1148,7 +1148,7 @@
         if (m.team !== curTeam) { curTeam = m.team; const h=document.createElement('div'); h.className='pick-team-hd'; h.textContent='Team '+m.team; listEl.appendChild(h) }
         const row = document.createElement('div'); row.className='pick-mach'
         const badgeClass = m.reason==='25%' ? 'amber' : 'daily'
-        const badgeText = m.reason==='25%' ? '≥25%' : (m.reason==='scheduled' ? 'Scheduled' : 'Daily')
+        const badgeText = m.reason==='25%' ? `${Math.round(m.pct * 100)}%` : `${m.reason==='scheduled' ? 'Scheduled' : 'Daily'} (${Math.round(m.pct * 100)}%)`
         row.innerHTML = `<span>${m.machine}</span><span class="pick-badge ${badgeClass}">${badgeText}</span>`
         row.onclick = () => { document.querySelectorAll('.pick-mach.active').forEach(e=>e.classList.remove('active')); row.classList.add('active'); renderPickDetail(m.machine) }
         listEl.appendChild(row)
