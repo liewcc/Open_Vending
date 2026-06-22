@@ -308,7 +308,7 @@ app.whenReady().then(() => {
   spawnPy([PICKING_HISTORY, 'init'], null)
 
   tray = new Tray(ICON_PNG)
-  tray.setToolTip('Open Vending')
+  tray.setToolTip(`Open Vending v${LOCAL_VERSION}`)
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: 'Show', click: () => { win.show(); win.focus() } },
     { type: 'separator' },
