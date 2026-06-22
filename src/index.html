@@ -1278,13 +1278,17 @@
           html += '<table class="pick-tbl"><thead><tr><th>No</th><th>Product</th><th>Bal</th><th>Lane</th><th>Restock</th></tr></thead><tbody>'
           pl.rows.forEach(r => {
             const tag = r.outOfStock ? '<span class="pick-out-tag">OUT</span>' : ''
-            html += `<tr class="${r.outOfStock?'pick-out':''}"><td>${r.no}</td><td>${r.product}${tag}</td><td class="${r.outOfStock?'bal-out':''}">${r.bal}</td><td>${r.lane}</td><td>${r.restock}</td></tr>`
+            html += `<tr class="${r.outOfStock?'pick-out':''}" data-lane="${r.lane}"><td>${r.no}</td><td>${r.product}${tag}</td><td class="${r.outOfStock?'bal-out':''}">${r.bal}</td><td>${r.lane}</td><td>${r.restock}</td></tr>`
           })
           html += '</tbody></table>'
           html += `<div class="pick-hidden-note">${pl.hiddenCount} rows hidden (Restock 0 or Bal &gt; 10)</div>`
         }
         detailEl.innerHTML = html
         detailEl.style.setProperty('--pick-hd-h', detailEl.querySelector('.pick-hd').offsetHeight + 'px')
+        detailEl.querySelectorAll('table.pick-tbl tbody tr[data-lane]').forEach(tr => {
+          tr.style.cursor = 'pointer'
+          tr.addEventListener('click', () => showChart(machine, tr.dataset.lane, `${machine} · Lane ${tr.dataset.lane}`))
+        })
         detailEl.onscroll = null
         currentDetailMachine = machine
       }
