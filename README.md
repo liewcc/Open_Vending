@@ -20,11 +20,11 @@ When you see **"Setup complete! Run run.bat to start."**, setup is done.
 
 ### Step 3 — Launch
 
-Double-click **`run.vbs`** to start the app with no console window.
+Double-click the **Open Vending** shortcut on your Desktop (created by setup).
 
 On first launch, the app will prompt for your DVends username and password. Credentials are stored encrypted on your machine.
 
-> `run.bat` is also available but briefly flashes a black window — this is a Windows limitation of `.bat` files.
+> You can also launch via **`run.vbs`** in the project folder. `run.bat` works too but briefly flashes a black window — a Windows limitation of `.bat` files.
 
 ---
 
