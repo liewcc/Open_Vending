@@ -104,12 +104,13 @@ Get-ChildItem -Path $src | Where-Object { $_.Name -notin $excl } | ForEach-Objec
 Start-Process 'wscript.exe' -ArgumentList ('"{0}"' -f $vbs)
 `)
 
-    spawn('powershell.exe',
-      ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', updaterPs1],
-      { detached: true, stdio: 'ignore', windowsHide: true }
+    spawn('cmd.exe',
+      ['/c', 'start', '""', '/min', 'powershell.exe',
+       '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
+       '-File', updaterPs1],
+      { detached: true, stdio: 'ignore' }
     ).unref()
-
-    app.quit()
+    setTimeout(() => app.quit(), 500)
   } catch (err) {
     win.webContents.send('update-progress', 'error')
   }
