@@ -67,19 +67,28 @@ The left panel lists every machine that needs restocking today. Each machine sho
 
 The main panel shows every lane in the selected machine along with product name, current balance, lane size, and restock quantity. Rows highlighted in red indicate out-of-stock lanes. Click any row to open a **Restock History** chart for that product.
 
+The toolbar above the detail panel has two buttons:
+
+| Icon | Function |
+|------|----------|
+| <img src="asset/button img/pending_actions.png" width="20"> | Open the **In-Transit Queue** modal |
+| <img src="asset/button img/picture_as_pdf.png" width="20"> | Export all queued picking lists as PDF |
+
 ### Adding to the queue
 
-Click the queue icon (<img src="asset/button img/update.png" width="16">) in the top-right corner of the detail panel to add the machine to the print queue. The icon turns **green** once the machine is queued. Green icons across the machine list give a quick visual of which machines have already been queued.
+Click <img src="asset/button img/check_box.png" width="16"> in the top-right corner of the detail panel to add the machine to the queue. The icon turns **green** once the machine is queued. Click <img src="asset/button img/home.png" width="16"> on the left to go back to the machine list without selecting a machine.
 
-### Queue modal
+### In-Transit Queue modal
 
-Click the queue icon in the **toolbar** (top-left of the picking panel) to open the queue modal. From here you can:
+Click <img src="asset/button img/pending_actions.png" width="16"> in the toolbar to open the queue modal. Each queued machine shows the total units and lane count. From here you can:
 
-- **Reload** — refresh all queued entries to reflect the latest report data
-- **Edit** (pencil icon beside each entry) — open that machine's picking list in **Edit mode**, where you can adjust any value directly in the table. Changes are auto-saved as you type and stored in the `db/` folder. Edits do not affect the original report.
-- **Delete** (trash icon beside each entry) — remove a single machine from the queue
-- **Delete All** — clear the entire queue
+| Icon | Function |
+|------|----------|
+| <img src="asset/button img/edit.png" width="16"> | Open that machine in **Edit mode** |
+| <img src="asset/button img/delete.png" width="16"> | Remove that machine from the queue |
+| <img src="asset/button img/refresh.png" width="16"> | Reload all queued entries from the latest report data |
+| <img src="asset/button img/delete_forever.png" width="16"> | Clear the entire queue |
 
 ### Edit mode
 
-When a machine is opened in Edit mode, an **"Edit mode"** banner appears at the top of the detail panel. All table cells become editable. Click the save icon in the top-right corner to exit Edit mode and return to the normal picking view.
+Click <img src="asset/button img/edit.png" width="16"> on any queued machine to open it in Edit mode. An **"Edit mode"** banner appears at the top of the detail panel and all table cells become editable. Changes are auto-saved as you type and stored in the `db/` folder — edits do not affect the original report. Click <img src="asset/button img/save.png" width="16"> in the top-right corner to exit Edit mode.

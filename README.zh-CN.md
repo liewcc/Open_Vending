@@ -67,19 +67,28 @@
 
 主面板列出所选机器的所有货道，包含商品名称、当前库存、货道容量和补货数量。红色高亮行表示该货道已断货。点击任意行可查看该商品的**补货历史**图表。
 
-### 加入排队
+明细面板上方工具栏有两个按钮：
 
-点击明细面板右上角的队列图标，将该机器加入打印队列。图标加入后变为**绿色**。机器列表中绿色图标可快速识别哪些机器已在队列中。
+| 图标 | 功能 |
+|------|------|
+| <img src="asset/button img/pending_actions.png" width="20"> | 打开**在途队列**弹窗 |
+| <img src="asset/button img/picture_as_pdf.png" width="20"> | 将所有排队的拣货清单导出为 PDF |
 
-### 队列弹窗
+### 加入队列
 
-点击拣货面板**工具栏左上角**的队列图标，打开队列弹窗。在此可以：
+点击明细面板右上角的 <img src="asset/button img/check_box.png" width="16"> 将该机器加入队列。图标变为**绿色**即表示已加入。点击左侧的 <img src="asset/button img/home.png" width="16"> 可返回机器列表。
 
-- **刷新** — 将所有排队的条目更新至最新报告数据
-- **编辑**（铅笔图标）— 以**编辑模式**打开该机器的拣货清单，可直接在表格中修改任意数值。输入后自动保存，数据存储在 `db/` 文件夹中，不影响原始报告
-- **删除**（垃圾桶图标）— 将单台机器从队列中移除
-- **全部删除** — 清空整个队列
+### 在途队列弹窗
+
+点击工具栏中的 <img src="asset/button img/pending_actions.png" width="16"> 打开队列弹窗。每台机器显示总单位数和货道数。可执行以下操作：
+
+| 图标 | 功能 |
+|------|------|
+| <img src="asset/button img/edit.png" width="16"> | 以**编辑模式**打开该机器 |
+| <img src="asset/button img/delete.png" width="16"> | 将该机器从队列中移除 |
+| <img src="asset/button img/refresh.png" width="16"> | 将所有排队条目刷新至最新报告数据 |
+| <img src="asset/button img/delete_forever.png" width="16"> | 清空整个队列 |
 
 ### 编辑模式
 
-以编辑模式打开机器时，明细面板顶部会出现 **"Edit mode"** 横幅提示，所有表格单元格变为可编辑状态。点击右上角的保存图标，退出编辑模式并返回正常拣货视图。
+点击排队机器旁的 <img src="asset/button img/edit.png" width="16"> 以编辑模式打开。明细面板顶部出现 **"Edit mode"** 横幅，所有表格单元格变为可编辑状态。输入后自动保存，数据存储在 `db/` 文件夹中，不影响原始报告。点击右上角的 <img src="asset/button img/save.png" width="16"> 退出编辑模式。
