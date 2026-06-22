@@ -41,7 +41,7 @@ On launch, the app automatically downloads the latest replenishment report from 
 | <img src="asset/button img/track_changes.png" width="24"> | **Changing List** | Items whose restock values changed since the last scan |
 | <img src="asset/button img/shopping_basket.png" width="24"> | **Picking List** | Daily restock plan by machine — see [Picking List](#picking-list) below |
 | <img src="asset/button img/settings.png" width="24"> | **Settings** | Configure app preferences |
-| <img src="asset/button img/update.png" width="24"> | **Check for Update** | Download and apply the latest version |
+| <img src="asset/button img/update.png" width="24"> | **Update** | Grayed out while up to date — lights up when a newer version is available. Click to update (see [Auto-update](#auto-update) below) |
 
 ### Settings
 
@@ -92,3 +92,16 @@ Click <img src="asset/button img/pending_actions.png" width="16"> in the toolbar
 ### Edit mode
 
 Click <img src="asset/button img/edit.png" width="16"> on any queued machine to open it in Edit mode. An **"Edit mode"** banner appears at the top of the detail panel and all table cells become editable. Changes are auto-saved as you type and stored in the `db/` folder — edits do not affect the original report. Click <img src="asset/button img/save.png" width="16"> in the top-right corner to exit Edit mode.
+
+---
+
+## Auto-update
+
+On every launch, the app checks the remote `package.json` for a newer version. The <img src="asset/button img/update.png" width="16"> icon in the side panel is grayed out while the app is up to date. When a newer version is detected, the icon lights up.
+
+Click the icon to start the update:
+
+1. The app downloads the latest release as a zip file.
+2. A background PowerShell script is launched, then the app exits.
+3. The script waits for the app to fully close, extracts the zip, and copies the updated files (preserving `node_modules/`, `python/`, `db/`, and other local data).
+4. The app relaunches automatically via `run.vbs`.

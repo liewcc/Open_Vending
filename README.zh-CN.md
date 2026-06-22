@@ -41,7 +41,7 @@
 | <img src="asset/button img/track_changes.png" width="24"> | **变动清单** | 显示上次扫描后补货值有变化的商品 |
 | <img src="asset/button img/shopping_basket.png" width="24"> | **拣货清单** | 每日补货计划，按贩卖机分组 — 详见下方[拣货清单](#拣货清单) |
 | <img src="asset/button img/settings.png" width="24"> | **设定** | 配置应用选项 |
-| <img src="asset/button img/update.png" width="24"> | **检查更新** | 下载并应用最新版本 |
+| <img src="asset/button img/update.png" width="24"> | **更新** | 版本最新时为灰色，检测到新版本时亮起。点击即可更新（详见下方[自动更新](#自动更新)） |
 
 ### 设定选项
 
@@ -92,3 +92,16 @@
 ### 编辑模式
 
 点击排队机器旁的 <img src="asset/button img/edit.png" width="16"> 以编辑模式打开。明细面板顶部出现 **"Edit mode"** 横幅，所有表格单元格变为可编辑状态。输入后自动保存，数据存储在 `db/` 文件夹中，不影响原始报告。点击右上角的 <img src="asset/button img/save.png" width="16"> 退出编辑模式。
+
+---
+
+## 自动更新
+
+每次启动时，程序会自动检查远端 `package.json` 是否有新版本。侧边栏的 <img src="asset/button img/update.png" width="16"> 图标在版本最新时为灰色，检测到新版本时会亮起。
+
+点击图标即可开始更新：
+
+1. 程序下载最新版本的 zip 文件。
+2. 在后台启动一个 PowerShell 脚本，随后程序退出。
+3. 脚本等待程序完全关闭后，解压 zip 并覆盖更新的文件（保留 `node_modules/`、`python/`、`db/` 等本地数据）。
+4. 程序通过 `run.vbs` 自动重新启动。
