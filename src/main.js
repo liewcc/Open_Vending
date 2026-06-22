@@ -105,8 +105,8 @@ Start-Process 'wscript.exe' -ArgumentList ('"{0}"' -f $vbs)
 `)
 
     spawn('powershell.exe',
-      ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', updaterPs1],
-      { detached: true, stdio: 'ignore' }
+      ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', updaterPs1],
+      { detached: true, stdio: 'ignore', windowsHide: true }
     ).unref()
 
     app.quit()
