@@ -30,17 +30,25 @@
 
 ## 使用说明
 
-程序启动后会自动下载最新的补货报告，并在主面板中显示。
+启动后，程序会自动从 DVends 下载最新补货报告，并显示在主表格中。
 
-点击侧边栏中的 **Re-download** 可重新下载刷新数据。
+### 侧边栏按钮
 
-## 目录结构
+| 图标 | 按钮 | 功能说明 |
+|------|------|----------|
+| <img src="asset/button img/table_view.png" width="24"> | **主页** | 返回主补货表格 |
+| <img src="asset/button img/cloud_sync.png" width="24"> | **重新下载** | 从 DVends 获取最新报告 |
+| <img src="asset/button img/track_changes.png" width="24"> | **变动清单** | 显示上次扫描后补货值有变化的商品 |
+| <img src="asset/button img/shopping_basket.png" width="24"> | **拣货清单** | 显示需要补货的商品，点击任意行可查看该商品的补货历史图表 |
+| <img src="asset/button img/settings.png" width="24"> | **设定** | 配置应用选项 |
+| <img src="asset/button img/update.png" width="24"> | **检查更新** | 下载并应用最新版本 |
 
-```
-Open_Vending/
-├── src/              UI 源文件（Electron）
-├── open_vending.py   下载自动化脚本
-├── setup.bat         首次安装程序
-├── run.bat           启动程序
-└── requirements.txt  Python 依赖
-```
+### 设定选项
+
+| 选项 | 说明 |
+|------|------|
+| 显示菜单栏 | 显示 Electron 应用菜单栏 |
+| 显示控制台窗口 | 下载数据时显示 DOS 控制台 |
+| 关闭到系统托盘 | 点击 × 最小化到托盘，而不是退出 |
+| 补货变动通知 | 扫描后若补货值有变化，发出系统托盘通知 |
+| 有头浏览器 | 扫描时使用可见浏览器（按 **F9** 可截取当前页面） |

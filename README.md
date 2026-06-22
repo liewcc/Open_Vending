@@ -30,17 +30,25 @@ On first launch, the app will prompt for your DVends username and password. Cred
 
 ## Usage
 
-The app opens automatically, downloads the latest replenishment report, and displays it in the main panel.
+On launch, the app automatically downloads the latest replenishment report from DVends and displays it in the main table.
 
-Click **Re-download** in the side panel to refresh the data.
+### Side panel buttons
 
-## Folder structure
+| Icon | Button | Description |
+|------|--------|-------------|
+| <img src="asset/button img/table_view.png" width="24"> | **Home** | Return to the main replenishment table |
+| <img src="asset/button img/cloud_sync.png" width="24"> | **Re-download** | Fetch the latest report from DVends |
+| <img src="asset/button img/track_changes.png" width="24"> | **Changing List** | Items whose restock values changed since the last scan |
+| <img src="asset/button img/shopping_basket.png" width="24"> | **Picking List** | Items that need restocking — click any row to view its restock history chart |
+| <img src="asset/button img/settings.png" width="24"> | **Settings** | Configure app preferences |
+| <img src="asset/button img/update.png" width="24"> | **Check for Update** | Download and apply the latest version |
 
-```
-Open_Vending/
-├── src/              UI source files (Electron)
-├── open_vending.py   Download automation script
-├── setup.bat         First-time setup
-├── run.bat           Launch the app
-└── requirements.txt  Python dependencies
-```
+### Settings
+
+| Option | Description |
+|--------|-------------|
+| Show Menu Bar | Display the Electron application menu bar |
+| Show Console Window | Show the DOS console during data download |
+| Close to System Tray | Clicking × minimizes to tray instead of quitting |
+| Notify on Restock Changes | System tray notification when restock values change after a scan |
+| Headed Browser | Run a visible browser during scan (press **F9** to capture the current page) |
