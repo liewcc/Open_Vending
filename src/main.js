@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, safeStorage, Tray, Menu, globalShortcut, Notification } = require('electron')
+const { app, BrowserWindow, ipcMain, safeStorage, Tray, Menu, globalShortcut, Notification, dialog } = require('electron')
 const { spawn } = require('child_process')
 const path = require('path')
 const fs   = require('fs')
@@ -426,3 +426,51 @@ ipcMain.handle('get-pending-in-transit', ()         => spawnPy([PICKING_HISTORY,
 ipcMain.handle('get-oos-counts',         ()         => spawnPy([PICKING_HISTORY, 'get-oos-counts'], null))
 ipcMain.handle('save-picks',             (_, picks) => spawnPy([PICKING_HISTORY, 'save-picks'],   picks))
 ipcMain.handle('mark-done',              (_, machines) => spawnPy([PICKING_HISTORY, 'mark-done'], machines))
+
+ipcMain.handle('print-all-picking-lists', async (_, data) => {
+  function esc(s) {
+    return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+  }
+  const pages = data.map(m => {
+    const rows = m.rows.map(r => {
+      const hasReplacement = false // wire replacement field here later
+      if (hasReplacement) {
+        return `<tr class="rep"><td>${esc(r.no)}</td><td class="orig">${esc(r.product)}</td><td class="col1">${esc(r.productId)}</td><td>${esc(r.bal)}</td><td>${esc(r.lane)}</td><td>${esc(r.restock)}</td></tr>`
+      }
+      return `<tr><td>${esc(r.no)}</td><td>${esc(r.product)}</td><td></td><td>${esc(r.bal)}</td><td>${esc(r.lane)}</td><td>${esc(r.restock)}</td></tr>`
+    }).join('')
+    return `<div class="page"><div class="hdr"><span>${esc(m.date)}</span><span>${esc(m.machine)} ${esc(m.team)}</span></div><table><thead><tr><th>No.</th><th>Product Name</th><th>Column1</th><th>Bal Qty</th><th>Lane Size</th><th>Restock</th></tr></thead><tbody>${rows}</tbody></table></div>`
+  }).join('')
+
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:11px}@page{size:A4 portrait;margin:12mm}.page{page-break-after:always;break-after:page}.page:last-child{page-break-after:avoid;break-after:avoid}.hdr{display:flex;justify-content:space-between;font-size:13px;font-weight:bold;margin-bottom:8px;padding-bottom:4px;border-bottom:1.5px solid #000}table{width:100%;border-collapse:collapse;font-size:11px}th,td{border:0.5px solid #555;padding:4px 6px;text-align:left}th{background:#f0f0f0;font-weight:600}th:nth-child(1){width:5%}th:nth-child(2){width:38%}th:nth-child(3){width:22%}th:nth-child(4),th:nth-child(5),th:nth-child(6){width:10%;text-align:center}td:nth-child(4),td:nth-child(5),td:nth-child(6){text-align:center}tr.rep td.orig{text-decoration:line-through;color:#777}tr.rep td.col1{background-color:#ffffa0!important;font-weight:500}</style></head><body>${pages}</body></html>`
+
+  const defaultPath = settings.lastPdfPath || path.join(os.homedir(), 'Desktop', 'picking-list.pdf')
+  const { canceled, filePath } = await dialog.showSaveDialog({ defaultPath, filters: [{ name: 'PDF', extensions: ['pdf'] }] })
+  if (canceled || !filePath) return { ok: false }
+
+  const printWin = new BrowserWindow({ show: false, webPreferences: { contextIsolation: true } })
+  printWin.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html))
+  await new Promise(resolve => printWin.webContents.once('did-finish-load', resolve))
+  const pdfBuffer = await printWin.webContents.printToPDF({ printBackground: true })
+  printWin.destroy()
+
+  fs.writeFileSync(filePath, pdfBuffer)
+  settings.lastPdfPath = filePath
+  saveSettings()
+  return { ok: true, filePath }
+})
+
+ipcMain.handle('save-pick-edit', (_, { machine, date, rows }) => {
+  const safe = machine.replace(/[^a-zA-Z0-9]/g, '_')
+  const fpath = path.join(ROOT, 'db', `pick_edit_${safe}_${date}.json`)
+  fs.writeFileSync(fpath, JSON.stringify({ machine, date, rows }, null, 2))
+})
+
+ipcMain.handle('load-pick-edit', (_, { machine, date }) => {
+  const safe = machine.replace(/[^a-zA-Z0-9]/g, '_')
+  const fpath = path.join(ROOT, 'db', `pick_edit_${safe}_${date}.json`)
+  if (!fs.existsSync(fpath)) return null
+  try { return JSON.parse(fs.readFileSync(fpath, 'utf8')) } catch { return null }
+})
+
+

@@ -2,12 +2,19 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'">
-<link rel="stylesheet" href="font/material-symbols.css">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=block">
 <title>Open Vending</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
+  @font-face {
+    font-family: 'Material Symbols Outlined';
+    font-style: normal;
+    font-weight: 100 700;
+    font-display: block;
+    src: url(font/kJEhBvYX7BgnkSrUwT8OhrdQw4oELdPIeeII9v6oFsI.woff2) format('woff2');
+  }
   .icon {
     font-family: 'Material Symbols Outlined';
     font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20;
@@ -502,6 +509,12 @@
   #pick-toolbar { display:flex; align-items:center; gap:12px; padding:9px 14px; background:#fff; border-bottom:0.5px solid #e2e4e9; font-size:12px; }
   #pick-count { color:#6b7280; }
   #pick-print-all { margin-left:auto; }
+  .pick-icon-btn { width:34px; height:34px; background:none; border:none; border-radius:6px; cursor:pointer; display:flex; align-items:center; justify-content:center; color:#6b7280; }
+  .pick-icon-btn:hover:not(:disabled) { background:#f3f4f6; color:#1f2937; }
+  .pick-icon-btn:disabled { color:#d1d5db; cursor:default; }
+  .pick-icon-btn.in-queue { color:#22c55e; }
+  .pick-icon-btn.in-queue .icon { font-variation-settings:'FILL' 1,'wght' 400,'GRAD' 0,'opsz' 24; }
+  .pick-icon-btn .icon { font-size:32px; font-variation-settings:'FILL' 0,'wght' 300,'GRAD' 0,'opsz' 24; }
   #pick-body { display:flex; flex:1; min-height:0; }
   #pick-machine-list { width:210px; border-right:0.5px solid #e2e4e9; overflow-y:auto; background:#fafbfc; padding:8px; font-size:12px; }
   #pick-detail { flex:1; overflow-y:auto; background:#fff; padding:0; min-width:0; }
@@ -512,11 +525,11 @@
   .pick-badge { margin-left:auto; border-radius:8px; padding:1px 7px; font-size:9.5px; white-space:nowrap; }
   .pick-badge.daily { background:#e1f0e1; color:#3b6d11; }
   .pick-badge.amber { background:#fae8d4; color:#854f0b; }
-  .pick-hd { padding:10px 14px; border-bottom:0.5px solid #eee; }
+  .pick-hd { padding:10px 14px; border-bottom:0.5px solid #eee; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:2; background:#fff; }
   .pick-hd .nm { font-size:13px; font-weight:500; color:#1f2937; }
   .pick-hd .sub { font-size:10.5px; color:#6b7280; margin-top:2px; }
   table.pick-tbl { width:100%; border-collapse:collapse; font-size:11.5px; }
-  table.pick-tbl th { text-align:left; color:#9ca3af; font-size:10px; font-weight:500; padding:5px 14px; border-bottom:0.5px solid #eee; }
+  table.pick-tbl th { text-align:left; color:#9ca3af; font-size:10px; font-weight:500; padding:5px 14px; border-bottom:0.5px solid #eee; position:sticky; top:var(--pick-hd-h, 52px); z-index:1; background:#fff; }
   table.pick-tbl td { padding:5px 14px; border-bottom:0.5px solid #f3f3f3; }
   tr.pick-out td { background:#fcebeb; }
   td.bal-out { color:#a32d2d; }
@@ -530,6 +543,18 @@
   .it-row { display:flex; align-items:center; gap:8px; padding:3px 0; }
   .it-row label { display:flex; align-items:center; gap:6px; cursor:pointer; }
   #in-transit-panel .it-actions { margin-top:10px; display:flex; gap:8px; }
+  .q-item { display:flex; align-items:center; gap:8px; padding:7px 0; border-bottom:0.5px solid #f3f3f3; }
+  .q-machine { font-size:12px; font-weight:500; color:#185fa5; cursor:pointer; flex:1; }
+  .q-machine:hover { text-decoration:underline; }
+  .q-sub { font-size:11px; color:#9ca3af; }
+  .q-item-acts { display:flex; gap:2px; }
+  .q-icon-btn { background:none; border:none; cursor:pointer; color:#6b7280; border-radius:4px; padding:3px; display:flex; align-items:center; }
+  .q-icon-btn:hover { background:#f3f4f6; color:#1f2937; }
+  .q-icon-btn .icon { font-size:18px; font-variation-settings:'FILL' 0,'wght' 300,'GRAD' 0,'opsz' 24; }
+  .q-footer { display:flex; gap:8px; margin-top:14px; padding-top:10px; border-top:0.5px solid #eee; justify-content:flex-end; }
+  .edit-banner { padding:7px 14px; background:#fffbeb; border-bottom:0.5px solid #fbbf24; font-size:11.5px; color:#92400e; font-weight:500; }
+  table.pick-tbl td[contenteditable] { background:#fffdf0; cursor:text; }
+  table.pick-tbl td[contenteditable]:focus { background:#fef9c3; outline:1.5px solid #fbbf24; outline-offset:-1px; }
 </style>
 </head>
 <body>
@@ -551,7 +576,7 @@
   <div id="chart-card">
     <div id="chart-header">
       <span id="chart-title">Restock History</span>
-      <button id="chart-close" onclick="closeChart()">×</button>
+      <button id="chart-close" onclick="closeChart()"><span class="icon">close</span></button>
     </div>
     <div id="chart-body"><div id="chart-loading">Loading…</div></div>
   </div>
@@ -711,12 +736,22 @@
 
   <!-- Pick Panel -->
   <div id="pick-panel" style="display:none; flex:1; flex-direction:column; min-width:0; background:#f0f2f5;">
-    <div id="pick-toolbar">
-      <input type="date" id="pick-date" onchange="renderPicks()">
-      <span id="pick-count"></span>
-      <button id="pick-print-all" disabled>Print all</button>
-    </div>
+  <div id="pick-toolbar">
+    <input type="date" id="pick-date" onchange="renderPicks()">
+    <span id="pick-count"></span>
+    <button id="btn-queue-view" class="pick-icon-btn" onclick="showQueueView()" title="View Queue"><span class="icon">pending_actions</span></button>
+    <button id="pick-print-all" class="pick-icon-btn" onclick="printAll()" title="Export PDF"><span class="icon">picture_as_pdf</span></button>
+  </div>
     <div id="in-transit-panel" style="display:none;"></div>
+  <div id="queue-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.35);z-index:1000;align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:10px;padding:20px;min-width:320px;max-width:480px;max-height:80vh;overflow-y:auto;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+        <span style="font-weight:500;font-size:13px;color:#1f2937;">In-Transit Queue</span>
+        <button class="q-icon-btn" onclick="document.getElementById('queue-modal').style.display='none'" title="Close"><span class="icon">close</span></button>
+      </div>
+      <div id="queue-modal-body"></div>
+    </div>
+  </div>
     <div id="pick-body">
       <div id="pick-machine-list"></div>
       <div id="pick-detail"></div>
@@ -763,6 +798,8 @@
   let scanTimer = null
   let scanIntervalSec = 30 * 60
   let lastFilePath = null;
+  let currentDetailMachine = null
+
 
   const fmtSec = s => {
     const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60
@@ -1099,20 +1136,41 @@
     window.api.startDownload()
   }
 
+  let currentPickList = []
   let currentPending = {}
   let currentOos = {}
+  let isEditMode = false
+  let editMachine = null
+  let editScrollTop = 0
+  let editSaveTimer = null
 
   function showPickView() {
     const di = document.getElementById('pick-date')
     if (!di.value) { const d = new Date(); di.value = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` }
     showPanel('pick')
-    renderPicks()
+    if (isEditMode && editMachine) {
+      renderPickDetail(editMachine).then(() => {
+        const detailEl = document.getElementById('pick-detail')
+        if (detailEl && editScrollTop) detailEl.scrollTop = editScrollTop
+      })
+    } else {
+      renderPicks()
+    }
   }
   async function renderPicks() {
     const listEl = document.getElementById('pick-machine-list')
     const detailEl = document.getElementById('pick-detail')
     const itPanel = document.getElementById('in-transit-panel')
-    if (!lastFilePath) { listEl.innerHTML = '<div class="pick-empty">No report loaded yet.</div>'; detailEl.innerHTML=''; document.getElementById('pick-count').textContent=''; itPanel.style.display='none'; return }
+    if (!lastFilePath) {
+      listEl.innerHTML = '<div class="pick-empty">No report loaded yet.</div>'
+      detailEl.innerHTML = ''
+      document.getElementById('pick-count').textContent = ''
+      itPanel.style.display = 'none'
+      currentPickList = []
+      document.getElementById('pick-print-all').disabled = true
+      currentDetailMachine = null
+      return
+    }
     const dateISO = document.getElementById('pick-date').value + 'T10:00:00'
     try {
       // 36h safety net
@@ -1133,7 +1191,7 @@
         })
         itHtml += '<div class="it-actions"><button onclick="markInTransitDone()">Update Restock Status</button></div>'
         itPanel.innerHTML = itHtml
-        itPanel.style.display = 'block'
+        itPanel.style.display = 'none'
       } else {
         itPanel.style.display = 'none'
         itPanel.innerHTML = ''
@@ -1141,6 +1199,8 @@
 
       const list = window.api.getTodayPicks(lastFilePath, dateISO, currentPending)
       document.getElementById('pick-count').textContent = `${list.length} machines to pick`
+      currentPickList = list
+      document.getElementById('pick-print-all').disabled = list.length === 0
       listEl.innerHTML = ''
       if (!list.length) { listEl.innerHTML = '<div class="pick-empty">Nothing to pick for this date.</div>'; detailEl.innerHTML=''; return }
       let curTeam = null
@@ -1149,11 +1209,17 @@
         const row = document.createElement('div'); row.className='pick-mach'
         const badgeClass = m.reason==='25%' ? 'amber' : 'daily'
         const badgeText = m.reason==='25%' ? `${Math.round(m.pct * 100)}%` : `${m.reason==='scheduled' ? 'Scheduled' : 'Daily'} (${Math.round(m.pct * 100)}%)`
+        row.dataset.machine = m.machine
         row.innerHTML = `<span>${m.machine}</span><span class="pick-badge ${badgeClass}">${badgeText}</span>`
         row.onclick = () => { document.querySelectorAll('.pick-mach.active').forEach(e=>e.classList.remove('active')); row.classList.add('active'); renderPickDetail(m.machine) }
         listEl.appendChild(row)
       })
-      detailEl.innerHTML = '<div class="pick-empty">Select a machine to view its picking list.</div>'
+      if (currentDetailMachine) {
+        const activeRow = listEl.querySelector(`[data-machine="${currentDetailMachine}"]`)
+        if (activeRow) activeRow.classList.add('active')
+      } else {
+        detailEl.innerHTML = '<div class="pick-empty">Select a machine to view its picking list.</div>'
+      }
     } catch (err) {
       console.error(err)
       listEl.innerHTML = `<div class="pick-empty" style="color:#e05c5c">Error loading picking list: ${err.message || err}</div>`
@@ -1170,24 +1236,58 @@
   async function renderPickDetail(machine) {
     const detailEl = document.getElementById('pick-detail')
     try {
-      const pendingByLane = (currentPending[machine]) || {}
-      const oosByLane     = (currentOos[machine])     || {}
-      const pl = window.api.getPickList(lastFilePath, machine, pendingByLane, oosByLane)
+      const oosByLane = (currentOos[machine]) || {}
+      const pl = window.api.getPickList(lastFilePath, machine, {}, oosByLane)
       const team = window.api.teamOf(machine) || '—'
       const dateStr = document.getElementById('pick-date').value
-      let html = `<div class="pick-hd"><div class="nm">${machine}</div><div class="sub">Picking date ${dateStr} &nbsp;·&nbsp; Restock team ${team}</div></div>`
-      if (!pl.rows.length) { html += '<div class="pick-empty">All lanes sufficiently stocked.</div>' }
-      else {
-        html += '<table class="pick-tbl"><thead><tr><th>No</th><th>Product</th><th>Bal</th><th>Lane</th><th>Restock</th></tr></thead><tbody>'
-        pl.rows.forEach(r => {
-          const tag = r.outOfStock ? '<span class="pick-out-tag">OUT</span>' : ''
-          html += `<tr class="${r.outOfStock?'pick-out':''}"><td>${r.no}</td><td>${r.product}${tag}</td><td class="${r.outOfStock?'bal-out':''}">${r.bal}</td><td>${r.lane}</td><td>${r.restock}</td></tr>`
-        })
-        html += '</tbody></table>'
-        html += `<div class="pick-hidden-note">${pl.hiddenCount} rows hidden (Restock 0 or Bal &gt; 10)</div>`
+      let rows = pl.rows
+      if (isEditMode && editMachine === machine) {
+        const date = dateStr.replace(/-/g, '')
+        const saved = await window.api.loadPickEdit(machine, date)
+        if (saved && saved.rows) rows = saved.rows
+        let html = `<div class="pick-hd"><div><div class="nm">${machine}</div><div class="sub">Picking date ${dateStr} &nbsp;·&nbsp; Restock team ${team}</div></div><button class="pick-icon-btn" onclick="exitEditMode()" title="Save &amp; Exit Edit"><span class="icon">save</span></button></div>`
+        html += `<div class="edit-banner">&#9998;&nbsp; Edit mode &mdash; changes auto-saved</div>`
+        if (!rows.length) { html += '<div class="pick-empty">All lanes sufficiently stocked.</div>' }
+        else {
+          html += '<table class="pick-tbl"><thead><tr><th>No</th><th>Product</th><th>Bal</th><th>Lane</th><th>Restock</th></tr></thead><tbody>'
+          rows.forEach(r => {
+            const tag = r.outOfStock ? '<span class="pick-out-tag">OUT</span>' : ''
+            html += `<tr class="${r.outOfStock?'pick-out':''}"><td>${r.no}</td><td contenteditable="true" spellcheck="false">${r.product}${tag}</td><td contenteditable="true" spellcheck="false">${r.bal}</td><td contenteditable="true" spellcheck="false">${r.lane}</td><td contenteditable="true" spellcheck="false">${r.restock}</td></tr>`
+          })
+          html += '</tbody></table>'
+        }
+        detailEl.innerHTML = html
+        detailEl.style.setProperty('--pick-hd-h', detailEl.querySelector('.pick-hd').offsetHeight + 'px')
+        const tbl = detailEl.querySelector('table.pick-tbl')
+        if (tbl) {
+          tbl.addEventListener('input', () => {
+            clearTimeout(editSaveTimer)
+            editSaveTimer = setTimeout(async () => {
+              const r = collectEditRows(); const d = dateStr.replace(/-/g, '')
+              if (r) await window.api.savePickEdit(machine, d, r)
+            }, 1000)
+          })
+        }
+        detailEl.onscroll = () => { if (isEditMode) editScrollTop = detailEl.scrollTop }
+        if (editScrollTop > 0) setTimeout(() => { detailEl.scrollTop = editScrollTop }, 50)
+      } else {
+        const inQueue = Object.keys(currentPending[machine] || {}).length > 0
+        let html = `<div class="pick-hd"><button class="pick-icon-btn" onclick="clearPickDetail()" title="Back to list"><span class="icon">home</span></button><div style="flex:1"><div class="nm">${machine}</div><div class="sub">Picking date ${dateStr} &nbsp;·&nbsp; Restock team ${team}</div></div><button class="pick-icon-btn${inQueue?' in-queue':''}" onclick="confirmAndQueuePrintCurrent()" title="${inQueue?'Already in queue':'Add to Queue'}"><span class="icon">check_box</span></button></div>`
+        if (!pl.rows.length) { html += '<div class="pick-empty">All lanes sufficiently stocked.</div>' }
+        else {
+          html += '<table class="pick-tbl"><thead><tr><th>No</th><th>Product</th><th>Bal</th><th>Lane</th><th>Restock</th></tr></thead><tbody>'
+          pl.rows.forEach(r => {
+            const tag = r.outOfStock ? '<span class="pick-out-tag">OUT</span>' : ''
+            html += `<tr class="${r.outOfStock?'pick-out':''}"><td>${r.no}</td><td>${r.product}${tag}</td><td class="${r.outOfStock?'bal-out':''}">${r.bal}</td><td>${r.lane}</td><td>${r.restock}</td></tr>`
+          })
+          html += '</tbody></table>'
+          html += `<div class="pick-hidden-note">${pl.hiddenCount} rows hidden (Restock 0 or Bal &gt; 10)</div>`
+        }
+        detailEl.innerHTML = html
+        detailEl.style.setProperty('--pick-hd-h', detailEl.querySelector('.pick-hd').offsetHeight + 'px')
+        detailEl.onscroll = null
+        currentDetailMachine = machine
       }
-      html += `<div class="pick-detail-foot"><button id="btn-confirm-pick" onclick="confirmAndQueuePrint('${machine.replace(/'/g, "\\'")}')">Confirm &amp; Queue Print</button></div>`
-      detailEl.innerHTML = html
     } catch (err) {
       console.error(err)
       detailEl.innerHTML = `<div class="pick-empty" style="color:#e05c5c">Error loading detail: ${err.message || err}</div>`
@@ -1208,9 +1308,102 @@
       pick_date:    today
     }))
     await window.api.savePicks(picks)
-    const btn = document.getElementById('btn-confirm-pick')
-    if (btn) { btn.textContent = '✓ Queued'; btn.disabled = true }
-    setTimeout(() => renderPicks(), 2000)
+    const pendingRaw = await window.api.getPendingInTransit()
+    currentPending = pendingRaw || {}
+    const qBtn = document.querySelector('#pick-detail .pick-hd .pick-icon-btn:last-child')
+    if (qBtn) { qBtn.classList.add('in-queue'); qBtn.title = 'Already in queue' }
+  }
+  async function confirmAndQueuePrintCurrent() {
+    if (!currentDetailMachine) return
+    await confirmAndQueuePrint(currentDetailMachine)
+  }
+  function showQueueView() {
+    const body = document.getElementById('queue-modal-body')
+    const machines = Object.keys(currentPending)
+    if (!machines.length) {
+      body.innerHTML = '<p style="color:#9ca3af;font-size:12px;margin:0;">Queue is empty.</p>'
+    } else {
+      let html = ''
+      machines.forEach(mach => {
+        const em = mach.replace(/'/g, "\\'")
+        const lanes = currentPending[mach]
+        const units = Object.values(lanes).reduce((a, v) => a + (Number(v) || 0), 0)
+        const laneCount = Object.keys(lanes).length
+        html += `<div class="q-item"><div style="flex:1"><span class="q-machine" onclick="enterEditMode('${em}')">${mach}</span><div class="q-sub">${units} units &middot; ${laneCount} lane${laneCount!==1?'s':''}</div></div><div class="q-item-acts"><button class="q-icon-btn" onclick="enterEditMode('${em}')" title="Edit"><span class="icon">edit</span></button><button class="q-icon-btn" onclick="deleteFromQueue('${em}')" title="Remove"><span class="icon">delete</span></button></div></div>`
+      })
+      html += `<div class="q-footer"><button class="q-icon-btn" onclick="updateQueue()" title="Refresh"><span class="icon">refresh</span></button><button class="q-icon-btn" onclick="deleteAllQueue()" title="Delete All"><span class="icon">delete_forever</span></button></div>`
+      body.innerHTML = html
+    }
+    document.getElementById('queue-modal').style.display = 'flex'
+  }
+  async function deleteFromQueue(machine) {
+    await window.api.markDone([machine])
+    await renderPicks()
+    showQueueView()
+  }
+  async function deleteAllQueue() {
+    const machines = Object.keys(currentPending)
+    if (!machines.length) return
+    await window.api.markDone(machines)
+    await renderPicks()
+    document.getElementById('queue-modal').style.display = 'none'
+  }
+  async function updateQueue() {
+    await renderPicks()
+    showQueueView()
+  }
+  function clearPickDetail() {
+    document.querySelectorAll('.pick-mach').forEach(el => el.classList.remove('active'))
+    document.getElementById('pick-detail').innerHTML = ''
+    currentDetailMachine = null
+  }
+
+  async function enterEditMode(machine) {
+    document.getElementById('queue-modal').style.display = 'none'
+    isEditMode = true
+    editMachine = machine
+    editScrollTop = 0
+    showPanel('pick')
+    document.querySelectorAll('.pick-mach').forEach(el => el.classList.toggle('active', el.dataset.machine === machine))
+    await renderPickDetail(machine)
+  }
+  async function exitEditMode() {
+    const machine = editMachine
+    if (machine) {
+      const date = document.getElementById('pick-date').value.replace(/-/g, '')
+      const r = collectEditRows()
+      if (r) await window.api.savePickEdit(machine, date, r)
+    }
+    isEditMode = false
+    editMachine = null
+    editScrollTop = 0
+    currentDetailMachine = machine
+    if (machine) await renderPickDetail(machine)
+  }
+  function collectEditRows() {
+    const rows = []
+    document.querySelectorAll('table.pick-tbl tbody tr').forEach(tr => {
+      const tds = tr.querySelectorAll('td')
+      if (tds.length < 5) return
+      rows.push({ no: tds[0].textContent.trim(), product: tds[1].textContent.trim(), bal: tds[2].textContent.trim(), lane: tds[3].textContent.trim(), restock: tds[4].textContent.trim(), outOfStock: tr.classList.contains('pick-out') })
+    })
+    return rows.length ? rows : null
+  }
+  async function printAll() {
+    if (!lastFilePath) { alert('No report file loaded. Please download a report first.'); return }
+    if (!currentPickList.length) return
+    const dateStr = document.getElementById('pick-date').value
+    const [y, mo, d] = dateStr.split('-')
+    const dateFormatted = `${d}/${mo}/${y}`
+    const data = currentPickList.map(m => {
+      const pendingByLane = (currentPending[m.machine]) || {}
+      const oosByLane = (currentOos[m.machine]) || {}
+      const pl = window.api.getPickList(lastFilePath, m.machine, pendingByLane, oosByLane)
+      return { machine: m.machine, team: m.team, date: dateFormatted, rows: pl.rows }
+    }).filter(m => m.rows.length > 0)
+    if (!data.length) return
+    const result = await window.api.printAll(data)
+    if (result && result.ok) alert('PDF saved: ' + result.filePath)
   }
 </script>
 
