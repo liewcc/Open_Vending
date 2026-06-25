@@ -405,8 +405,9 @@ ipcMain.on('set-setting', (_, { key, val }) => {
 ipcMain.on('launch-browser', () => { if (cachedCreds) launchBrowser(cachedCreds) })
 ipcMain.on('close-browser',  () => closeBrowser())
 
-const QUERY_HISTORY = path.join(__dirname, 'query_history.py')
+const QUERY_HISTORY   = path.join(__dirname, 'query_history.py')
 const PICKING_HISTORY = path.join(__dirname, 'picking_history.py')
+const SLOW_MOVERS     = path.join(__dirname, 'slow_movers.py')
 ipcMain.handle('get-restock-history', (_, { machine, lane }) =>
   new Promise(resolve => {
     const pythonExe = path.join(ROOT, 'python', 'python.exe')
@@ -458,6 +459,60 @@ ipcMain.handle('print-all-picking-lists', async (_, data) => {
   fs.writeFileSync(filePath, pdfBuffer)
   settings.lastPdfPath = filePath
   saveSettings()
+  return { ok: true, filePath }
+})
+
+ipcMain.handle('open-csv-dialog', async () => {
+  const { canceled, filePaths } = await dialog.showOpenDialog({
+    filters: [{ name: 'CSV', extensions: ['csv'] }],
+    properties: ['openFile']
+  })
+  return canceled ? null : filePaths[0]
+})
+
+ipcMain.handle('analyze-slow-movers', (_, { productCsv, salesCsv, topN }) =>
+  spawnPy([SLOW_MOVERS, productCsv, salesCsv, String(topN || 20)], null)
+)
+
+ipcMain.handle('print-slow-movers', async (_, { rows, dateRange }) => {
+  function esc(s) {
+    return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+  }
+  const tableRows = rows.map((r, i) =>
+    `<tr><td>${i+1}</td><td>${esc(r.name)}</td><td>${r.total}</td><td>${esc(r.last_sale) || '—'}</td><td>${r.days != null ? r.days + 'd' : 'Never'}</td></tr>`
+  ).join('')
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:Arial,sans-serif;font-size:11px}
+    @page{size:A4 portrait;margin:15mm}
+    h2{font-size:14px;margin-bottom:3px}
+    .sub{font-size:10px;color:#555;margin-bottom:12px}
+    table{width:100%;border-collapse:collapse}
+    th,td{border:1px dashed #888;padding:4px 6px;text-align:left}
+    th{font-weight:600;font-size:10px;text-transform:uppercase}
+    th:nth-child(1),td:nth-child(1){width:5%;text-align:center}
+    th:nth-child(3),td:nth-child(3),th:nth-child(4),td:nth-child(4),th:nth-child(5),td:nth-child(5){width:13%;text-align:center}
+    .note{margin-top:14px;font-size:10px;color:#444;border-top:1px dashed #aaa;padding-top:8px}
+  </style></head><body>
+    <h2>Slow-Moving Products</h2>
+    <div class="sub">${esc(dateRange)}</div>
+    <table>
+      <thead><tr><th>#</th><th>Product Name</th><th>Sales</th><th>Last Sale</th><th>Days Since</th></tr></thead>
+      <tbody>${tableRows}</tbody>
+    </table>
+    <div class="note">&#9888; Products still in machine — change on next visit, do not empty lane in advance.</div>
+  </body></html>`
+
+  const defaultPath = path.join(os.homedir(), 'Desktop', 'slow-movers.pdf')
+  const { canceled, filePath } = await dialog.showSaveDialog({ defaultPath, filters: [{ name: 'PDF', extensions: ['pdf'] }] })
+  if (canceled || !filePath) return { ok: false }
+
+  const printWin = new BrowserWindow({ show: false, webPreferences: { contextIsolation: true } })
+  printWin.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html))
+  await new Promise(resolve => printWin.webContents.once('did-finish-load', resolve))
+  const pdfBuffer = await printWin.webContents.printToPDF({ printBackground: false })
+  printWin.destroy()
+  fs.writeFileSync(filePath, pdfBuffer)
   return { ok: true, filePath }
 })
 

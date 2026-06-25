@@ -61,6 +61,9 @@ contextBridge.exposeInMainWorld('api', {
     return (routePlan.machines[machine] && routePlan.machines[machine].team) || null
   },
   printAll: (data) => ipcRenderer.invoke('print-all-picking-lists', data),
+  openCsvDialog:     ()                            => ipcRenderer.invoke('open-csv-dialog'),
+  analyzeSlowMovers: (productCsv, salesCsv, topN) => ipcRenderer.invoke('analyze-slow-movers', { productCsv, salesCsv, topN }),
+  printSlowMovers:   (data)                        => ipcRenderer.invoke('print-slow-movers', data),
   savePickEdit: (machine, date, rows) => ipcRenderer.invoke('save-pick-edit', { machine, date, rows }),
   loadPickEdit:  (machine, date)       => ipcRenderer.invoke('load-pick-edit',  { machine, date }),
 })
