@@ -203,7 +203,7 @@ set "OV_WD=%ROOT:~0,-1%"
   echo $desk = [Environment]::GetFolderPath^('Desktop'^)
   echo $s = ^(New-Object -ComObject WScript.Shell^).CreateShortcut^($desk + '\Open Vending.lnk'^)
   echo $s.TargetPath = 'wscript.exe'
-  echo $s.Arguments = '%OV_VBS%'
+  echo $s.Arguments = '"%OV_VBS%"'
   echo $s.WorkingDirectory = '%OV_WD%'
   echo $s.IconLocation = '%OV_ICO%'
   echo $s.Save^(^)
