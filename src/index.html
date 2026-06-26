@@ -115,12 +115,6 @@
 
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
 
-  /* neon glow on title-bar badges */
-  #btn-changes.show {
-    box-shadow: 0 0 8px 2px #f9e2af66, inset 0 0 6px #f9e2af22;
-    text-shadow: 0 0 6px #f9e2afcc;
-  }
-
   /* ── Credential Modal ── */
   #cred-overlay {
     display: none;
@@ -223,11 +217,11 @@
   .sm-browse { font-size: 11px; padding: 4px 10px; border: 1px solid #d1d5db; border-radius: 5px; cursor: pointer; background: #fff; }
   .sm-browse:hover { background: #f3f4f6; }
   #sm-topn { width: 54px; padding: 4px 6px; border: 1px solid #d1d5db; border-radius: 5px; font-size: 11px; }
-  #btn-sm-analyze {
+  #btn-sm-analyze, #btn-sm-generate {
     padding: 5px 14px; background: #1e2235; color: #fff; border: none;
     border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer;
   }
-  #btn-sm-analyze:hover { background: #313552; }
+  #btn-sm-analyze:hover, #btn-sm-generate:hover { background: #313552; }
   #btn-sm-print {
     padding: 5px 14px; background: #fff; color: #374151; border: 1px solid #d1d5db;
     border-radius: 6px; font-size: 12px; cursor: pointer; display: none;
@@ -356,22 +350,6 @@
   input:checked + .slider:before { transform: translateX(18px); }
 
   /* ── Status row badges ── */
-  #btn-changes {
-    display: none;
-    padding: 3px 10px;
-    background: #3a2d10;
-    color: #f9e2af;
-    border: none;
-    border-radius: 20px;
-    font-size: 11px;
-    font-weight: 600;
-    cursor: pointer;
-    align-items: center;
-    transition: background .15s;
-  }
-  #btn-changes.show { display: inline-flex; }
-  #btn-changes:hover { background: #4a3a18; }
-
   #timer-badge {
     padding: 3px 10px;
     background: #3a2d10;
@@ -383,24 +361,7 @@
     text-shadow: 0 0 6px #f9e2afcc;
   }
 
-  /* ── Diff panel ── */
-  #diff-panel {
-    flex: 1;
-    display: none;
-    flex-direction: column;
-    overflow: hidden;
-  }
-
-  #diff-toolbar {
-    padding: 14px 20px;
-    background: #fff;
-    border-bottom: 1px solid #e5e7eb;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-
-  #btn-back, #btn-pick-back {
+  #btn-pick-back {
     padding: 5px 12px;
     background: #f3f4f6;
     border: 1px solid #e5e7eb;
@@ -410,22 +371,7 @@
     color: #374151;
     cursor: pointer;
   }
-  #btn-back:hover, #btn-pick-back:hover { background: #e5e7eb; }
-
-  #diff-wrap {
-    flex: 1;
-    overflow: auto;
-  }
-
-  #diff-table { width: auto; min-width: 100%; }
-  #diff-table thead tr { background: #92400e; }
-
-  #diff-table tbody tr { background: #fffbeb; }
-  #diff-table tbody tr:nth-child(even) { background: #fef3c7; }
-  #diff-table tbody tr:hover { background: #fde68a; }
-
-  .val-old { color: #b91c1c; }
-  .val-new { color: #15803d; font-weight: 600; }
+  #btn-pick-back:hover { background: #e5e7eb; }
 
   /* ── Main Panel ── */
   #main {
@@ -492,7 +438,7 @@
     white-space: nowrap;
   }
 
-  #data-table tbody tr, #diff-tbody tr { cursor: pointer; }
+  #data-table tbody tr { cursor: pointer; }
 
   /* ── Chart Modal ── */
   #chart-overlay {
@@ -596,6 +542,10 @@
   .edit-banner { padding:7px 14px; background:#fffbeb; border-bottom:0.5px solid #fbbf24; font-size:11.5px; color:#92400e; font-weight:500; }
   table.pick-tbl td[contenteditable] { background:#fffdf0; cursor:text; }
   table.pick-tbl td[contenteditable]:focus { background:#fef9c3; outline:1.5px solid #fbbf24; outline-offset:-1px; }
+
+  th.sortable { cursor:pointer; user-select:none; }
+  th.sortable:hover { opacity:.85; }
+  th.sortable .sort-ind { margin-left:4px; font-size:9px; opacity:.7; display:inline-block; width:8px; }
 </style>
 </head>
 <body>
@@ -606,9 +556,6 @@
   <div id="titlebar-status">
     <div id="status-badge" class="running"><div class="dot"></div></div>
     <span id="timer-badge">—</span>
-    <button id="btn-changes" onclick="showDiffView()">
-      <span id="changes-count">0</span>&nbsp;changes
-    </button>
   </div>
 </div>
 
@@ -647,10 +594,10 @@
     <div id="btn-actions">
       <button id="btn-home" class="side-icon-btn" onclick="goHome()" title="Back to main table"><span class="icon">table_view</span></button>
       <button id="btn-download" class="side-icon-btn" disabled onclick="redownload()" title="Re-download"><span class="icon">cloud_sync</span></button>
-      <button id="btn-changes-list" class="side-icon-btn" onclick="showDiffView()" title="Changing List"><span class="icon">track_changes</span></button>
       <button id="btn-pick" class="side-icon-btn" onclick="showPickView()" title="Picking List"><span class="icon">shopping_basket</span></button>
       <button id="btn-slow" class="side-icon-btn" onclick="showSlowView()" title="Slow Movers"><span class="icon">trending_down</span></button>
       <button id="btn-gear" class="side-icon-btn" onclick="toggleConfig()" title="Settings"><span class="icon">settings</span></button>
+      <button class="side-icon-btn" onclick="window.api.quitApp()" title="Exit"><span class="icon">power_settings_new</span></button>
     </div>
     <div id="btn-actions-bottom">
       <button id="btn-github" class="side-icon-btn" onclick="window.api.openExternal('https://github.com/liewcc/Open_Vending')" title="View on GitHub">
@@ -754,27 +701,7 @@
     </div>
   </div>
 
-  <!-- Diff Panel -->
-  <div id="diff-panel">
-    <div id="diff-toolbar">
-      <button id="btn-back" onclick="showMainView()">← Back</button>
-      <h2 style="font-size:14px;font-weight:600;color:#374151;flex:1">Change Summary</h2>
-      <span id="diff-count-label" style="font-size:11px;color:#9ca3af"></span>
-    </div>
-    <div id="diff-wrap">
-      <table id="diff-table">
-        <thead>
-          <tr>
-            <th>Machine</th>
-            <th>Lane</th>
-            <th>Previous Restock</th>
-            <th>Current Restock</th>
-          </tr>
-        </thead>
-        <tbody id="diff-tbody"></tbody>
-      </table>
-    </div>
-  </div>
+
 
   <!-- Pick Panel -->
   <div id="pick-panel" style="display:none; flex:1; flex-direction:column; min-width:0; background:#f0f2f5;">
@@ -805,14 +732,9 @@
     <div id="slow-toolbar">
       <h2>Slow Movers</h2>
       <div class="sm-path-row">
-        <span class="sm-path-label">Products:</span>
-        <input id="sm-product-path" class="sm-path-input" readonly placeholder="Select product list CSV…">
-        <button class="sm-browse" onclick="browseCSV('sm-product-path')">Browse</button>
-      </div>
-      <div class="sm-path-row">
-        <span class="sm-path-label">Sales:</span>
-        <input id="sm-sales-path" class="sm-path-input" readonly placeholder="Select sales detail CSV…">
-        <button class="sm-browse" onclick="browseCSV('sm-sales-path')">Browse</button>
+        <span class="sm-path-label">DB File:</span>
+        <input id="sm-db-path" class="sm-path-input" readonly placeholder="Select generated DB file…" style="width:260px;">
+        <button class="sm-browse" onclick="browseDb()">Browse</button>
       </div>
       <div class="sm-path-row">
         <span class="sm-path-label">Show top</span>
@@ -820,6 +742,7 @@
         <span class="sm-path-label">items</span>
       </div>
       <button id="btn-sm-analyze" onclick="runSlowAnalysis()">Analyze</button>
+      <button id="btn-sm-generate" onclick="openGenerateModal()">Generate List</button>
       <button id="btn-sm-print" onclick="printSlowMovers()">Export PDF</button>
     </div>
     <div id="slow-body">
@@ -854,6 +777,38 @@
   </main>
 </div>
 
+<div id="gen-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:300;align-items:center;justify-content:center;">
+  <div id="gen-card" style="background:#fff;border-radius:10px;padding:28px 24px;width:420px;display:flex;flex-direction:column;gap:14px;">
+    <h2 style="font-size:14px;font-weight:600;color:#374151;">Generate Merged DB</h2>
+    <div class="field">
+      <label>Products CSV</label>
+      <div style="display:flex;gap:6px;">
+        <input id="gen-product-path" type="text" readonly style="flex:1;padding:6px 8px;border:1px solid #d1d5db;border-radius:6px;font-size:12px;background:#f9fafb;color:#374151;">
+        <button onclick="browseGenCsv('gen-product-path','smProductPath')" style="padding:5px 10px;border:1px solid #d1d5db;border-radius:5px;cursor:pointer;background:#fff;font-size:11px;">Browse</button>
+      </div>
+    </div>
+    <div class="field">
+      <label>Sales CSV</label>
+      <div style="display:flex;gap:6px;">
+        <input id="gen-sales-path" type="text" readonly style="flex:1;padding:6px 8px;border:1px solid #d1d5db;border-radius:6px;font-size:12px;background:#f9fafb;color:#374151;">
+        <button onclick="browseGenCsv('gen-sales-path','smSalesPath')" style="padding:5px 10px;border:1px solid #d1d5db;border-radius:5px;cursor:pointer;background:#fff;font-size:11px;">Browse</button>
+      </div>
+    </div>
+    <div class="field">
+      <label>Save DB to</label>
+      <div style="display:flex;gap:6px;">
+        <input id="gen-db-path" type="text" placeholder="Choose target path or type filename…" style="flex:1;padding:6px 8px;border:1px solid #d1d5db;border-radius:6px;font-size:12px;background:#fff;color:#374151;" oninput="window._smGenDbPath=this.value;window.api.setSetting('smGenDbPath',this.value)">
+        <button onclick="browseDbSave()" style="padding:5px 10px;border:1px solid #d1d5db;border-radius:5px;cursor:pointer;background:#fff;font-size:11px;">Browse</button>
+      </div>
+    </div>
+    <div id="gen-status" style="font-size:11px;color:#6b7280;min-height:14px;"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;">
+      <button onclick="closeGenerateModal()" style="padding:8px 18px;border:1px solid #d1d5db;border-radius:6px;font-size:12px;cursor:pointer;background:#fff;">Cancel</button>
+      <button id="btn-gen-ok" onclick="doGenerateDb()" style="padding:8px 18px;background:#1e2235;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;">OK</button>
+    </div>
+  </div>
+</div>
+
 <script>
   const log        = document.getElementById('log')
   const badge      = document.getElementById('status-badge')
@@ -862,7 +817,6 @@
   const placeholder= document.getElementById('placeholder')
   const tableWrap  = document.getElementById('table-wrap')
   const pText      = document.getElementById('placeholder-text')
-  const btnChanges = document.getElementById('btn-changes')
   const timerBadge = document.getElementById('timer-badge')
 
   let scanTimer = null
@@ -935,6 +889,7 @@
 
     placeholder.style.display = 'none'
     tableWrap.style.display = 'block'
+    makeSortable(document.getElementById('data-table'))
   }
 
   window.api.onNeedsCredentials(() => {
@@ -999,6 +954,10 @@
     document.getElementById('tog-auto-dl').checked = s.autoDownload
     document.getElementById('inp-interval').value  = s.autoDownloadInterval ?? 30
     scanIntervalSec = (s.autoDownloadInterval ?? 30) * 60
+    if (s.smProductPath) window._smProductPath = s.smProductPath
+    if (s.smSalesPath)   window._smSalesPath   = s.smSalesPath
+    if (s.smDbPath)      document.getElementById('sm-db-path').value = s.smDbPath
+    if (s.smGenDbPath)   window._smGenDbPath = s.smGenDbPath
   })
 
   function onHeadedChange(checked) {
@@ -1027,7 +986,6 @@
   function showPanel(which) {
     document.getElementById('main').style.display       = which === 'main'   ? 'flex' : 'none'
     configPanel.style.display                           = which === 'config' ? 'flex' : 'none'
-    diffPanel.style.display                             = which === 'diff'   ? 'flex' : 'none'
     document.getElementById('pick-panel').style.display = which === 'pick'   ? 'flex' : 'none'
     document.getElementById('slow-panel').style.display = which === 'slow'   ? 'flex' : 'none'
     btnGear.classList.toggle('active', which === 'config')
@@ -1063,33 +1021,6 @@
     window.api.doUpdate()
   }
 
-  // ── Diff view ───────────────────────────────────────────────────────────────
-  const diffPanel = document.getElementById('diff-panel')
-
-  window.api.onDiffReady(count => {
-    if (count === 0) { btnChanges.classList.remove('show'); return }
-    document.getElementById('changes-count').textContent = count
-    btnChanges.classList.add('show')
-  })
-
-  async function showDiffView() {
-    const diffs = await window.api.getDiffs()
-    const tbody = document.getElementById('diff-tbody')
-    tbody.innerHTML = ''
-    diffs.forEach(d => {
-      const tr = document.createElement('tr')
-      tr.innerHTML = `<td>${d.machine}</td><td>${d.lane}</td>
-        <td><span class="val-old">${d.old}</span></td>
-        <td><span class="val-new">${d.new}</span></td>`
-      tr.onclick = () => showChart(d.machine, d.lane, `${d.machine} · Lane ${d.lane}`)
-      tbody.appendChild(tr)
-    })
-    document.getElementById('diff-count-label').textContent = `${diffs.length} field change${diffs.length > 1 ? 's' : ''}`
-    btnChanges.classList.remove('show')
-    showPanel('diff')
-  }
-
-  function showMainView() { showPanel('main') }
 
   // ── Chart ───────────────────────────────────────────────────────────────────
   const chartOverlay = document.getElementById('chart-overlay')
@@ -1193,6 +1124,31 @@
 
     s += `</svg>`
     return s
+  }
+
+  function makeSortable(table) {
+    if (!table) return
+    const ths = table.querySelectorAll('thead th')
+    ths.forEach((th, col) => {
+      th.classList.add('sortable')
+      const ind = document.createElement('span')
+      ind.className = 'sort-ind'
+      th.appendChild(ind)
+      th._sortDir = 0
+      th.addEventListener('click', () => {
+        th._sortDir = th._sortDir === 1 ? -1 : 1
+        ths.forEach(t => { if (t !== th) { t._sortDir = 0; t.querySelector('.sort-ind').textContent = '' } })
+        ind.textContent = th._sortDir === 1 ? '▲' : '▼'
+        const tbody = table.querySelector('tbody')
+        ;[...tbody.rows].sort((a, b) => {
+          const av = a.cells[col]?.textContent.trim() ?? ''
+          const bv = b.cells[col]?.textContent.trim() ?? ''
+          const an = parseFloat(av), bn = parseFloat(bv)
+          const cmp = !isNaN(an) && !isNaN(bn) ? an - bn : av.localeCompare(bv, undefined, { numeric: true })
+          return th._sortDir * cmp
+        }).forEach(r => tbody.appendChild(r))
+      })
+    })
   }
 
   function redownload() {
@@ -1329,6 +1285,7 @@
         }
         detailEl.innerHTML = html
         detailEl.style.setProperty('--pick-hd-h', detailEl.querySelector('.pick-hd').offsetHeight + 'px')
+        makeSortable(detailEl.querySelector('table.pick-tbl'))
         const tbl = detailEl.querySelector('table.pick-tbl')
         if (tbl) {
           tbl.addEventListener('input', () => {
@@ -1356,6 +1313,7 @@
         }
         detailEl.innerHTML = html
         detailEl.style.setProperty('--pick-hd-h', detailEl.querySelector('.pick-hd').offsetHeight + 'px')
+        makeSortable(detailEl.querySelector('table.pick-tbl'))
         detailEl.querySelectorAll('table.pick-tbl tbody tr[data-lane]').forEach(tr => {
           tr.style.cursor = 'pointer'
           tr.addEventListener('click', () => showChart(machine, tr.dataset.lane, `${machine} · Lane ${tr.dataset.lane}`))
@@ -1471,14 +1429,17 @@
 
   async function browseCSV(inputId) {
     const p = await window.api.openCsvDialog()
-    if (p) document.getElementById(inputId).value = p
+    if (p) {
+      document.getElementById(inputId).value = p
+      if (inputId === 'sm-product-path') window.api.setSetting('smProductPath', p)
+      if (inputId === 'sm-sales-path')   window.api.setSetting('smSalesPath', p)
+    }
   }
 
   async function runSlowAnalysis() {
-    const productCsv = document.getElementById('sm-product-path').value.trim()
-    const salesCsv   = document.getElementById('sm-sales-path').value.trim()
-    const topN       = parseInt(document.getElementById('sm-topn').value) || 20
-    if (!productCsv || !salesCsv) { alert('Please select both CSV files first.'); return }
+    const dbPath = document.getElementById('sm-db-path').value.trim()
+    const topN   = parseInt(document.getElementById('sm-topn').value) || 20
+    if (!dbPath) { alert('Please select a DB File first.'); return }
 
     const statusEl = document.getElementById('slow-status')
     const wrapEl   = document.getElementById('slow-table-wrap')
@@ -1488,7 +1449,7 @@
     printBtn.style.display = 'none'
     smLastResult = null
 
-    const res = await window.api.analyzeSlowMovers(productCsv, salesCsv, topN)
+    const res = await window.api.analyzeSlowDb(dbPath, topN)
     if (!res || !res.ok) {
       statusEl.textContent = 'Error: ' + (res && res.error ? res.error : 'unknown')
       return
@@ -1511,6 +1472,7 @@
       </table>
       <div class="sm-note">&#9888; These products are still in the machine. Change on next visit — do not empty the lane in advance.</div>`
     printBtn.style.display = ''
+    makeSortable(wrapEl.querySelector('table'))
   }
 
   async function printSlowMovers() {
@@ -1535,6 +1497,68 @@
     const result = await window.api.printAll(data)
     if (result && result.ok) alert('PDF saved: ' + result.filePath)
   }
+
+// ── Slow Movers – Generate DB ───────────────────────────────────────────────
+async function browseDb() {
+  const p = await window.api.openDbDialog()
+  if (p) {
+    document.getElementById('sm-db-path').value = p
+    window.api.setSetting('smDbPath', p)
+  }
+}
+
+async function browseGenCsv(inputId, settingKey) {
+  const p = await window.api.openCsvDialog()
+  if (p) {
+    document.getElementById(inputId).value = p
+    window['_' + settingKey] = p
+    window.api.setSetting(settingKey, p)
+  }
+}
+
+function openGenerateModal() {
+  document.getElementById('gen-product-path').value = window._smProductPath || ''
+  document.getElementById('gen-sales-path').value   = window._smSalesPath   || ''
+  document.getElementById('gen-db-path').value      = window._smGenDbPath || ''
+  document.getElementById('gen-status').textContent = ''
+  document.getElementById('gen-overlay').style.display = 'flex'
+}
+
+function closeGenerateModal() {
+  document.getElementById('gen-overlay').style.display = 'none'
+}
+
+async function browseDbSave() {
+  const p = await window.api.openSaveDbDialog()
+  if (p) {
+    document.getElementById('gen-db-path').value = p
+    window._smGenDbPath = p
+    window.api.setSetting('smGenDbPath', p)
+  }
+}
+
+async function doGenerateDb() {
+  const productCsv = document.getElementById('gen-product-path').value.trim()
+  const salesCsv   = document.getElementById('gen-sales-path').value.trim()
+  const dbPath     = document.getElementById('gen-db-path').value.trim()
+  if (!productCsv || !salesCsv) { document.getElementById('gen-status').textContent = 'Product and Sales CSV paths required.'; return }
+  if (!dbPath) { document.getElementById('gen-status').textContent = 'Please choose a save path for the DB.'; return }
+  const statusEl = document.getElementById('gen-status')
+  const okBtn = document.getElementById('btn-gen-ok')
+  statusEl.textContent = 'Generating…'
+  okBtn.disabled = true
+  const res = await window.api.generateSlowDb(productCsv, salesCsv, dbPath)
+  okBtn.disabled = false
+  if (!res || !res.ok) {
+    statusEl.textContent = 'Error: ' + (res && res.error ? res.error : 'unknown')
+    return
+  }
+  statusEl.textContent = `Done — ${res.total_active} active products written to DB.`
+  // auto-fill the DB path in C
+  document.getElementById('sm-db-path').value = dbPath
+  window.api.setSetting('smDbPath', dbPath)
+  setTimeout(closeGenerateModal, 1200)
+}
 </script>
 
 </body>

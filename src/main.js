@@ -223,7 +223,6 @@ function runDownload(creds) {
       if (line.startsWith('DIFFS: ')) {
         try { lastDiffs = JSON.parse(line.slice(7)) } catch { lastDiffs = [] }
         try { fs.writeFileSync(LAST_DIFFS, JSON.stringify(lastDiffs)) } catch { }
-        win.webContents.send('diff-ready', lastDiffs.length)
         if (settings.notifyChanges && lastDiffs.length > 0) {
           const notif = new Notification({
             title: 'Open Vending — Restock Changes',
@@ -330,7 +329,6 @@ app.whenReady().then(() => {
     if (fs.existsSync(LAST_DIFFS)) {
       try {
         lastDiffs = JSON.parse(fs.readFileSync(LAST_DIFFS, 'utf8'))
-        if (lastDiffs.length) win.webContents.send('diff-ready', lastDiffs.length)
       } catch { }
     }
 
@@ -383,9 +381,9 @@ ipcMain.on('start-download', () => {
 })
 
 ipcMain.on('do-update', () => doUpdate())
+ipcMain.on('quit-app',  () => app.quit())
 
 ipcMain.handle('get-settings', () => settings)
-ipcMain.handle('get-diffs',   () => lastDiffs)
 
 ipcMain.on('set-setting', (_, { key, val }) => {
   settings[key] = val
@@ -469,6 +467,30 @@ ipcMain.handle('open-csv-dialog', async () => {
   })
   return canceled ? null : filePaths[0]
 })
+
+ipcMain.handle('open-db-dialog', async () => {
+  const { canceled, filePaths } = await dialog.showOpenDialog({
+    filters: [{ name: 'SQLite DB', extensions: ['db', '*'] }],
+    properties: ['openFile']
+  })
+  return canceled ? null : filePaths[0]
+})
+
+ipcMain.handle('open-save-db-dialog', async () => {
+  const { canceled, filePath } = await dialog.showSaveDialog({
+    filters: [{ name: 'SQLite DB', extensions: ['db'] }],
+    defaultPath: path.join(os.homedir(), 'Desktop', 'slow-movers.db')
+  })
+  return canceled ? null : filePath
+})
+
+ipcMain.handle('generate-slow-db', (_, { productCsv, salesCsv, dbPath }) =>
+  spawnPy([SLOW_MOVERS, 'build', productCsv, salesCsv, dbPath], null)
+)
+
+ipcMain.handle('analyze-slow-db', (_, { dbPath, topN }) =>
+  spawnPy([SLOW_MOVERS, 'analyze', dbPath, String(topN || 20)], null)
+)
 
 ipcMain.handle('analyze-slow-movers', (_, { productCsv, salesCsv, topN }) =>
   spawnPy([SLOW_MOVERS, productCsv, salesCsv, String(topN || 20)], null)
