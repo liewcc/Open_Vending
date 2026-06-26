@@ -53,9 +53,9 @@ async function checkForUpdate() {
   try {
     const res  = await fetch(REPO_PKG_URL)
     const pkg  = await res.json()
-    return { status: semverGt(pkg.version, LOCAL_VERSION) ? 'available' : 'up-to-date' }
+    return { status: semverGt(pkg.version, LOCAL_VERSION) ? 'available' : 'up-to-date', local: LOCAL_VERSION, remote: pkg.version }
   } catch {
-    return { status: 'error' }
+    return { status: 'error', local: LOCAL_VERSION, remote: null }
   }
 }
 

@@ -998,13 +998,14 @@
     window.api.setSetting(key, val)
   }
 
-  window.api.onUpdateStatus(({ status }) => {
+  window.api.onUpdateStatus(({ status, local, remote }) => {
+    const ver = remote ? `v${local} → v${remote}` : `v${local}`
     if (status === 'available') {
-      btnUpdate.title = 'Relaunch to Update'; btnUpdate.className = 'side-icon-btn available'; btnUpdate.disabled = false;
+      btnUpdate.title = `Relaunch to Update (${ver})`; btnUpdate.className = 'side-icon-btn available'; btnUpdate.disabled = false;
     } else if (status === 'up-to-date') {
-      btnUpdate.title = 'Up to date'; btnUpdate.className = 'side-icon-btn'; btnUpdate.disabled = true;
+      btnUpdate.title = `Up to date (${ver})`; btnUpdate.className = 'side-icon-btn'; btnUpdate.disabled = true;
     } else {
-      btnUpdate.title = 'Check Failed'; btnUpdate.className = 'side-icon-btn'; btnUpdate.disabled = true;
+      btnUpdate.title = `Check Failed (${ver})`; btnUpdate.className = 'side-icon-btn'; btnUpdate.disabled = true;
     }
   })
 
