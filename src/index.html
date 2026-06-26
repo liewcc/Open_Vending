@@ -216,7 +216,6 @@
   }
   .sm-browse { font-size: 11px; padding: 4px 10px; border: 1px solid #d1d5db; border-radius: 5px; cursor: pointer; background: #fff; }
   .sm-browse:hover { background: #f3f4f6; }
-  #sm-topn { width: 54px; padding: 4px 6px; border: 1px solid #d1d5db; border-radius: 5px; font-size: 11px; }
   #btn-sm-analyze, #btn-sm-generate {
     padding: 5px 14px; background: #1e2235; color: #fff; border: none;
     border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer;
@@ -735,11 +734,6 @@
         <span class="sm-path-label">DB File:</span>
         <input id="sm-db-path" class="sm-path-input" readonly placeholder="Select generated DB file…" style="width:260px;">
         <button class="sm-browse" onclick="browseDb()">Browse</button>
-      </div>
-      <div class="sm-path-row">
-        <span class="sm-path-label">Show top</span>
-        <input id="sm-topn" type="number" value="20" min="5" max="100">
-        <span class="sm-path-label">items</span>
       </div>
       <button id="btn-sm-analyze" onclick="runSlowAnalysis()">Analyze</button>
       <button id="btn-sm-generate" onclick="openGenerateModal()">Generate List</button>
@@ -1437,9 +1431,64 @@
     }
   }
 
+  let smAllRows = []
+  let smSortCol = 'total'
+  let smSortDir = 1  // 1 = asc, -1 = desc
+
+  function smSortRows(rows, col, dir) {
+    return [...rows].sort((a, b) => {
+      let av = a[col], bv = b[col]
+      if (col === 'days') { av = av ?? 999999; bv = bv ?? 999999 }
+      if (typeof av === 'number') return dir * (av - bv)
+      return dir * String(av ?? '').localeCompare(String(bv ?? ''), undefined, { numeric: true })
+    })
+  }
+
+  function smRenderTable() {
+    const wrapEl = document.getElementById('slow-table-wrap')
+    const esc    = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+
+    const sorted = smSortRows(smAllRows, smSortCol, smSortDir)
+    const page   = sorted
+
+    const cols = [
+      { key: null,        label: '#' },
+      { key: 'name',      label: 'Product Name' },
+      { key: 'total',     label: 'Total Sales' },
+      { key: 'last_sale', label: 'Last Sale' },
+      { key: 'days',      label: 'Days Since' },
+    ]
+    const headers = cols.map(c => {
+      if (!c.key) return `<th>#</th>`
+      const arrow = c.key === smSortCol ? (smSortDir === 1 ? ' ▲' : ' ▼') : ''
+      return `<th class="sortable" data-col="${c.key}">${c.label}<span class="sort-ind">${arrow}</span></th>`
+    }).join('')
+
+    const bodyRows = page.map((r, i) => {
+      const daysCls = (r.days == null || r.days > 90) ? ' class="days-bad"' : ''
+      const daysStr = r.days != null ? r.days + 'd' : 'Never'
+      return `<tr><td>${i+1}</td><td>${esc(r.name)}</td><td>${r.total}</td><td>${esc(r.last_sale) || '—'}</td><td${daysCls}>${daysStr}</td></tr>`
+    }).join('')
+
+    wrapEl.innerHTML = `
+      <table>
+        <thead><tr>${headers}</tr></thead>
+        <tbody>${bodyRows}</tbody>
+      </table>
+      <div class="sm-note">&#9888; These products are still in the machine. Change on next visit — do not empty the lane in advance.</div>`
+
+    wrapEl.querySelectorAll('thead th[data-col]').forEach(th => {
+      th.addEventListener('click', () => {
+        const col = th.dataset.col
+        if (smSortCol === col) smSortDir = -smSortDir
+        else { smSortCol = col; smSortDir = 1 }
+        smRenderTable()
+      })
+    })
+  }
+
   async function runSlowAnalysis() {
     const dbPath = document.getElementById('sm-db-path').value.trim()
-    const topN   = parseInt(document.getElementById('sm-topn').value) || 20
     if (!dbPath) { alert('Please select a DB File first.'); return }
 
     const statusEl = document.getElementById('slow-status')
@@ -1449,36 +1498,27 @@
     wrapEl.innerHTML = ''
     printBtn.style.display = 'none'
     smLastResult = null
+    smAllRows = []
+    smSortCol = 'total'
+    smSortDir = 1
 
-    const res = await window.api.analyzeSlowDb(dbPath, topN)
+    const res = await window.api.analyzeSlowDb(dbPath, 0)
     if (!res || !res.ok) {
       statusEl.textContent = 'Error: ' + (res && res.error ? res.error : 'unknown')
       return
     }
 
     smLastResult = res
-    statusEl.textContent = `Showing ${res.rows.length} slowest of ${res.total_active} active products · ${res.date_range}`
-
-    const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-    const rows = res.rows.map((r, i) => {
-      const daysCls = (r.days == null || r.days > 90) ? ' class="days-bad"' : ''
-      const daysStr = r.days != null ? r.days + 'd' : 'Never'
-      return `<tr><td>${i+1}</td><td>${esc(r.name)}</td><td>${r.total}</td><td>${esc(r.last_sale) || '—'}</td><td${daysCls}>${daysStr}</td></tr>`
-    }).join('')
-
-    wrapEl.innerHTML = `
-      <table>
-        <thead><tr><th>#</th><th>Product Name</th><th>Total Sales</th><th>Last Sale</th><th>Days Since</th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-      <div class="sm-note">&#9888; These products are still in the machine. Change on next visit — do not empty the lane in advance.</div>`
+    smAllRows = res.rows
+    statusEl.textContent = `Showing all ${res.total_active} active products · ${res.date_range}`
+    smRenderTable()
     printBtn.style.display = ''
-    makeSortable(wrapEl.querySelector('table'))
   }
 
   async function printSlowMovers() {
     if (!smLastResult) return
-    const result = await window.api.printSlowMovers({ rows: smLastResult.rows, dateRange: smLastResult.date_range })
+    const printRows = smSortRows(smAllRows, smSortCol, smSortDir)
+    const result = await window.api.printSlowMovers({ rows: printRows, dateRange: smLastResult.date_range })
     if (result && result.ok) alert('PDF saved: ' + result.filePath)
   }
 

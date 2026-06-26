@@ -109,7 +109,7 @@ def analyze_db(db_path, top_n):
 
     print(json.dumps({
         'ok':          True,
-        'rows':        rows[:top_n],
+        'rows':        rows,
         'total_active': len(rows),
         'date_range':  f'{min_date} to {max_date}',
     }))
@@ -180,7 +180,7 @@ def main():
 
     print(json.dumps({
         'ok':          True,
-        'rows':        rows[:top_n],
+        'rows':        rows,
         'total_active': len(rows),
         'date_range':  f'{min_date} to {max_date}',
     }))
