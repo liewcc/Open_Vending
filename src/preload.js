@@ -59,6 +59,45 @@ contextBridge.exposeInMainWorld('api', {
   teamOf(machine) {
     return (routePlan.machines[machine] && routePlan.machines[machine].team) || null
   },
+  getAllMachines(filePath, pendingByMachine) {
+    const rows = parseRows(filePath)
+    if (!pendingByMachine) pendingByMachine = {}
+    const machinesInPlan = (routePlan && routePlan.machines) ? routePlan.machines : {}
+
+    // Group report rows by machine name
+    const groups = {}
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i]
+      if (!row || !row[0]) continue
+      if (!groups[row[0]]) groups[row[0]] = []
+      groups[row[0]].push(row)
+    }
+
+    const results = []
+    for (const machineName in machinesInPlan) {
+      const machinePlan = machinesInPlan[machineName]
+      const machRows = groups[machineName] || []
+      let laneSum = 0, restockSum = 0
+      for (const r of machRows) {
+        laneSum += picking.num(r[5])
+        restockSum += picking.num(r[6])
+      }
+      const lanePending = pendingByMachine[machineName] || {}
+      const inTransitSum = Object.values(lanePending).reduce((a, v) => a + v, 0)
+      const adjustedRestockSum = Math.max(0, restockSum - inTransitSum)
+      const pct = laneSum > 0 ? Math.round(adjustedRestockSum / laneSum * 100) / 100 : 0
+      results.push({ machine: machineName, team: machinePlan.team || 'UNASSIGNED', pct, restockSum, adjustedRestockSum, laneSum })
+    }
+
+    results.sort((a, b) => {
+      const p = t => t === '5530' ? 1 : t === '1126' ? 2 : t === 'UNASSIGNED' ? 3 : 4
+      const pa = p(a.team), pb = p(b.team)
+      if (pa !== pb) return pa - pb
+      if (pa === 4 && a.team !== b.team) return a.team.localeCompare(b.team)
+      return a.machine.localeCompare(b.machine)
+    })
+    return results
+  },
   printAll: (data) => ipcRenderer.invoke('print-all-picking-lists', data),
   openCsvDialog:     ()                            => ipcRenderer.invoke('open-csv-dialog'),
   analyzeSlowMovers: (productCsv, salesCsv, topN) => ipcRenderer.invoke('analyze-slow-movers', { productCsv, salesCsv, topN }),

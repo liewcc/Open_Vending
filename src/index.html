@@ -707,6 +707,7 @@
   <div id="pick-toolbar">
     <input type="date" id="pick-date" onchange="renderPicks()">
     <span id="pick-count"></span>
+    <button id="btn-show-all" class="pick-icon-btn" onclick="toggleShowAll()" title="Show all machines"><span class="icon">view_list</span></button>
     <button id="btn-queue-view" class="pick-icon-btn" onclick="showQueueView()" title="View Queue"><span class="icon">pending_actions</span></button>
     <button id="pick-print-all" class="pick-icon-btn" onclick="printAll()" title="Export PDF"><span class="icon">picture_as_pdf</span></button>
   </div>
@@ -1161,6 +1162,7 @@
   let currentPickList = []
   let currentPending = {}
   let currentOos = {}
+  let showAllMachines = false
   let isEditMode = false
   let editMachine = null
   let editScrollTop = 0
@@ -1223,14 +1225,30 @@
       document.getElementById('pick-count').textContent = `${list.length} machines to pick`
       currentPickList = list
       document.getElementById('pick-print-all').disabled = list.length === 0
+
+      // Build a set of machines that qualify for picking today (for highlight in show-all mode)
+      const pickSet = new Set(list.map(m => m.machine))
+
+      // In show-all mode, display every machine in the route plan
+      const displayList = showAllMachines
+        ? window.api.getAllMachines(lastFilePath, currentPending)
+        : list
+
       listEl.innerHTML = ''
-      if (!list.length) { listEl.innerHTML = '<div class="pick-empty">Nothing to pick for this date.</div>'; detailEl.innerHTML=''; return }
+      if (!displayList.length) { listEl.innerHTML = '<div class="pick-empty">Nothing to pick for this date.</div>'; detailEl.innerHTML=''; return }
       let curTeam = null
-      list.forEach(m => {
+      displayList.forEach(m => {
         if (m.team !== curTeam) { curTeam = m.team; const h=document.createElement('div'); h.className='pick-team-hd'; h.textContent='Team '+m.team; listEl.appendChild(h) }
         const row = document.createElement('div'); row.className='pick-mach'
-        const badgeClass = m.reason==='25%' ? 'amber' : 'daily'
-        const badgeText = m.reason==='25%' ? `${Math.round(m.pct * 100)}%` : `${m.reason==='scheduled' ? 'Scheduled' : 'Daily'} (${Math.round(m.pct * 100)}%)`
+        const pctVal = Math.round(m.pct * 100)
+        let badgeClass, badgeText
+        if (showAllMachines) {
+          badgeClass = pickSet.has(m.machine) ? 'amber' : ''
+          badgeText = `${pctVal}%`
+        } else {
+          badgeClass = m.reason==='25%' ? 'amber' : 'daily'
+          badgeText = m.reason==='25%' ? `${pctVal}%` : `${m.reason==='scheduled' ? 'Scheduled' : 'Daily'} (${pctVal}%)`
+        }
         row.dataset.machine = m.machine
         row.innerHTML = `<span>${m.machine}</span><span class="pick-badge ${badgeClass}">${badgeText}</span>`
         row.onclick = () => { document.querySelectorAll('.pick-mach.active').forEach(e=>e.classList.remove('active')); row.classList.add('active'); renderPickDetail(m.machine) }
@@ -1248,6 +1266,13 @@
       detailEl.innerHTML = ''
       document.getElementById('pick-count').textContent = ''
     }
+  }
+  function toggleShowAll() {
+    showAllMachines = !showAllMachines
+    const btn = document.getElementById('btn-show-all')
+    btn.classList.toggle('in-queue', showAllMachines)
+    btn.title = showAllMachines ? 'Show picking list only' : 'Show all machines'
+    renderPicks()
   }
   async function markInTransitDone() {
     const checked = [...document.querySelectorAll('#in-transit-panel input[type=checkbox]:checked')].map(cb => cb.value)
