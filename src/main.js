@@ -442,7 +442,7 @@ ipcMain.handle('print-all-picking-lists', async (_, data) => {
     return `<div class="page"><div class="hdr"><span>${esc(m.date)}</span><span>${esc(m.machine)} ${esc(m.team)}</span></div><table><thead><tr><th>No.</th><th>Product Name</th><th>Column1</th><th>Bal Qty</th><th>Lane Size</th><th>Restock</th></tr></thead><tbody>${rows}</tbody></table></div>`
   }).join('')
 
-  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:11px}@page{size:A4 portrait;margin:12mm}.page{page-break-after:always;break-after:page}.page:last-child{page-break-after:avoid;break-after:avoid}.hdr{display:flex;justify-content:space-between;font-size:13px;font-weight:bold;margin-bottom:8px;padding-bottom:4px;border-bottom:1.5px solid #000}table{width:100%;border-collapse:collapse;font-size:11px}th,td{border:0.5px solid #555;padding:4px 6px;text-align:left}th{background:#f0f0f0;font-weight:600}th:nth-child(1){width:5%}th:nth-child(2){width:38%}th:nth-child(3){width:22%}th:nth-child(4),th:nth-child(5),th:nth-child(6){width:10%;text-align:center}td:nth-child(4),td:nth-child(5),td:nth-child(6){text-align:center}tr.rep td.orig{text-decoration:line-through;color:#777}tr.rep td.col1{background-color:#ffffa0!important;font-weight:500}</style></head><body>${pages}</body></html>`
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:11px}@page{size:A4 portrait;margin:12mm}.page{page-break-after:always;break-after:page}.page:last-child{page-break-after:avoid;break-after:avoid}.hdr{display:flex;justify-content:space-between;font-size:13px;font-weight:bold;margin-bottom:8px;padding-bottom:4px;border-bottom:1.5px solid #000}table{width:100%;border-collapse:collapse;font-size:11px}th,td{border:1px dashed #aaa;padding:4px 6px;text-align:left}th{font-weight:600}th:nth-child(1){width:5%}th:nth-child(2){width:38%}th:nth-child(3){width:22%}th:nth-child(4),th:nth-child(5),th:nth-child(6){width:10%;text-align:center}td:nth-child(4),td:nth-child(5),td:nth-child(6){text-align:center}tr.rep td.orig{text-decoration:line-through;color:#777}tr.rep td.col1{background-color:#ffffa0!important;font-weight:500}</style></head><body>${pages}</body></html>`
 
   const defaultPath = settings.lastPdfPath || path.join(os.homedir(), 'Desktop', 'picking-list.pdf')
   const { canceled, filePath } = await dialog.showSaveDialog({ defaultPath, filters: [{ name: 'PDF', extensions: ['pdf'] }] })
@@ -451,7 +451,7 @@ ipcMain.handle('print-all-picking-lists', async (_, data) => {
   const printWin = new BrowserWindow({ show: false, webPreferences: { contextIsolation: true } })
   printWin.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html))
   await new Promise(resolve => printWin.webContents.once('did-finish-load', resolve))
-  const pdfBuffer = await printWin.webContents.printToPDF({ printBackground: true })
+  const pdfBuffer = await printWin.webContents.printToPDF({ printBackground: false })
   printWin.destroy()
 
   fs.writeFileSync(filePath, pdfBuffer)
@@ -510,7 +510,7 @@ ipcMain.handle('print-slow-movers', async (_, { rows, dateRange }) => {
     h2{font-size:14px;margin-bottom:3px}
     .sub{font-size:10px;color:#555;margin-bottom:12px}
     table{width:100%;border-collapse:collapse}
-    th,td{border:1px dashed #888;padding:4px 6px;text-align:left}
+    th,td{border:1px dashed #aaa;padding:4px 6px;text-align:left}
     th{font-weight:600;font-size:10px;text-transform:uppercase}
     th:nth-child(1),td:nth-child(1){width:5%;text-align:center}
     th:nth-child(3),td:nth-child(3),th:nth-child(4),td:nth-child(4),th:nth-child(5),td:nth-child(5){width:13%;text-align:center}
