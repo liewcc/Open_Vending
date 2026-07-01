@@ -52,9 +52,9 @@ contextBridge.exposeInMainWorld('api', {
     const rows = parseRows(filePath)
     return picking.machinesToPickToday(rows, routePlan, new Date(dateISO), pendingByMachine || {})
   },
-  getPickList(filePath, machine, pendingByLane, oosByLane, forecastByPid, semBreak) {
+  getPickList(filePath, machine, pendingByLane, oosByLane, forecastByPid, semBreak, bufferByLane) {
     const rows = parseRows(filePath)
-    return picking.buildPickingList(rows, machine, pendingByLane || {}, oosByLane || {}, forecastByPid || {}, semBreak || false)
+    return picking.buildPickingList(rows, machine, pendingByLane || {}, oosByLane || {}, forecastByPid || {}, semBreak || false, bufferByLane || {})
   },
   teamOf(machine) {
     return (routePlan.machines[machine] && routePlan.machines[machine].team) || null
@@ -115,5 +115,10 @@ contextBridge.exposeInMainWorld('api', {
   buildSalesForecastDb:  ()           => ipcRenderer.invoke('build-sales-forecast-db'),
   getSalesForecastMeta:  ()           => ipcRenderer.invoke('get-sales-forecast-meta'),
   getForecastByWeekday:  (weekday)    => ipcRenderer.invoke('get-forecast-by-weekday', { weekday }),
+  initBufferDb:           ()     => ipcRenderer.invoke('init-buffer-db'),
+  getBufferSettings:      ()     => ipcRenderer.invoke('get-buffer-settings'),
+  setBufferQty:           (rows) => ipcRenderer.invoke('set-buffer-qty', rows),
+  calcBufferSuggestions:  ()     => ipcRenderer.invoke('calc-buffer-suggestions'),
+  loadBufferSuggestions:  ()     => ipcRenderer.invoke('load-buffer-suggestions'),
 })
 

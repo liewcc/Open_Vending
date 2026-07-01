@@ -148,13 +148,15 @@ function machinesToPickToday(reportRows, routePlan, date, pendingByMachine) {
  * @param {object} oosByLane - {laneNo: count, ...}
  * @param {object} forecastByPid - {pid: avg_qty, ...}  (pass {} if unavailable)
  * @param {boolean} semBreak - if true, forecast is disabled
+ * @param {object} bufferByLane - {laneNo: bufferQty, ...} (pass {} if unavailable)
  * @returns {object}
  */
-function buildPickingList(reportRows, machine, pendingByLane, oosByLane, forecastByPid, semBreak) {
+function buildPickingList(reportRows, machine, pendingByLane, oosByLane, forecastByPid, semBreak, bufferByLane) {
   if (!pendingByLane) pendingByLane = {};
   if (!oosByLane) oosByLane = {};
   if (!forecastByPid) forecastByPid = {};
   if (semBreak === undefined) semBreak = false;
+  if (!bufferByLane) bufferByLane = {};
 
   // Take only data rows whose column 0 === machine
   const machineRows = [];
@@ -197,7 +199,10 @@ function buildPickingList(reportRows, machine, pendingByLane, oosByLane, forecas
     // Step E: forecast qty
     const pid = String(row[2]);
     const forecastQty = semBreak ? 0 : Math.round((forecastByPid[pid] || 0));
-    const finalRestock = Math.max(0, actualRestock + forecastQty);
+
+    // Step F: buffer qty
+    const bufferQty = bufferByLane[laneNo] || 0;
+    const finalRestock = Math.max(0, actualRestock + forecastQty + bufferQty);
 
     visibleRows.push({
       no: row[1],
@@ -207,6 +212,7 @@ function buildPickingList(reportRows, machine, pendingByLane, oosByLane, forecas
       lane: num(row[5]),
       restock: finalRestock,
       forecastQty,
+      bufferQty,
       outOfStock,
       fastMover,
       laneNo

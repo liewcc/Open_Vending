@@ -523,6 +523,17 @@
   .pick-fast-tag { background:#fde68a; color:#92400e; border-radius:7px; padding:0 6px; font-size:9px; margin-left:6px; }
   td.bal-out { color:#a32d2d; }
   .pick-out-tag { background:#f7c1c1; color:#791f1f; border-radius:7px; padding:0 6px; font-size:9px; margin-left:6px; }
+.buf-machine-item { padding:7px 14px; font-size:12.5px; cursor:pointer; border-radius:4px; margin:1px 4px; }
+  .buf-machine-item:hover { background:#f3f4f6; }
+  .buf-machine-item.active { background:#e0e7ff; color:#3730a3; font-weight:500; }
+  .buf-tbl { width:100%; border-collapse:collapse; font-size:12.5px; }
+  .buf-tbl thead tr { background:transparent; color:inherit; }
+  .buf-tbl th { text-align:left; padding:6px 10px; border-bottom:1px solid #e5e7eb; font-weight:500; color:#6b7280; font-size:11px; background:#fff; }
+  .buf-tbl td { padding:5px 10px; border-bottom:0.5px solid #f3f4f6; }
+  .buf-tbl input[type=number] { width:60px; padding:3px 6px; border:1px solid #d1d5db; border-radius:4px; font-size:12px; text-align:center; }
+  .buf-tbl input[type=number]:focus { outline:none; border-color:#6366f1; }
+  .buf-no-data { color:#0891b2; font-size:11px; font-style:italic; }
+  .buf-tbl td.buf-suggest { color:#059669; font-size:11px; }
   .pick-hidden-note { padding:8px 14px; color:#9ca3af; font-size:10.5px; }
   .pick-search-bar { display:flex; align-items:center; gap:6px; padding:7px 14px; border-bottom:0.5px solid #eee; background:#fafbfc; }
   .pick-search-bar input { flex:1; padding:4px 8px; border:1px solid #d1d5db; border-radius:6px; font-size:11.5px; color:#374151; background:#fff; }
@@ -603,6 +614,8 @@
       <button id="btn-download" class="side-icon-btn" disabled onclick="redownload()" title="Re-download"><span class="icon">cloud_sync</span></button>
       <button id="btn-pick" class="side-icon-btn" onclick="showPickView()" title="Picking List"><span class="icon">shopping_basket</span></button>
       <button id="btn-slow" class="side-icon-btn" onclick="showSlowView()" title="Slow Movers"><span class="icon">trending_down</span></button>
+      <button id="btn-route" class="side-icon-btn" onclick="showRoutePlanView()" title="Route Plan"><span class="icon">route</span></button>
+      <button id="btn-buffer" class="side-icon-btn" onclick="showBufferStockView()" title="Buffer Stock"><span class="icon">package_2</span></button>
       <button id="btn-gear" class="side-icon-btn" onclick="toggleConfig()" title="Settings"><span class="icon">settings</span></button>
       <button class="side-icon-btn" onclick="window.api.quitApp()" title="Exit"><span class="icon">power_settings_new</span></button>
     </div>
@@ -765,7 +778,37 @@
     </div>
     <div id="slow-body">
       <div id="slow-status"></div>
+      <div id="slow-search-bar" class="pick-search-bar" style="display:none;">
+        <input type="text" id="slow-search-input" placeholder="Search product…" oninput="filterTable(document.querySelector('#slow-table-wrap table'),this.value)">
+        <button onclick="document.getElementById('slow-search-input').value='';filterTable(document.querySelector('#slow-table-wrap table'),'')">Clear</button>
+      </div>
       <div id="slow-table-wrap"></div>
+    </div>
+  </div>
+
+  <div id="route-plan-panel" style="display:none;flex-direction:column;flex:1;padding:24px;">
+    <h2 style="margin-bottom:16px;">Route Plan</h2>
+    <p style="color:var(--text-secondary);">Coming soon — manage machine schedules and team assignments.</p>
+  </div>
+
+  <div id="buffer-stock-panel" style="display:none;flex-direction:column;flex:1;min-width:0;background:#f0f2f5;">
+    <div id="buf-toolbar" style="display:flex;align-items:center;gap:12px;padding:9px 14px;background:#fff;border-bottom:0.5px solid #e2e4e9;flex-shrink:0;font-size:12px;">
+      <span id="buf-status" style="font-size:11px;color:#6b7280;"></span>
+      <button id="buf-btn-apply" class="pick-icon-btn" style="margin-left:auto;" onclick="bufApplyToNormal()" title="Apply selected suggestions to Normal qty"><span class="icon">check_box</span></button>
+      <button id="buf-btn-suggest" class="pick-icon-btn" onclick="bufAutoSuggest()" title="Recalculate suggestions from sales history"><span class="icon">auto_fix_high</span></button>
+      <button id="buf-btn-save"    class="pick-icon-btn" onclick="bufSaveAll()" title="Save all changes"><span class="icon">save</span></button>
+    </div>
+    <div style="display:flex;flex:1;min-height:0;">
+      <div id="buf-machine-list" style="width:210px;border-right:0.5px solid #e2e4e9;overflow-y:auto;background:#fafbfc;padding:8px;font-size:12px;flex-shrink:0;"></div>
+      <div id="buf-detail" style="flex:1;overflow-y:auto;background:#fff;min-width:0;">
+        <div class="pick-search-bar">
+          <input type="text" id="buf-search" placeholder="Search lane / product…" oninput="bufFilterLanes(this.value)">
+          <button onclick="document.getElementById('buf-search').value='';bufFilterLanes('')">Clear</button>
+        </div>
+        <div id="buf-lane-wrap" style="padding:0;">
+          <div style="color:#9ca3af;font-size:13px;padding:40px 0;text-align:center;">Select a machine from the list.</div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -784,6 +827,11 @@
         <polyline points="10 9 9 9 8 9"/>
       </svg>
       <p id="placeholder-text">Downloading report...</p>
+    </div>
+
+    <div id="main-search-bar" class="pick-search-bar" style="display:none;">
+      <input type="text" id="main-search-input" placeholder="Search…" oninput="filterTable(document.getElementById('data-table'),this.value)">
+      <button onclick="document.getElementById('main-search-input').value='';filterTable(document.getElementById('data-table'),'')">Clear</button>
     </div>
 
     <div id="table-wrap">
@@ -907,6 +955,8 @@
 
     placeholder.style.display = 'none'
     tableWrap.style.display = 'block'
+    document.getElementById('main-search-bar').style.display = ''
+    document.getElementById('main-search-input').value = ''
     makeSortable(document.getElementById('data-table'))
   }
 
@@ -982,6 +1032,11 @@
       const btn = document.getElementById('btn-sem-break')
       if (btn) { btn.classList.add('in-queue'); btn.title = 'Sem Break ON (forecast off) — click to disable' }
     }
+    if (s.bufferMode) bufferMode = s.bufferMode
+  })
+
+  window.api.getBufferSettings().then(r => {
+    if (r && r.ok) currentBuffer = r.data || {}
   })
 
   function onHeadedChange(checked) {
@@ -1008,10 +1063,12 @@
   }
 
   function showPanel(which) {
-    document.getElementById('main').style.display       = which === 'main'   ? 'flex' : 'none'
-    configPanel.style.display                           = which === 'config' ? 'flex' : 'none'
-    document.getElementById('pick-panel').style.display = which === 'pick'   ? 'flex' : 'none'
-    document.getElementById('slow-panel').style.display = which === 'slow'   ? 'flex' : 'none'
+    document.getElementById('main').style.display              = which === 'main'         ? 'flex' : 'none'
+    configPanel.style.display                                  = which === 'config'       ? 'flex' : 'none'
+    document.getElementById('pick-panel').style.display        = which === 'pick'         ? 'flex' : 'none'
+    document.getElementById('slow-panel').style.display        = which === 'slow'         ? 'flex' : 'none'
+    document.getElementById('route-plan-panel').style.display  = which === 'route-plan'   ? 'flex' : 'none'
+    document.getElementById('buffer-stock-panel').style.display = which === 'buffer-stock' ? 'flex' : 'none'
     btnGear.classList.toggle('active', which === 'config')
     configVisible = which === 'config'
   }
@@ -1155,10 +1212,13 @@
     return s
   }
 
-  function makeSortable(table) {
+  function makeSortable(table, opts) {
     if (!table) return
-    const ths = table.querySelectorAll('thead th')
+    const skipCols = (opts && opts.skipCols) || []
+    const ths = Array.from(table.querySelectorAll('thead th'))
     ths.forEach((th, col) => {
+      if (skipCols.includes(col)) return
+      if (th.querySelector('.sort-ind')) return   // already initialised
       th.classList.add('sortable')
       const ind = document.createElement('span')
       ind.className = 'sort-ind'
@@ -1166,7 +1226,7 @@
       th._sortDir = 0
       th.addEventListener('click', () => {
         th._sortDir = th._sortDir === 1 ? -1 : 1
-        ths.forEach(t => { if (t !== th) { t._sortDir = 0; t.querySelector('.sort-ind').textContent = '' } })
+        ths.forEach(t => { if (t !== th) { t._sortDir = 0; const i = t.querySelector('.sort-ind'); if (i) i.textContent = '' } })
         ind.textContent = th._sortDir === 1 ? '▲' : '▼'
         const tbody = table.querySelector('tbody')
         ;[...tbody.rows].sort((a, b) => {
@@ -1177,6 +1237,15 @@
           return th._sortDir * cmp
         }).forEach(r => tbody.appendChild(r))
       })
+    })
+  }
+
+  function filterTable(table, query) {
+    if (!table) return
+    const q = (query || '').trim().toLowerCase()
+    table.querySelectorAll('tbody tr').forEach(tr => {
+      const text = Array.from(tr.cells).map(td => td.textContent).join(' ').toLowerCase()
+      tr.style.display = (!q || text.includes(q)) ? '' : 'none'
     })
   }
 
@@ -1196,7 +1265,19 @@
   let currentPending = {}
   let currentOos = {}
   let currentForecast = {}   // {machine: {pid: avg_qty}}
+  let currentBuffer = {}     // {machine: {lane_no: {normal_qty, sembreak_qty, pid}}}
+  let bufferMode = 'normal'  // 'normal' | 'sembreak' | 'none'
   let semBreakMode = false
+
+  function getBufferByLane(machine) {
+    if (bufferMode === 'none') return {}
+    const machineBuf = currentBuffer[machine] || {}
+    const result = {}
+    for (const [laneNo, v] of Object.entries(machineBuf)) {
+      result[laneNo] = bufferMode === 'sembreak' ? (v.sembreak_qty || 0) : (v.normal_qty || 0)
+    }
+    return result
+  }
   let showAllMachines = false
   let isEditMode = false
   let editMachine = null
@@ -1364,7 +1445,7 @@
     const detailEl = document.getElementById('pick-detail')
     try {
       const oosByLane = (currentOos[machine]) || {}
-      const pl = window.api.getPickList(lastFilePath, machine, {}, oosByLane, currentForecast[machine] || {}, semBreakMode)
+      const pl = window.api.getPickList(lastFilePath, machine, {}, oosByLane, currentForecast[machine] || {}, semBreakMode, getBufferByLane(machine))
       const team = window.api.teamOf(machine) || '—'
       const dateStr = document.getElementById('pick-date').value
       let rows = pl.rows
@@ -1377,12 +1458,13 @@
         html += `<div class="pick-search-bar"><input type="text" id="pick-search-input" placeholder="Search product…" oninput="filterPickTable(this.value)"><button onclick="clearPickSearch()">Clear</button></div>`
         if (!rows.length) { html += '<div class="pick-empty">All lanes sufficiently stocked.</div>' }
         else {
-          html += `<table class="pick-tbl"><thead><tr><th>No</th><th>Product</th><th>Bal</th><th>Lane</th><th>Forecast</th><th>Forecast Restock</th></tr></thead><tbody>`
+          html += `<table class="pick-tbl"><thead><tr><th>No</th><th>Product</th><th>Bal</th><th>Lane</th><th>Forecast</th><th>Buffer</th><th>Restock</th></tr></thead><tbody>`
           rows.forEach(r => {
             const tag = r.outOfStock ? '<span class="pick-out-tag">OUT</span>' : ''
             const ftag = r.fastMover ? '<span class="pick-fast-tag">FAST</span>' : ''
             const cls = [r.outOfStock?'pick-out':'', r.fastMover?'pick-fast':''].filter(Boolean).join(' ')
-            html += `<tr class="${cls}"><td>${r.no}</td><td contenteditable="true" spellcheck="false">${r.product}${tag}${ftag}</td><td contenteditable="true" spellcheck="false">${r.bal}</td><td contenteditable="true" spellcheck="false">${r.lane}</td><td style="color:#6b7280">${r.forecastQty > 0 ? '+' + r.forecastQty : '—'}</td><td contenteditable="true" spellcheck="false">${r.restock}</td></tr>`
+            const bufCol = r.bufferQty ? `<span style="color:#0891b2">${r.bufferQty > 0 ? '+' : ''}${r.bufferQty}</span>` : '—'
+            html += `<tr class="${cls}"><td>${r.no}</td><td contenteditable="true" spellcheck="false">${r.product}${tag}${ftag}</td><td contenteditable="true" spellcheck="false">${r.bal}</td><td contenteditable="true" spellcheck="false">${r.lane}</td><td style="color:#6b7280">${r.forecastQty > 0 ? '+' + r.forecastQty : '—'}</td><td>${bufCol}</td><td contenteditable="true" spellcheck="false">${r.restock}</td></tr>`
           })
           html += '</tbody></table>'
         }
@@ -1407,12 +1489,13 @@
         html += `<div class="pick-search-bar"><input type="text" id="pick-search-input" placeholder="Search product…" oninput="filterPickTable(this.value)"><button onclick="clearPickSearch()">Clear</button></div>`
         if (!pl.rows.length) { html += '<div class="pick-empty">All lanes sufficiently stocked.</div>' }
         else {
-          html += `<table class="pick-tbl"><thead><tr><th>No</th><th>Product</th><th>Bal</th><th>Lane</th><th>Forecast</th><th>Forecast Restock</th></tr></thead><tbody>`
+          html += `<table class="pick-tbl"><thead><tr><th>No</th><th>Product</th><th>Bal</th><th>Lane</th><th>Forecast</th><th>Buffer</th><th>Restock</th></tr></thead><tbody>`
           pl.rows.forEach(r => {
             const tag = r.outOfStock ? '<span class="pick-out-tag">OUT</span>' : ''
             const ftag = r.fastMover ? '<span class="pick-fast-tag">FAST</span>' : ''
             const cls = [r.outOfStock?'pick-out':'', r.fastMover?'pick-fast':''].filter(Boolean).join(' ')
-            html += `<tr class="${cls}" data-lane="${r.lane}"><td>${r.no}</td><td>${r.product}${tag}${ftag}</td><td class="${r.outOfStock?'bal-out':''}">${r.bal}</td><td>${r.lane}</td><td style="color:#6b7280">${r.forecastQty > 0 ? '+' + r.forecastQty : '—'}</td><td>${r.restock}</td></tr>`
+            const bufCol = r.bufferQty ? `<span style="color:#0891b2">${r.bufferQty > 0 ? '+' : ''}${r.bufferQty}</span>` : '—'
+            html += `<tr class="${cls}" data-lane="${r.lane}"><td>${r.no}</td><td>${r.product}${tag}${ftag}</td><td class="${r.outOfStock?'bal-out':''}">${r.bal}</td><td>${r.lane}</td><td style="color:#6b7280">${r.forecastQty > 0 ? '+' + r.forecastQty : '—'}</td><td>${bufCol}</td><td>${r.restock}</td></tr>`
           })
           html += '</tbody></table>'
           html += `<div class="pick-hidden-note">${pl.hiddenCount} rows hidden (Restock 0 or Bal &gt; 10)</div>`
@@ -1435,7 +1518,7 @@
   async function confirmAndQueuePrint(machine) {
     const pendingByLane = (currentPending[machine]) || {}
     const oosByLane     = (currentOos[machine])     || {}
-    const pl = window.api.getPickList(lastFilePath, machine, pendingByLane, oosByLane, currentForecast[machine] || {}, semBreakMode)
+    const pl = window.api.getPickList(lastFilePath, machine, pendingByLane, oosByLane, currentForecast[machine] || {}, semBreakMode, getBufferByLane(machine))
     const today = document.getElementById('pick-date').value
     const picks = pl.rows.map(r => ({
       machine,
@@ -1532,6 +1615,217 @@
   let smLastResult = null
 
   function showSlowView() { showPanel('slow') }
+  function showRoutePlanView() { showPanel('route-plan') }
+
+  let bufCurrentMachine = null
+  let bufSuggestions = {}   // {machine: {pid: {normal, sembreak}}} — loaded from DB
+  let bufEdits = {}         // {machine: {lane_no: {normal_qty, sembreak_qty, pid}}}
+
+  async function showBufferStockView() {
+    showPanel('buffer-stock')
+    const [settingsR, sugR] = await Promise.all([
+      window.api.getBufferSettings(),
+      window.api.loadBufferSuggestions()
+    ])
+    if (settingsR && settingsR.ok) currentBuffer = settingsR.data || {}
+    if (sugR && sugR.ok) bufSuggestions = sugR.data || {}
+    bufRenderMachineList()
+    if (bufCurrentMachine) bufRenderLanes(bufCurrentMachine)
+  }
+
+function bufRenderMachineList(filter) {
+    const listEl = document.getElementById('buf-machine-list')
+    if (!lastFilePath) {
+      listEl.innerHTML = '<div class="pick-empty">Load a report first.</div>'
+      return
+    }
+    const rows = window.api.parseExcel(lastFilePath)
+    const q = (filter || '').toLowerCase()
+    const allMachines = window.api.getAllMachines(lastFilePath, {})
+    listEl.innerHTML = ''
+    let curTeam = null
+    allMachines.forEach(m => {
+      if (q && !m.machine.toLowerCase().includes(q)) return
+      if (m.team !== curTeam) {
+        curTeam = m.team
+        const h = document.createElement('div')
+        h.className = 'pick-team-hd'
+        h.textContent = 'Team ' + m.team
+        listEl.appendChild(h)
+      }
+      const row = document.createElement('div')
+      row.className = 'pick-mach' + (m.machine === bufCurrentMachine ? ' active' : '')
+      row.dataset.machine = m.machine
+      row.innerHTML = `<span>${m.machine}</span>`
+      row.onclick = () => {
+        listEl.querySelectorAll('.pick-mach').forEach(e => e.classList.remove('active'))
+        row.classList.add('active')
+        bufSelectMachine(m.machine)
+      }
+      listEl.appendChild(row)
+    })
+  }
+
+  function bufFilterMachines(val) {
+    bufRenderMachineList(val)
+  }
+
+  function bufSelectMachine(machine) {
+    bufCurrentMachine = machine
+    bufRenderLanes(machine)
+  }
+
+  let bufAllLaneRows = []   // cache for filter
+
+  function bufRenderLanes(machine) {
+    const wrap = document.getElementById('buf-lane-wrap')
+    if (!lastFilePath) { wrap.innerHTML = '<div class="pick-empty">Load a report first.</div>'; return }
+    const rows = window.api.parseExcel(lastFilePath)
+    bufAllLaneRows = rows.slice(1).filter(r => r[0] === machine)
+    if (!bufAllLaneRows.length) { wrap.innerHTML = '<div class="pick-empty">No lanes found.</div>'; return }
+
+    // sticky header matching pick-hd style
+    const mEsc = machine.replace(/'/g, "\\'")
+    let html = `<div class="pick-hd"><div><div class="nm">${machine}</div><div class="sub">Set Normal and Sem Break buffer qty per lane</div></div></div>`
+    html += bufBuildTable(machine, bufAllLaneRows, '')
+    wrap.innerHTML = html
+    wrap.parentElement.style.setProperty('--pick-hd-h', (wrap.querySelector('.pick-hd')?.offsetHeight || 52) + 'px')
+    makeSortable(wrap.querySelector('table.buf-tbl'), { skipCols: [0] })
+  }
+
+  function bufBuildTable(machine, machRows, filter) {
+    const q = filter.toLowerCase()
+    const machineBuf = Object.assign({}, currentBuffer[machine] || {}, bufEdits[machine] || {})
+    const machineSug = bufSuggestions[machine] || {}
+    const mEsc = machine.replace(/'/g, "\\'")
+
+    let html = `<table class="buf-tbl"><thead><tr>
+      <th style="width:28px;"><input type="checkbox" id="buf-chk-all" title="Select all" onchange="bufToggleAllChk(this)"></th>
+      <th>Lane</th><th>PID</th><th>Product</th><th style="color:#059669">Sug Normal</th><th style="color:#d97706">Sug Sem Break</th><th>Normal</th><th>Sem Break</th>
+    </tr></thead><tbody>`
+
+    let count = 0
+    machRows.forEach(r => {
+      const laneNo = String(r[1])
+      const pid    = String(r[2])
+      const prod   = String(r[3] || '')
+      if (q && !prod.toLowerCase().includes(q) && !laneNo.includes(q)) return
+      count++
+      const saved  = machineBuf[laneNo] || {}
+      const sug    = machineSug[pid] || {}
+      const sugN   = sug.normal   != null ? sug.normal   : null
+      const sugS   = sug.sembreak != null ? sug.sembreak : null
+      const hasSug = sugN != null || sugS != null
+      const sugNTxt = sugN != null ? `<span style="color:#059669">${sugN > 0 ? '+' : ''}${sugN}</span>` : '<span class="buf-no-data">—</span>'
+      const sugSTxt = sugS != null ? `<span style="color:#d97706">${sugS}</span>`                        : '<span class="buf-no-data">—</span>'
+      const norm   = saved.normal_qty   != null ? saved.normal_qty   : ''
+      const sem    = saved.sembreak_qty != null ? saved.sembreak_qty : ''
+      html += `<tr>
+        <td style="text-align:center;"><input type="checkbox" class="buf-chk" data-lane="${laneNo}" data-pid="${pid}" data-sugn="${sugN ?? ''}" data-sugs="${sugS ?? ''}" ${hasSug ? '' : 'disabled'}></td>
+        <td>${laneNo}</td>
+        <td style="color:#9ca3af;font-size:11px;">${pid}</td>
+        <td>${prod}</td>
+        <td>${sugNTxt}</td>
+        <td>${sugSTxt}</td>
+        <td><input type="number" data-lane="${laneNo}" data-pid="${pid}" data-field="normal_qty"   value="${norm}" placeholder="0" onchange="bufOnEdit('${mEsc}',this)"></td>
+        <td><input type="number" data-lane="${laneNo}" data-pid="${pid}" data-field="sembreak_qty" value="${sem}"  placeholder="0" onchange="bufOnEdit('${mEsc}',this)"></td>
+      </tr>`
+    })
+    if (!count) html += `<tr><td colspan="8" style="padding:20px 14px;color:#9ca3af;text-align:center;">No results.</td></tr>`
+    html += '</tbody></table>'
+    return html
+  }
+
+  function bufToggleAllChk(master) {
+    const wrap = document.getElementById('buf-lane-wrap')
+    wrap.querySelectorAll('.buf-chk:not(:disabled)').forEach(c => { c.checked = master.checked })
+  }
+
+  function bufFilterLanes(val) {
+    if (!bufCurrentMachine) return
+    const wrap = document.getElementById('buf-lane-wrap')
+    const tbl = wrap.querySelector('table')
+    if (tbl) tbl.outerHTML = bufBuildTable(bufCurrentMachine, bufAllLaneRows, val)
+    else wrap.innerHTML += bufBuildTable(bufCurrentMachine, bufAllLaneRows, val)
+    makeSortable(wrap.querySelector('table.buf-tbl'), { skipCols: [0] })
+  }
+
+  function bufOnEdit(machine, input) {
+    const laneNo = input.dataset.lane
+    const pid    = input.dataset.pid
+    const field  = input.dataset.field
+    const val    = input.value === '' ? 0 : parseInt(input.value) || 0
+    if (!bufEdits[machine]) bufEdits[machine] = {}
+    if (!bufEdits[machine][laneNo]) {
+      const saved = (currentBuffer[machine] || {})[laneNo] || {}
+      bufEdits[machine][laneNo] = { pid, normal_qty: saved.normal_qty || 0, sembreak_qty: saved.sembreak_qty || 0 }
+    }
+    bufEdits[machine][laneNo][field] = val
+    bufEdits[machine][laneNo].pid = pid
+  }
+
+  async function bufSaveAll() {
+    const statusEl = document.getElementById('buf-status')
+    statusEl.textContent = 'Saving…'
+    const rows = []
+    for (const [machine, lanes] of Object.entries(bufEdits)) {
+      for (const [lane_no, v] of Object.entries(lanes)) {
+        rows.push({ machine, lane_no, pid: v.pid || '', normal_qty: v.normal_qty || 0, sembreak_qty: v.sembreak_qty || 0 })
+      }
+    }
+    if (!rows.length) { statusEl.textContent = 'Nothing to save.'; setTimeout(() => { statusEl.textContent = '' }, 2000); return }
+    const r = await window.api.setBufferQty(rows)
+    if (r && r.ok) {
+      const freshR = await window.api.getBufferSettings()
+      if (freshR && freshR.ok) { currentBuffer = freshR.data || {}; bufEdits = {} }
+      statusEl.textContent = `Saved ${r.saved} lanes.`
+    } else {
+      statusEl.textContent = 'Save failed.'
+    }
+    setTimeout(() => { statusEl.textContent = '' }, 3000)
+  }
+
+  async function bufAutoSuggest() {
+    const statusEl = document.getElementById('buf-status')
+    statusEl.textContent = 'Calculating…'
+    const r = await window.api.calcBufferSuggestions()
+    if (!r || !r.ok) { statusEl.textContent = 'No sales data.'; setTimeout(() => { statusEl.textContent = '' }, 3000); return }
+    bufSuggestions = r.data || {}
+    if (bufCurrentMachine) bufRenderLanes(bufCurrentMachine)
+    statusEl.textContent = `Updated ${r.saved || 0} suggestions.`
+    setTimeout(() => { statusEl.textContent = '' }, 3000)
+  }
+
+  function bufApplyToNormal() {
+    if (!bufCurrentMachine) return
+    const wrap = document.getElementById('buf-lane-wrap')
+    const checked = wrap.querySelectorAll('.buf-chk:checked')
+    if (!checked.length) {
+      const statusEl = document.getElementById('buf-status')
+      statusEl.textContent = 'No rows selected.'
+      setTimeout(() => { statusEl.textContent = '' }, 2000)
+      return
+    }
+    const machine = bufCurrentMachine
+    checked.forEach(chk => {
+      const laneNo = chk.dataset.lane
+      const pid    = chk.dataset.pid
+      const sugN   = chk.dataset.sugn !== '' ? parseInt(chk.dataset.sugn) : null
+      const sugS   = chk.dataset.sugs !== '' ? parseInt(chk.dataset.sugs) : null
+      if (!bufEdits[machine]) bufEdits[machine] = {}
+      if (!bufEdits[machine][laneNo]) {
+        const saved = (currentBuffer[machine] || {})[laneNo] || {}
+        bufEdits[machine][laneNo] = { pid, normal_qty: saved.normal_qty || 0, sembreak_qty: saved.sembreak_qty || 0 }
+      }
+      if (sugN !== null) bufEdits[machine][laneNo].normal_qty   = sugN
+      if (sugS !== null) bufEdits[machine][laneNo].sembreak_qty = sugS
+      bufEdits[machine][laneNo].pid = pid
+    })
+    bufRenderLanes(machine)
+    const statusEl = document.getElementById('buf-status')
+    statusEl.textContent = `Applied ${checked.length} row(s) — remember to Save.`
+    setTimeout(() => { statusEl.textContent = '' }, 4000)
+  }
 
   async function browseCSV(inputId) {
     const p = await window.api.openCsvDialog()
@@ -1543,39 +1837,12 @@
   }
 
   let smAllRows = []
-  let smSortCol = 'total'
-  let smSortDir = 1  // 1 = asc, -1 = desc
-
-  function smSortRows(rows, col, dir) {
-    return [...rows].sort((a, b) => {
-      let av = a[col], bv = b[col]
-      if (col === 'days') { av = av ?? 999999; bv = bv ?? 999999 }
-      if (typeof av === 'number') return dir * (av - bv)
-      return dir * String(av ?? '').localeCompare(String(bv ?? ''), undefined, { numeric: true })
-    })
-  }
 
   function smRenderTable() {
     const wrapEl = document.getElementById('slow-table-wrap')
     const esc    = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
 
-    const sorted = smSortRows(smAllRows, smSortCol, smSortDir)
-    const page   = sorted
-
-    const cols = [
-      { key: null,        label: '#' },
-      { key: 'name',      label: 'Product Name' },
-      { key: 'total',     label: 'Total Sales' },
-      { key: 'last_sale', label: 'Last Sale' },
-      { key: 'days',      label: 'Days Since' },
-    ]
-    const headers = cols.map(c => {
-      if (!c.key) return `<th>#</th>`
-      const arrow = c.key === smSortCol ? (smSortDir === 1 ? ' ▲' : ' ▼') : ''
-      return `<th class="sortable" data-col="${c.key}">${c.label}<span class="sort-ind">${arrow}</span></th>`
-    }).join('')
-
-    const bodyRows = page.map((r, i) => {
+    const bodyRows = smAllRows.map((r, i) => {
       const daysCls = (r.days == null || r.days > 90) ? ' class="days-bad"' : ''
       const daysStr = r.days != null ? r.days + 'd' : 'Never'
       return `<tr><td>${i+1}</td><td>${esc(r.name)}</td><td>${r.total}</td><td>${esc(r.last_sale) || '—'}</td><td${daysCls}>${daysStr}</td></tr>`
@@ -1583,19 +1850,18 @@
 
     wrapEl.innerHTML = `
       <table>
-        <thead><tr>${headers}</tr></thead>
+        <thead><tr><th>#</th><th>Product Name</th><th>Total Sales</th><th>Last Sale</th><th>Days Since</th></tr></thead>
         <tbody>${bodyRows}</tbody>
       </table>
       <div class="sm-note">&#9888; These products are still in the machine. Change on next visit — do not empty the lane in advance.</div>`
 
-    wrapEl.querySelectorAll('thead th[data-col]').forEach(th => {
-      th.addEventListener('click', () => {
-        const col = th.dataset.col
-        if (smSortCol === col) smSortDir = -smSortDir
-        else { smSortCol = col; smSortDir = 1 }
-        smRenderTable()
-      })
-    })
+    makeSortable(wrapEl.querySelector('table'), { skipCols: [0] })
+
+    const searchBar = document.getElementById('slow-search-bar')
+    if (searchBar) {
+      searchBar.style.display = ''
+      document.getElementById('slow-search-input').value = ''
+    }
   }
 
   async function runSlowAnalysis() {
@@ -1610,8 +1876,6 @@
     printBtn.style.display = 'none'
     smLastResult = null
     smAllRows = []
-    smSortCol = 'total'
-    smSortDir = 1
 
     const res = await window.api.analyzeSlowDb(dbPath, 0)
     if (!res || !res.ok) {
@@ -1620,7 +1884,8 @@
     }
 
     smLastResult = res
-    smAllRows = res.rows
+    // Default order: lowest total first
+    smAllRows = [...res.rows].sort((a, b) => (a.total ?? 0) - (b.total ?? 0))
     statusEl.textContent = `Showing all ${res.total_active} active products · ${res.date_range}`
     smRenderTable()
     printBtn.style.display = ''
@@ -1628,8 +1893,7 @@
 
   async function printSlowMovers() {
     if (!smLastResult) return
-    const printRows = smSortRows(smAllRows, smSortCol, smSortDir)
-    const result = await window.api.printSlowMovers({ rows: printRows, dateRange: smLastResult.date_range })
+    const result = await window.api.printSlowMovers({ rows: smAllRows, dateRange: smLastResult.date_range })
     if (result && result.ok) alert('PDF saved: ' + result.filePath)
   }
 
@@ -1642,7 +1906,7 @@
     const data = currentPickList.map(m => {
       const pendingByLane = (currentPending[m.machine]) || {}
       const oosByLane = (currentOos[m.machine]) || {}
-      const pl = window.api.getPickList(lastFilePath, m.machine, pendingByLane, oosByLane, currentForecast[m.machine] || {}, semBreakMode)
+      const pl = window.api.getPickList(lastFilePath, m.machine, pendingByLane, oosByLane, currentForecast[m.machine] || {}, semBreakMode, getBufferByLane(m.machine))
       return { machine: m.machine, team: m.team, date: dateFormatted, rows: pl.rows }
     }).filter(m => m.rows.length > 0)
     if (!data.length) return

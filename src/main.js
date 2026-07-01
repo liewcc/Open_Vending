@@ -306,6 +306,7 @@ app.whenReady().then(() => {
   settings = loadSettings()
   createWindow()
   spawnPy([PICKING_HISTORY, 'init'], null)
+  spawnPy([BUFFER_STOCK, 'init', DATA_DB], null)
 
   tray = new Tray(ICON_PNG)
   tray.setToolTip(`Open Vending v${LOCAL_VERSION}`)
@@ -408,8 +409,10 @@ const PICKING_HISTORY    = path.join(__dirname, 'picking_history.py')
 const SLOW_MOVERS        = path.join(__dirname, 'slow_movers.py')
 const BUILD_SALES_DETAIL   = path.join(__dirname, 'build_sales_detail.py')
 const BUILD_SALES_FORECAST = path.join(__dirname, 'build_sales_forecast.py')
+const BUFFER_STOCK         = path.join(__dirname, 'buffer_stock.py')
 const SALES_DETAIL_DB      = path.join(ROOT, 'db', 'sales_detail.db')
 const SALES_FORECAST_DB    = path.join(ROOT, 'db', 'sales_forecast.db')
+const DATA_DB              = path.join(ROOT, 'db', 'data.db')
 ipcMain.handle('get-restock-history', (_, { machine, lane }) =>
   new Promise(resolve => {
     const pythonExe = path.join(ROOT, 'python', 'python.exe')
@@ -569,6 +572,12 @@ ipcMain.handle('get-sales-forecast-meta', () =>
 ipcMain.handle('get-forecast-by-weekday', (_, { weekday }) =>
   spawnPy([BUILD_SALES_FORECAST, 'query', SALES_FORECAST_DB, String(weekday)], null)
 )
+
+ipcMain.handle('init-buffer-db',        ()       => spawnPy([BUFFER_STOCK, 'init',    DATA_DB], null))
+ipcMain.handle('get-buffer-settings',   ()       => spawnPy([BUFFER_STOCK, 'get',     DATA_DB], null))
+ipcMain.handle('set-buffer-qty',        (_, rows) => spawnPy([BUFFER_STOCK, 'set',    DATA_DB], rows))
+ipcMain.handle('calc-buffer-suggestions',()      => spawnPy([BUFFER_STOCK, 'suggest',     DATA_DB, SALES_DETAIL_DB], null))
+ipcMain.handle('load-buffer-suggestions',()      => spawnPy([BUFFER_STOCK, 'get_suggest', DATA_DB], null))
 
 ipcMain.handle('get-report-mtime', () => {
   try { return fs.statSync(LAST_REPORT).mtime.toISOString() } catch { return null }
