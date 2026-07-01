@@ -440,9 +440,9 @@ ipcMain.handle('print-all-picking-lists', async (_, data) => {
   }
   const pages = data.map(m => {
     const rows = m.rows.map(r => {
-      const hasReplacement = false // wire replacement field here later
-      if (hasReplacement) {
-        return `<tr class="rep"><td>${esc(r.no)}</td><td class="orig">${esc(r.product)}</td><td class="col1">${esc(r.productId)}</td><td>${esc(r.bal)}</td><td>${esc(r.lane)}</td><td>${esc(r.restock)}</td></tr>`
+      const repl = r.replacement && r.replacement.trim()
+      if (repl) {
+        return `<tr class="rep"><td>${esc(r.no)}</td><td class="orig">${esc(r.product)}</td><td class="col1">${esc(repl)}</td><td>${esc(r.bal)}</td><td>${esc(r.lane)}</td><td>${esc(r.restock)}</td></tr>`
       }
       return `<tr><td>${esc(r.no)}</td><td>${esc(r.product)}</td><td></td><td>${esc(r.bal)}</td><td>${esc(r.lane)}</td><td>${esc(r.restock)}</td></tr>`
     }).join('')

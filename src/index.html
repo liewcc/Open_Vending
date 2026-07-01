@@ -201,7 +201,7 @@
 
   /* ── Slow Movers Panel ── */
   #slow-panel {
-    display: none; flex: 1; flex-direction: column; background: #f0f2f5; overflow: hidden;
+    display: none; flex: 1; flex-direction: column; background: #f0f2f5; min-height: 0;
   }
   #slow-toolbar {
     display: flex; align-items: center; gap: 10px; padding: 10px 16px;
@@ -226,11 +226,13 @@
     border-radius: 6px; font-size: 12px; cursor: pointer; display: none;
   }
   #btn-sm-print:hover { background: #f3f4f6; }
-  #slow-body { flex: 1; overflow-y: auto; padding: 16px; }
-  #slow-status { font-size: 12px; color: #6b7280; margin-bottom: 10px; }
-  #slow-table-wrap table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,.07); }
+  #slow-sub-toolbar { flex-shrink: 0; padding: 6px 16px; background: #fff; border-bottom: 0.5px solid #e5e7eb; display: flex; align-items: center; gap: 10px; min-height: 36px; }
+  #slow-status { font-size: 11px; color: #6b7280; flex: 1; }
+  #slow-body { flex: 1; overflow-y: auto; padding: 12px 16px; min-height: 0; }
+  #slow-table-wrap { border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,.07); }
+  #slow-table-wrap table { width: 100%; border-collapse: collapse; background: #fff; }
   #slow-table-wrap th, #slow-table-wrap td { padding: 7px 10px; font-size: 12px; border-bottom: 1px solid #f3f4f6; text-align: left; }
-  #slow-table-wrap th { font-size: 11px; font-weight: 600; color: #6b7280; text-transform: uppercase; background: #f9fafb; }
+  #slow-table-wrap th { font-size: 11px; font-weight: 600; color: #6b7280; text-transform: uppercase; background: #f9fafb; position: sticky; top: 0; z-index: 1; }
   #slow-table-wrap td:nth-child(1), #slow-table-wrap th:nth-child(1) { width: 5%; text-align: center; color: #9ca3af; }
   #slow-table-wrap td:nth-child(3), #slow-table-wrap th:nth-child(3),
   #slow-table-wrap td:nth-child(4), #slow-table-wrap th:nth-child(4),
@@ -560,6 +562,12 @@
   .edit-banner { padding:7px 14px; background:#fffbeb; border-bottom:0.5px solid #fbbf24; font-size:11.5px; color:#92400e; font-weight:500; }
   table.pick-tbl td[contenteditable] { background:#fffdf0; cursor:text; }
   table.pick-tbl td[contenteditable]:focus { background:#fef9c3; outline:1.5px solid #fbbf24; outline-offset:-1px; }
+  .pick-icon-btn.has-edit { color:#f59e0b; }
+  .pick-repl { font-size:9.5px; color:#6b7280; margin-top:2px; }
+  .pick-swap-btn { background:none; border:none; cursor:pointer; color:#d1d5db; padding:2px 4px; font-size:15px; line-height:1; border-radius:3px; }
+  .pick-swap-btn:hover { color:#6b7280; background:#f3f4f6; }
+  tr.swap-sel .pick-swap-btn { color:#2563eb; }
+  tr.swap-sel td { background:#eff6ff !important; }
 
   th.sortable { cursor:pointer; user-select:none; }
   th.sortable:hover { opacity:.85; }
@@ -776,12 +784,14 @@
       <button id="btn-sm-generate" onclick="openGenerateModal()">Generate List</button>
       <button id="btn-sm-print" onclick="printSlowMovers()">Export PDF</button>
     </div>
-    <div id="slow-body">
+    <div id="slow-sub-toolbar" style="display:none;">
       <div id="slow-status"></div>
-      <div id="slow-search-bar" class="pick-search-bar" style="display:none;">
-        <input type="text" id="slow-search-input" placeholder="Search product…" oninput="filterTable(document.querySelector('#slow-table-wrap table'),this.value)">
-        <button onclick="document.getElementById('slow-search-input').value='';filterTable(document.querySelector('#slow-table-wrap table'),'')">Clear</button>
+      <div id="slow-search-bar" style="display:none;align-items:center;gap:6px;">
+        <input type="text" id="slow-search-input" placeholder="Search product…" oninput="filterTable(document.querySelector('#slow-table-wrap table'),this.value)" style="padding:4px 8px;border:1px solid #d1d5db;border-radius:6px;font-size:11.5px;color:#374151;background:#fff;width:200px;">
+        <button onclick="document.getElementById('slow-search-input').value='';filterTable(document.querySelector('#slow-table-wrap table'),'')" style="padding:4px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:11.5px;background:#fff;color:#6b7280;cursor:pointer;">Clear</button>
       </div>
+    </div>
+    <div id="slow-body">
       <div id="slow-table-wrap"></div>
     </div>
   </div>
@@ -1458,19 +1468,20 @@
         html += `<div class="pick-search-bar"><input type="text" id="pick-search-input" placeholder="Search product…" oninput="filterPickTable(this.value)"><button onclick="clearPickSearch()">Clear</button></div>`
         if (!rows.length) { html += '<div class="pick-empty">All lanes sufficiently stocked.</div>' }
         else {
-          html += `<table class="pick-tbl"><thead><tr><th>No</th><th>Product</th><th>Bal</th><th>Lane</th><th>Forecast</th><th>Buffer</th><th>Restock</th></tr></thead><tbody>`
+          html += `<table class="pick-tbl"><thead><tr><th>No</th><th>Product</th><th>Bal</th><th>Lane</th><th>Forecast</th><th>Buffer</th><th>Restock</th><th>Replacement</th><th></th></tr></thead><tbody>`
           rows.forEach(r => {
             const tag = r.outOfStock ? '<span class="pick-out-tag">OUT</span>' : ''
             const ftag = r.fastMover ? '<span class="pick-fast-tag">FAST</span>' : ''
             const cls = [r.outOfStock?'pick-out':'', r.fastMover?'pick-fast':''].filter(Boolean).join(' ')
             const bufCol = r.bufferQty ? `<span style="color:#0891b2">${r.bufferQty > 0 ? '+' : ''}${r.bufferQty}</span>` : '—'
-            html += `<tr class="${cls}"><td>${r.no}</td><td contenteditable="true" spellcheck="false">${r.product}${tag}${ftag}</td><td contenteditable="true" spellcheck="false">${r.bal}</td><td contenteditable="true" spellcheck="false">${r.lane}</td><td style="color:#6b7280">${r.forecastQty > 0 ? '+' + r.forecastQty : '—'}</td><td>${bufCol}</td><td contenteditable="true" spellcheck="false">${r.restock}</td></tr>`
+            const repl = r.replacement || ''
+            html += `<tr class="${cls}"><td>${r.no}</td><td contenteditable="true" spellcheck="false">${r.product}${tag}${ftag}</td><td contenteditable="true" spellcheck="false">${r.bal}</td><td contenteditable="true" spellcheck="false">${r.lane}</td><td style="color:#6b7280">${r.forecastQty > 0 ? '+' + r.forecastQty : '—'}</td><td>${bufCol}</td><td contenteditable="true" spellcheck="false">${r.restock}</td><td contenteditable="true" spellcheck="false">${repl}</td><td><button class="pick-swap-btn" onclick="handleSwap(this)" title="Swap lane with another row">⇅</button></td></tr>`
           })
           html += '</tbody></table>'
         }
         detailEl.innerHTML = html
         detailEl.style.setProperty('--pick-hd-h', detailEl.querySelector('.pick-hd').offsetHeight + 'px')
-        makeSortable(detailEl.querySelector('table.pick-tbl'))
+        makeSortable(detailEl.querySelector('table.pick-tbl'), { skipCols: [8] })
         const tbl = detailEl.querySelector('table.pick-tbl')
         if (tbl) {
           tbl.addEventListener('input', () => {
@@ -1485,7 +1496,11 @@
         if (editScrollTop > 0) setTimeout(() => { detailEl.scrollTop = editScrollTop }, 50)
       } else {
         const inQueue = Object.keys(currentPending[machine] || {}).length > 0
-        let html = `<div class="pick-hd"><button class="pick-icon-btn" onclick="clearPickDetail()" title="Back to list"><span class="icon">home</span></button><div style="flex:1"><div class="nm">${machine}</div><div class="sub">Picking date ${dateStr} &nbsp;·&nbsp; Restock team ${team}</div></div><button class="pick-icon-btn${inQueue?' in-queue':''}" onclick="confirmAndQueuePrintCurrent()" title="${inQueue?'Already in queue':'Add to Queue'}"><span class="icon">check_box</span></button></div>`
+        const savedView = await window.api.loadPickEdit(machine, dateStr.replace(/-/g,''))
+        const replMap = {}
+        if (savedView?.rows) savedView.rows.forEach(r => { if (r.replacement) replMap[String(r.lane)] = r.replacement })
+        const hasEdit = savedView?.rows?.some(r => r.replacement)
+        let html = `<div class="pick-hd"><button class="pick-icon-btn" onclick="clearPickDetail()" title="Back to list"><span class="icon">home</span></button><div style="flex:1"><div class="nm">${machine}</div><div class="sub">Picking date ${dateStr} &nbsp;·&nbsp; Restock team ${team}</div></div><button class="pick-icon-btn${hasEdit?' has-edit':''}" onclick="enterEditMode('${machine.replace(/'/g,"\\'")}')" title="Edit replacements"><span class="icon">edit</span></button><button class="pick-icon-btn${inQueue?' in-queue':''}" onclick="confirmAndQueuePrintCurrent()" title="${inQueue?'Already in queue':'Add to Queue'}"><span class="icon">check_box</span></button></div>`
         html += `<div class="pick-search-bar"><input type="text" id="pick-search-input" placeholder="Search product…" oninput="filterPickTable(this.value)"><button onclick="clearPickSearch()">Clear</button></div>`
         if (!pl.rows.length) { html += '<div class="pick-empty">All lanes sufficiently stocked.</div>' }
         else {
@@ -1495,7 +1510,8 @@
             const ftag = r.fastMover ? '<span class="pick-fast-tag">FAST</span>' : ''
             const cls = [r.outOfStock?'pick-out':'', r.fastMover?'pick-fast':''].filter(Boolean).join(' ')
             const bufCol = r.bufferQty ? `<span style="color:#0891b2">${r.bufferQty > 0 ? '+' : ''}${r.bufferQty}</span>` : '—'
-            html += `<tr class="${cls}" data-lane="${r.lane}"><td>${r.no}</td><td>${r.product}${tag}${ftag}</td><td class="${r.outOfStock?'bal-out':''}">${r.bal}</td><td>${r.lane}</td><td style="color:#6b7280">${r.forecastQty > 0 ? '+' + r.forecastQty : '—'}</td><td>${bufCol}</td><td>${r.restock}</td></tr>`
+            const replNote = replMap[String(r.lane)] ? `<div class="pick-repl">→ ${replMap[String(r.lane)]}</div>` : ''
+            html += `<tr class="${cls}" data-lane="${r.lane}"><td>${r.no}</td><td>${r.product}${tag}${ftag}${replNote}</td><td class="${r.outOfStock?'bal-out':''}">${r.bal}</td><td>${r.lane}</td><td style="color:#6b7280">${r.forecastQty > 0 ? '+' + r.forecastQty : '—'}</td><td>${bufCol}</td><td>${r.restock}</td></tr>`
           })
           html += '</tbody></table>'
           html += `<div class="pick-hidden-note">${pl.hiddenCount} rows hidden (Restock 0 or Bal &gt; 10)</div>`
@@ -1607,14 +1623,38 @@
     document.querySelectorAll('table.pick-tbl tbody tr').forEach(tr => {
       const tds = tr.querySelectorAll('td')
       if (tds.length < 5) return
-      rows.push({ no: tds[0].textContent.trim(), product: tds[1].textContent.trim(), bal: tds[2].textContent.trim(), lane: tds[3].textContent.trim(), restock: tds[4].textContent.trim(), outOfStock: tr.classList.contains('pick-out') })
+      rows.push({ no: tds[0].textContent.trim(), product: tds[1].textContent.trim(), bal: tds[2].textContent.trim(), lane: tds[3].textContent.trim(), restock: tds[6].textContent.trim(), replacement: tds[7]?.textContent.trim() || '', outOfStock: tr.classList.contains('pick-out'), fastMover: tr.classList.contains('pick-fast') })
     })
     return rows.length ? rows : null
   }
+  let swapSelectedRow = null
+  function handleSwap(btn) {
+    const tr = btn.closest('tr')
+    if (!swapSelectedRow) {
+      swapSelectedRow = tr
+      tr.classList.add('swap-sel')
+    } else if (swapSelectedRow === tr) {
+      tr.classList.remove('swap-sel')
+      swapSelectedRow = null
+    } else {
+      const tdsA = swapSelectedRow.querySelectorAll('td')
+      const tdsB = tr.querySelectorAll('td')
+      const tmpLane = tdsA[3].textContent
+      tdsA[3].textContent = tdsB[3].textContent
+      tdsB[3].textContent = tmpLane
+      swapSelectedRow.classList.remove('swap-sel')
+      swapSelectedRow = null
+      tr.closest('table').dispatchEvent(new Event('input', { bubbles: true }))
+    }
+  }
+
   // ── Slow Movers ─────────────────────────────────────────────────────────────
   let smLastResult = null
 
-  function showSlowView() { showPanel('slow') }
+  function showSlowView() {
+    showPanel('slow')
+    if (!smAllRows.length) smRestoreFromStorage()
+  }
   function showRoutePlanView() { showPanel('route-plan') }
 
   let bufCurrentMachine = null
@@ -1838,6 +1878,32 @@ function bufRenderMachineList(filter) {
 
   let smAllRows = []
 
+  function smSaveToStorage() {
+    try {
+      localStorage.setItem('sm_cache', JSON.stringify({
+        rows: smAllRows,
+        meta: smLastResult,
+        dbPath: document.getElementById('sm-db-path').value
+      }))
+    } catch { /* storage full — ignore */ }
+  }
+
+  function smRestoreFromStorage() {
+    try {
+      const raw = localStorage.getItem('sm_cache')
+      if (!raw) return
+      const { rows, meta, dbPath } = JSON.parse(raw)
+      if (!rows || !rows.length) return
+      smAllRows = rows
+      smLastResult = meta
+      if (dbPath) document.getElementById('sm-db-path').value = dbPath
+      const statusEl = document.getElementById('slow-status')
+      statusEl.textContent = `Showing all ${meta.total_active} active products · ${meta.date_range} (restored)`
+      document.getElementById('btn-sm-print').style.display = ''
+      smRenderTable()
+    } catch { /* corrupted cache — ignore */ }
+  }
+
   function smRenderTable() {
     const wrapEl = document.getElementById('slow-table-wrap')
     const esc    = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
@@ -1857,9 +1923,10 @@ function bufRenderMachineList(filter) {
 
     makeSortable(wrapEl.querySelector('table'), { skipCols: [0] })
 
+    document.getElementById('slow-sub-toolbar').style.display = 'flex'
     const searchBar = document.getElementById('slow-search-bar')
     if (searchBar) {
-      searchBar.style.display = ''
+      searchBar.style.display = 'flex'
       document.getElementById('slow-search-input').value = ''
     }
   }
@@ -1871,6 +1938,8 @@ function bufRenderMachineList(filter) {
     const statusEl = document.getElementById('slow-status')
     const wrapEl   = document.getElementById('slow-table-wrap')
     const printBtn = document.getElementById('btn-sm-print')
+    document.getElementById('slow-sub-toolbar').style.display = 'flex'
+    document.getElementById('slow-search-bar').style.display = 'none'
     statusEl.textContent = 'Analyzing…'
     wrapEl.innerHTML = ''
     printBtn.style.display = 'none'
@@ -1889,6 +1958,7 @@ function bufRenderMachineList(filter) {
     statusEl.textContent = `Showing all ${res.total_active} active products · ${res.date_range}`
     smRenderTable()
     printBtn.style.display = ''
+    smSaveToStorage()
   }
 
   async function printSlowMovers() {
@@ -1903,12 +1973,17 @@ function bufRenderMachineList(filter) {
     const dateStr = document.getElementById('pick-date').value
     const [y, mo, d] = dateStr.split('-')
     const dateFormatted = `${d}/${mo}/${y}`
-    const data = currentPickList.map(m => {
+    const dateKey = dateStr.replace(/-/g, '')
+    const data = (await Promise.all(currentPickList.map(async m => {
       const pendingByLane = (currentPending[m.machine]) || {}
       const oosByLane = (currentOos[m.machine]) || {}
       const pl = window.api.getPickList(lastFilePath, m.machine, pendingByLane, oosByLane, currentForecast[m.machine] || {}, semBreakMode, getBufferByLane(m.machine))
-      return { machine: m.machine, team: m.team, date: dateFormatted, rows: pl.rows }
-    }).filter(m => m.rows.length > 0)
+      const saved = await window.api.loadPickEdit(m.machine, dateKey)
+      const replMap = {}
+      if (saved?.rows) saved.rows.forEach(r => { if (r.replacement) replMap[String(r.lane)] = r.replacement })
+      const rows = pl.rows.map(r => ({ ...r, replacement: replMap[String(r.lane)] || '' }))
+      return { machine: m.machine, team: m.team, date: dateFormatted, rows }
+    }))).filter(m => m.rows.length > 0)
     if (!data.length) return
     const result = await window.api.printAll(data)
     if (result && result.ok) alert('PDF saved: ' + result.filePath)
