@@ -518,9 +518,17 @@
   table.pick-tbl th { text-align:left; color:#9ca3af; font-size:10px; font-weight:500; padding:5px 14px; border-bottom:0.5px solid #eee; position:sticky; top:var(--pick-hd-h, 52px); z-index:1; background:#fff; }
   table.pick-tbl td { padding:5px 14px; border-bottom:0.5px solid #f3f3f3; }
   tr.pick-out td { background:#fcebeb; }
+  tr.pick-fast td { background:#fff7e6; }
+  tr.pick-fast.pick-out td { background:#fce0d8; }
+  .pick-fast-tag { background:#fde68a; color:#92400e; border-radius:7px; padding:0 6px; font-size:9px; margin-left:6px; }
   td.bal-out { color:#a32d2d; }
   .pick-out-tag { background:#f7c1c1; color:#791f1f; border-radius:7px; padding:0 6px; font-size:9px; margin-left:6px; }
   .pick-hidden-note { padding:8px 14px; color:#9ca3af; font-size:10.5px; }
+  .pick-search-bar { display:flex; align-items:center; gap:6px; padding:7px 14px; border-bottom:0.5px solid #eee; background:#fafbfc; }
+  .pick-search-bar input { flex:1; padding:4px 8px; border:1px solid #d1d5db; border-radius:6px; font-size:11.5px; color:#374151; background:#fff; }
+  .pick-search-bar input:focus { outline:none; border-color:#185fa5; }
+  .pick-search-bar button { padding:4px 10px; border:1px solid #d1d5db; border-radius:6px; font-size:11.5px; background:#fff; color:#6b7280; cursor:pointer; white-space:nowrap; }
+  .pick-search-bar button:hover { background:#f3f4f6; }
   .pick-detail-foot { padding:8px 14px; border-top:0.5px solid #eee; }
   .pick-empty { padding:18px 14px; color:#9ca3af; font-size:12px; }
 
@@ -694,6 +702,19 @@
       </div>
     </div>
 
+    <h3>Sales Detail DB</h3>
+    <div class="config-card" style="padding:12px 16px;">
+      <div style="font-size:11px;color:#6b7280;margin-bottom:8px;">Convert <code>sales_detail.csv</code> from portal into a local SQLite database for forecast calculations.</div>
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;">
+        <input id="sd-csv-path" type="text" readonly placeholder="Select sales_detail CSV…"
+          style="flex:1;padding:5px 8px;border:1px solid #d1d5db;border-radius:6px;font-size:11.5px;background:#f9fafb;color:#374151;cursor:default;">
+        <button class="pick-icon-btn" onclick="browseSalesCsv()" title="Browse CSV file"><span class="icon">folder_open</span></button>
+        <button id="btn-sd-convert" onclick="convertSalesDetailDb()" title="Convert to DB"
+          style="padding:5px 14px;background:#185fa5;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:500;cursor:pointer;">Convert</button>
+      </div>
+      <div id="sd-status" style="font-size:11px;color:#6b7280;min-height:16px;"></div>
+    </div>
+
     <h3>Log</h3>
     <div class="config-card" style="padding: 12px 16px;">
       <div id="log"></div>
@@ -707,6 +728,8 @@
   <div id="pick-toolbar">
     <input type="date" id="pick-date" onchange="renderPicks()">
     <span id="pick-count"></span>
+    <span id="report-mtime" style="color:#9ca3af;font-size:10.5px;margin-left:2px;"></span>
+    <button id="btn-sem-break" class="pick-icon-btn" onclick="toggleSemBreak()" title="Sem Break mode (forecast off)"><span class="icon">school</span></button>
     <button id="btn-show-all" class="pick-icon-btn" onclick="toggleShowAll()" title="Show all machines"><span class="icon">view_list</span></button>
     <button id="btn-queue-view" class="pick-icon-btn" onclick="showQueueView()" title="View Queue"><span class="icon">pending_actions</span></button>
     <button id="pick-print-all" class="pick-icon-btn" onclick="printAll()" title="Export PDF"><span class="icon">picture_as_pdf</span></button>
@@ -953,6 +976,12 @@
     if (s.smSalesPath)   window._smSalesPath   = s.smSalesPath
     if (s.smDbPath)      document.getElementById('sm-db-path').value = s.smDbPath
     if (s.smGenDbPath)   window._smGenDbPath = s.smGenDbPath
+    if (s.sdCsvPath)     document.getElementById('sd-csv-path').value = s.sdCsvPath
+    if (s.semBreakMode) {
+      semBreakMode = true
+      const btn = document.getElementById('btn-sem-break')
+      if (btn) { btn.classList.add('in-queue'); btn.title = 'Sem Break ON (forecast off) — click to disable' }
+    }
   })
 
   function onHeadedChange(checked) {
@@ -987,7 +1016,11 @@
     configVisible = which === 'config'
   }
 
-  function toggleConfig() { showPanel(configVisible ? 'main' : 'config') }
+  function toggleConfig() {
+    const opening = !configVisible
+    showPanel(opening ? 'config' : 'main')
+    if (opening) loadSalesDetailMeta()
+  }
 
   function applySetting(key, val) {
     window.api.setSetting(key, val)
@@ -1162,6 +1195,8 @@
   let currentPickList = []
   let currentPending = {}
   let currentOos = {}
+  let currentForecast = {}   // {machine: {pid: avg_qty}}
+  let semBreakMode = false
   let showAllMachines = false
   let isEditMode = false
   let editMachine = null
@@ -1185,6 +1220,20 @@
     const listEl = document.getElementById('pick-machine-list')
     const detailEl = document.getElementById('pick-detail')
     const itPanel = document.getElementById('in-transit-panel')
+    // Update report mtime display
+    if (window.api.getReportMtime) {
+      const mtime = await window.api.getReportMtime()
+      const mtimeEl = document.getElementById('report-mtime')
+      if (mtimeEl) {
+        if (mtime) {
+          const d = new Date(mtime)
+          const fmt = d.toLocaleDateString('en-GB') + ' ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+          mtimeEl.textContent = 'Last updated: ' + fmt
+        } else {
+          mtimeEl.textContent = ''
+        }
+      }
+    }
     if (!lastFilePath) {
       listEl.innerHTML = '<div class="pick-empty">No report loaded yet.</div>'
       detailEl.innerHTML = ''
@@ -1203,6 +1252,14 @@
       const oosRaw = await window.api.getOosCounts()
       currentPending = pendingRaw || {}
       currentOos = oosRaw || {}
+
+      // Load forecast for the selected date's weekday (0=Mon…6=Sun)
+      // Saturday (5) uses Sunday (6) forecast per Q2 spec
+      const selDate = new Date(document.getElementById('pick-date').value + 'T12:00:00')
+      let forecastWeekday = (selDate.getDay() + 6) % 7  // JS 0=Sun → remap to 0=Mon
+      if (forecastWeekday === 5) forecastWeekday = 6     // Sat → use Sun forecast
+      const forecastRaw = await window.api.getForecastByWeekday(forecastWeekday)
+      currentForecast = (forecastRaw && forecastRaw.ok) ? forecastRaw.data : {}
 
       // Render in-transit panel
       const pendingMachines = Object.keys(currentPending)
@@ -1267,12 +1324,35 @@
       document.getElementById('pick-count').textContent = ''
     }
   }
+  function filterPickTable(query) {
+    const q = query.trim().toLowerCase()
+    document.querySelectorAll('table.pick-tbl tbody tr').forEach(tr => {
+      const name = tr.cells[1] ? tr.cells[1].textContent.toLowerCase() : ''
+      tr.style.display = (!q || name.includes(q)) ? '' : 'none'
+    })
+  }
+
+  function clearPickSearch() {
+    const inp = document.getElementById('pick-search-input')
+    if (inp) { inp.value = ''; filterPickTable('') }
+  }
+
   function toggleShowAll() {
     showAllMachines = !showAllMachines
     const btn = document.getElementById('btn-show-all')
     btn.classList.toggle('in-queue', showAllMachines)
     btn.title = showAllMachines ? 'Show picking list only' : 'Show all machines'
     renderPicks()
+  }
+
+  function toggleSemBreak() {
+    semBreakMode = !semBreakMode
+    const btn = document.getElementById('btn-sem-break')
+    btn.classList.toggle('in-queue', semBreakMode)
+    btn.title = semBreakMode ? 'Sem Break ON (forecast off) — click to disable' : 'Sem Break mode (forecast off)'
+    window.api.setSetting('semBreakMode', semBreakMode)
+    renderPicks()
+    if (currentDetailMachine) renderPickDetail(currentDetailMachine)
   }
   async function markInTransitDone() {
     const checked = [...document.querySelectorAll('#in-transit-panel input[type=checkbox]:checked')].map(cb => cb.value)
@@ -1284,7 +1364,7 @@
     const detailEl = document.getElementById('pick-detail')
     try {
       const oosByLane = (currentOos[machine]) || {}
-      const pl = window.api.getPickList(lastFilePath, machine, {}, oosByLane)
+      const pl = window.api.getPickList(lastFilePath, machine, {}, oosByLane, currentForecast[machine] || {}, semBreakMode)
       const team = window.api.teamOf(machine) || '—'
       const dateStr = document.getElementById('pick-date').value
       let rows = pl.rows
@@ -1294,12 +1374,15 @@
         if (saved && saved.rows) rows = saved.rows
         let html = `<div class="pick-hd"><div><div class="nm">${machine}</div><div class="sub">Picking date ${dateStr} &nbsp;·&nbsp; Restock team ${team}</div></div><button class="pick-icon-btn" onclick="exitEditMode()" title="Save &amp; Exit Edit"><span class="icon">save</span></button></div>`
         html += `<div class="edit-banner">&#9998;&nbsp; Edit mode &mdash; changes auto-saved</div>`
+        html += `<div class="pick-search-bar"><input type="text" id="pick-search-input" placeholder="Search product…" oninput="filterPickTable(this.value)"><button onclick="clearPickSearch()">Clear</button></div>`
         if (!rows.length) { html += '<div class="pick-empty">All lanes sufficiently stocked.</div>' }
         else {
-          html += '<table class="pick-tbl"><thead><tr><th>No</th><th>Product</th><th>Bal</th><th>Lane</th><th>Restock</th></tr></thead><tbody>'
+          html += `<table class="pick-tbl"><thead><tr><th>No</th><th>Product</th><th>Bal</th><th>Lane</th><th>Forecast</th><th>Forecast Restock</th></tr></thead><tbody>`
           rows.forEach(r => {
             const tag = r.outOfStock ? '<span class="pick-out-tag">OUT</span>' : ''
-            html += `<tr class="${r.outOfStock?'pick-out':''}"><td>${r.no}</td><td contenteditable="true" spellcheck="false">${r.product}${tag}</td><td contenteditable="true" spellcheck="false">${r.bal}</td><td contenteditable="true" spellcheck="false">${r.lane}</td><td contenteditable="true" spellcheck="false">${r.restock}</td></tr>`
+            const ftag = r.fastMover ? '<span class="pick-fast-tag">FAST</span>' : ''
+            const cls = [r.outOfStock?'pick-out':'', r.fastMover?'pick-fast':''].filter(Boolean).join(' ')
+            html += `<tr class="${cls}"><td>${r.no}</td><td contenteditable="true" spellcheck="false">${r.product}${tag}${ftag}</td><td contenteditable="true" spellcheck="false">${r.bal}</td><td contenteditable="true" spellcheck="false">${r.lane}</td><td style="color:#6b7280">${r.forecastQty > 0 ? '+' + r.forecastQty : '—'}</td><td contenteditable="true" spellcheck="false">${r.restock}</td></tr>`
           })
           html += '</tbody></table>'
         }
@@ -1321,12 +1404,15 @@
       } else {
         const inQueue = Object.keys(currentPending[machine] || {}).length > 0
         let html = `<div class="pick-hd"><button class="pick-icon-btn" onclick="clearPickDetail()" title="Back to list"><span class="icon">home</span></button><div style="flex:1"><div class="nm">${machine}</div><div class="sub">Picking date ${dateStr} &nbsp;·&nbsp; Restock team ${team}</div></div><button class="pick-icon-btn${inQueue?' in-queue':''}" onclick="confirmAndQueuePrintCurrent()" title="${inQueue?'Already in queue':'Add to Queue'}"><span class="icon">check_box</span></button></div>`
+        html += `<div class="pick-search-bar"><input type="text" id="pick-search-input" placeholder="Search product…" oninput="filterPickTable(this.value)"><button onclick="clearPickSearch()">Clear</button></div>`
         if (!pl.rows.length) { html += '<div class="pick-empty">All lanes sufficiently stocked.</div>' }
         else {
-          html += '<table class="pick-tbl"><thead><tr><th>No</th><th>Product</th><th>Bal</th><th>Lane</th><th>Restock</th></tr></thead><tbody>'
+          html += `<table class="pick-tbl"><thead><tr><th>No</th><th>Product</th><th>Bal</th><th>Lane</th><th>Forecast</th><th>Forecast Restock</th></tr></thead><tbody>`
           pl.rows.forEach(r => {
             const tag = r.outOfStock ? '<span class="pick-out-tag">OUT</span>' : ''
-            html += `<tr class="${r.outOfStock?'pick-out':''}" data-lane="${r.lane}"><td>${r.no}</td><td>${r.product}${tag}</td><td class="${r.outOfStock?'bal-out':''}">${r.bal}</td><td>${r.lane}</td><td>${r.restock}</td></tr>`
+            const ftag = r.fastMover ? '<span class="pick-fast-tag">FAST</span>' : ''
+            const cls = [r.outOfStock?'pick-out':'', r.fastMover?'pick-fast':''].filter(Boolean).join(' ')
+            html += `<tr class="${cls}" data-lane="${r.lane}"><td>${r.no}</td><td>${r.product}${tag}${ftag}</td><td class="${r.outOfStock?'bal-out':''}">${r.bal}</td><td>${r.lane}</td><td style="color:#6b7280">${r.forecastQty > 0 ? '+' + r.forecastQty : '—'}</td><td>${r.restock}</td></tr>`
           })
           html += '</tbody></table>'
           html += `<div class="pick-hidden-note">${pl.hiddenCount} rows hidden (Restock 0 or Bal &gt; 10)</div>`
@@ -1349,7 +1435,7 @@
   async function confirmAndQueuePrint(machine) {
     const pendingByLane = (currentPending[machine]) || {}
     const oosByLane     = (currentOos[machine])     || {}
-    const pl = window.api.getPickList(lastFilePath, machine, pendingByLane, oosByLane)
+    const pl = window.api.getPickList(lastFilePath, machine, pendingByLane, oosByLane, currentForecast[machine] || {}, semBreakMode)
     const today = document.getElementById('pick-date').value
     const picks = pl.rows.map(r => ({
       machine,
@@ -1556,7 +1642,7 @@
     const data = currentPickList.map(m => {
       const pendingByLane = (currentPending[m.machine]) || {}
       const oosByLane = (currentOos[m.machine]) || {}
-      const pl = window.api.getPickList(lastFilePath, m.machine, pendingByLane, oosByLane)
+      const pl = window.api.getPickList(lastFilePath, m.machine, pendingByLane, oosByLane, currentForecast[m.machine] || {}, semBreakMode)
       return { machine: m.machine, team: m.team, date: dateFormatted, rows: pl.rows }
     }).filter(m => m.rows.length > 0)
     if (!data.length) return
@@ -1565,6 +1651,58 @@
   }
 
 // ── Slow Movers – Generate DB ───────────────────────────────────────────────
+async function browseSalesCsv() {
+  const p = await window.api.openSalesCsvDialog()
+  if (p) {
+    document.getElementById('sd-csv-path').value = p
+    window.api.setSetting('sdCsvPath', p)
+  }
+}
+
+async function convertSalesDetailDb() {
+  const csvPath = document.getElementById('sd-csv-path').value.trim()
+  if (!csvPath) { alert('Please select a CSV file first.'); return }
+  const statusEl = document.getElementById('sd-status')
+  const btn = document.getElementById('btn-sd-convert')
+  btn.disabled = true
+  btn.textContent = 'Converting…'
+  statusEl.style.color = '#6b7280'
+  statusEl.textContent = '(1/2) Building sales_detail.db…'
+
+  const r1 = await window.api.buildSalesDetailDb(csvPath)
+  if (!r1 || !r1.ok) {
+    btn.disabled = false
+    btn.textContent = 'Convert'
+    statusEl.style.color = '#dc2626'
+    statusEl.textContent = 'Error (sales_detail): ' + (r1 && r1.error ? r1.error : 'unknown error')
+    return
+  }
+
+  statusEl.textContent = `(2/2) Building sales_forecast.db…`
+  const r2 = await window.api.buildSalesForecastDb()
+  btn.disabled = false
+  btn.textContent = 'Convert'
+  if (r2 && r2.ok) {
+    statusEl.style.color = '#16a34a'
+    statusEl.textContent = `Done — ${Number(r1.total_rows).toLocaleString()} rows · ${Number(r2.total_forecasts).toLocaleString()} forecast entries · ${r1.min_date} to ${r1.max_date}`
+  } else {
+    statusEl.style.color = '#dc2626'
+    statusEl.textContent = 'Error (sales_forecast): ' + (r2 && r2.error ? r2.error : 'unknown error')
+  }
+}
+
+async function loadSalesDetailMeta() {
+  const meta = await window.api.getSalesDetailMeta()
+  if (!meta || !meta.ok) return
+  const statusEl = document.getElementById('sd-status')
+  if (statusEl) {
+    statusEl.style.color = '#6b7280'
+    statusEl.textContent = `DB ready · ${Number(meta.total_rows).toLocaleString()} rows · ${meta.min_date} to ${meta.max_date} · built ${meta.built_at}`
+  }
+  const pathEl = document.getElementById('sd-csv-path')
+  if (pathEl && meta.source_file) pathEl.placeholder = meta.source_file
+}
+
 async function browseDb() {
   const p = await window.api.openDbDialog()
   if (p) {

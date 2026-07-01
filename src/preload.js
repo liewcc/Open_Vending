@@ -52,9 +52,9 @@ contextBridge.exposeInMainWorld('api', {
     const rows = parseRows(filePath)
     return picking.machinesToPickToday(rows, routePlan, new Date(dateISO), pendingByMachine || {})
   },
-  getPickList(filePath, machine, pendingByLane, oosByLane) {
+  getPickList(filePath, machine, pendingByLane, oosByLane, forecastByPid, semBreak) {
     const rows = parseRows(filePath)
-    return picking.buildPickingList(rows, machine, pendingByLane || {}, oosByLane || {})
+    return picking.buildPickingList(rows, machine, pendingByLane || {}, oosByLane || {}, forecastByPid || {}, semBreak || false)
   },
   teamOf(machine) {
     return (routePlan.machines[machine] && routePlan.machines[machine].team) || null
@@ -106,7 +106,14 @@ contextBridge.exposeInMainWorld('api', {
   openSaveDbDialog:  ()                            => ipcRenderer.invoke('open-save-db-dialog'),
   generateSlowDb:    (productCsv, salesCsv, dbPath) => ipcRenderer.invoke('generate-slow-db', { productCsv, salesCsv, dbPath }),
   analyzeSlowDb:     (dbPath, topN)                => ipcRenderer.invoke('analyze-slow-db', { dbPath, topN }),
-  savePickEdit: (machine, date, rows) => ipcRenderer.invoke('save-pick-edit', { machine, date, rows }),
-  loadPickEdit:  (machine, date)       => ipcRenderer.invoke('load-pick-edit',  { machine, date }),
+  savePickEdit:       (machine, date, rows) => ipcRenderer.invoke('save-pick-edit', { machine, date, rows }),
+  loadPickEdit:       (machine, date)       => ipcRenderer.invoke('load-pick-edit',  { machine, date }),
+  getReportMtime:     ()                    => ipcRenderer.invoke('get-report-mtime'),
+  openSalesCsvDialog:  ()        => ipcRenderer.invoke('open-sales-csv-dialog'),
+  buildSalesDetailDb:  (csvPath) => ipcRenderer.invoke('build-sales-detail-db', { csvPath }),
+  getSalesDetailMeta:  ()        => ipcRenderer.invoke('get-sales-detail-meta'),
+  buildSalesForecastDb:  ()           => ipcRenderer.invoke('build-sales-forecast-db'),
+  getSalesForecastMeta:  ()           => ipcRenderer.invoke('get-sales-forecast-meta'),
+  getForecastByWeekday:  (weekday)    => ipcRenderer.invoke('get-forecast-by-weekday', { weekday }),
 })
 

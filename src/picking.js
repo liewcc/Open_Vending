@@ -146,11 +146,15 @@ function machinesToPickToday(reportRows, routePlan, date, pendingByMachine) {
  * @param {string} machine
  * @param {object} pendingByLane - {laneNo: qty, ...}
  * @param {object} oosByLane - {laneNo: count, ...}
+ * @param {object} forecastByPid - {pid: avg_qty, ...}  (pass {} if unavailable)
+ * @param {boolean} semBreak - if true, forecast is disabled
  * @returns {object}
  */
-function buildPickingList(reportRows, machine, pendingByLane, oosByLane) {
+function buildPickingList(reportRows, machine, pendingByLane, oosByLane, forecastByPid, semBreak) {
   if (!pendingByLane) pendingByLane = {};
   if (!oosByLane) oosByLane = {};
+  if (!forecastByPid) forecastByPid = {};
+  if (semBreak === undefined) semBreak = false;
 
   // Take only data rows whose column 0 === machine
   const machineRows = [];
@@ -186,18 +190,25 @@ function buildPickingList(reportRows, machine, pendingByLane, oosByLane) {
     // Step A: out of stock
     const outOfStock = (bal === 0);
 
-    // Step D: fast-mover +1
+    // Step D: fast-mover highlight (oos7 >= 3 in past 7 days)
     const oos7 = oosByLane[laneNo] || 0;
-    const finalRestock = oos7 >= 2 ? actualRestock + 1 : actualRestock;
+    const fastMover = oos7 >= 3;
+
+    // Step E: forecast qty
+    const pid = String(row[2]);
+    const forecastQty = semBreak ? 0 : Math.round((forecastByPid[pid] || 0));
+    const finalRestock = Math.max(0, actualRestock + forecastQty);
 
     visibleRows.push({
       no: row[1],
-      productId: row[2],
+      productId: pid,
       product: row[3] !== undefined && row[3] !== null ? String(row[3]) : '',
       bal,
       lane: num(row[5]),
       restock: finalRestock,
+      forecastQty,
       outOfStock,
+      fastMover,
       laneNo
     });
   }

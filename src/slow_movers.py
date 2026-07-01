@@ -6,6 +6,17 @@ import sqlite3
 from datetime import datetime, date
 
 
+def _open_csv(path):
+    """Open a CSV file, trying utf-8-sig first then cp1252 as fallback."""
+    try:
+        f = open(path, newline='', encoding='utf-8-sig')
+        f.read(1024)
+        f.seek(0)
+        return f
+    except UnicodeDecodeError:
+        return open(path, newline='', encoding='cp1252')
+
+
 def is_inactive(name):
     """Products prefixed with zzz/ZXXX/xxxx etc. are already discontinued."""
     first = name.strip().split()[0].lower() if name.strip() else ''
@@ -15,17 +26,11 @@ def is_inactive(name):
 def build_db(product_csv, sales_csv, db_path):
     # Load active products (skip discontinued and system/test entries)
     products = {}
-    with open(product_csv, newline='', encoding='utf-8-sig') as f:
+    with _open_csv(product_csv) as f:
         for row in csv.DictReader(f):
             pid  = row['PID'].strip()
-            name = row['name'].strip()
+            name = row['Product Name'].strip()
             if is_inactive(name):
-                continue
-            try:
-                price = float(row['price'])
-            except (ValueError, KeyError):
-                price = 0
-            if price < 0.05:
                 continue
             products[pid] = name
 
@@ -46,7 +51,7 @@ def build_db(product_csv, sales_csv, db_path):
     min_date = None
     max_date = None
     sales_to_insert = []
-    with open(sales_csv, newline='', encoding='utf-8-sig') as f:
+    with _open_csv(sales_csv) as f:
         for row in csv.DictReader(f):
             date_str = row['transdate'].strip()[:10]  # YYYY-MM-DD
             if date_str:
@@ -85,7 +90,10 @@ def analyze_db(db_path, top_n):
     today = date.today()
     rows = []
     for pid, name, total, last in rows_db:
-        days = (today - datetime.strptime(last, '%Y-%m-%d').date()).days if last else None
+        try:
+            days = (today - datetime.strptime(last[:10], '%Y-%m-%d').date()).days if last else None
+        except (ValueError, TypeError):
+            days = None
         rows.append({
             'pid':       pid,
             'name':      name,
@@ -122,17 +130,11 @@ def main():
 
     # Load active products (skip discontinued and system/test entries)
     products = {}
-    with open(product_csv, newline='', encoding='utf-8-sig') as f:
+    with _open_csv(product_csv) as f:
         for row in csv.DictReader(f):
             pid  = row['PID'].strip()
-            name = row['name'].strip()
+            name = row['Product Name'].strip()
             if is_inactive(name):
-                continue
-            try:
-                price = float(row['price'])
-            except (ValueError, KeyError):
-                price = 0
-            if price < 0.05:
                 continue
             products[pid] = name
 
@@ -140,7 +142,7 @@ def main():
     counts    = {pid: 0    for pid in products}
     last_sale = {pid: None for pid in products}
 
-    with open(sales_csv, newline='', encoding='utf-8-sig') as f:
+    with _open_csv(sales_csv) as f:
         for row in csv.DictReader(f):
             date_str = row['transdate'].strip()[:10]  # YYYY-MM-DD
             pids = [p.strip() for p in row['productids'].split(',') if p.strip().isdigit()]
@@ -156,7 +158,10 @@ def main():
     for pid, name in products.items():
         total = counts[pid]
         last  = last_sale[pid]
-        days  = (today - datetime.strptime(last, '%Y-%m-%d').date()).days if last else None
+        try:
+            days = (today - datetime.strptime(last[:10], '%Y-%m-%d').date()).days if last else None
+        except (ValueError, TypeError):
+            days = None
         rows.append({
             'pid':       pid,
             'name':      name,
@@ -170,7 +175,7 @@ def main():
 
     # Derive date range from sales file for display
     min_date = max_date = ''
-    with open(sales_csv, newline='', encoding='utf-8-sig') as f:
+    with _open_csv(sales_csv) as f:
         for row in csv.DictReader(f):
             d = row['transdate'].strip()[:10]
             if not min_date or d < min_date:

@@ -9,7 +9,7 @@ const CRED_FILE     = path.join(app.getPath('userData'), 'credentials.enc')
 const SETTINGS_FILE = path.join(app.getPath('userData'), 'settings.json')
 const LAST_REPORT   = path.join(ROOT, 'db', 'last_report.xlsx')
 const LAST_DIFFS    = path.join(ROOT, 'db', 'last_diffs.json')
-const DEFAULT_SETTINGS = { menuBar: false, showConsole: false, closeTray: false, notifyChanges: false, autoDownload: false, autoDownloadInterval: 30, headedBrowser: false, landingUrl: 'https://vendingportal.azurewebsites.net/SuperAdmin/SPLogin.aspx' }
+const DEFAULT_SETTINGS = { menuBar: false, showConsole: false, closeTray: false, notifyChanges: false, autoDownload: false, autoDownloadInterval: 30, headedBrowser: false, landingUrl: 'https://vendingportal.azurewebsites.net/SuperAdmin/SPLogin.aspx', semBreakMode: false }
 const F9_TRIGGER    = path.join(ROOT, 'db', '.f9_trigger')
 const BROWSER_STOP  = path.join(ROOT, 'db', '.browser_stop')
 const ICON_PNG = path.join(ROOT, 'asset', 'image', 'icon_nobg.png')
@@ -403,9 +403,13 @@ ipcMain.on('set-setting', (_, { key, val }) => {
 ipcMain.on('launch-browser', () => { if (cachedCreds) launchBrowser(cachedCreds) })
 ipcMain.on('close-browser',  () => closeBrowser())
 
-const QUERY_HISTORY   = path.join(__dirname, 'query_history.py')
-const PICKING_HISTORY = path.join(__dirname, 'picking_history.py')
-const SLOW_MOVERS     = path.join(__dirname, 'slow_movers.py')
+const QUERY_HISTORY      = path.join(__dirname, 'query_history.py')
+const PICKING_HISTORY    = path.join(__dirname, 'picking_history.py')
+const SLOW_MOVERS        = path.join(__dirname, 'slow_movers.py')
+const BUILD_SALES_DETAIL   = path.join(__dirname, 'build_sales_detail.py')
+const BUILD_SALES_FORECAST = path.join(__dirname, 'build_sales_forecast.py')
+const SALES_DETAIL_DB      = path.join(ROOT, 'db', 'sales_detail.db')
+const SALES_FORECAST_DB    = path.join(ROOT, 'db', 'sales_forecast.db')
 ipcMain.handle('get-restock-history', (_, { machine, lane }) =>
   new Promise(resolve => {
     const pythonExe = path.join(ROOT, 'python', 'python.exe')
@@ -536,6 +540,38 @@ ipcMain.handle('print-slow-movers', async (_, { rows, dateRange }) => {
   printWin.destroy()
   fs.writeFileSync(filePath, pdfBuffer)
   return { ok: true, filePath }
+})
+
+ipcMain.handle('open-sales-csv-dialog', async () => {
+  const { canceled, filePaths } = await dialog.showOpenDialog({
+    filters: [{ name: 'CSV', extensions: ['csv'] }],
+    properties: ['openFile']
+  })
+  return canceled ? null : filePaths[0]
+})
+
+ipcMain.handle('build-sales-detail-db', (_, { csvPath }) =>
+  spawnPy([BUILD_SALES_DETAIL, csvPath, SALES_DETAIL_DB], null)
+)
+
+ipcMain.handle('get-sales-detail-meta', () =>
+  spawnPy([BUILD_SALES_DETAIL, 'meta', SALES_DETAIL_DB], null)
+)
+
+ipcMain.handle('build-sales-forecast-db', () =>
+  spawnPy([BUILD_SALES_FORECAST, SALES_DETAIL_DB, SALES_FORECAST_DB], null)
+)
+
+ipcMain.handle('get-sales-forecast-meta', () =>
+  spawnPy([BUILD_SALES_FORECAST, 'meta', SALES_FORECAST_DB], null)
+)
+
+ipcMain.handle('get-forecast-by-weekday', (_, { weekday }) =>
+  spawnPy([BUILD_SALES_FORECAST, 'query', SALES_FORECAST_DB, String(weekday)], null)
+)
+
+ipcMain.handle('get-report-mtime', () => {
+  try { return fs.statSync(LAST_REPORT).mtime.toISOString() } catch { return null }
 })
 
 ipcMain.handle('save-pick-edit', (_, { machine, date, rows }) => {
