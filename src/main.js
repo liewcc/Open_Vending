@@ -433,6 +433,8 @@ ipcMain.handle('get-pending-in-transit', ()         => spawnPy([PICKING_HISTORY,
 ipcMain.handle('get-oos-counts',         ()         => spawnPy([PICKING_HISTORY, 'get-oos-counts'], null))
 ipcMain.handle('save-picks',             (_, picks) => spawnPy([PICKING_HISTORY, 'save-picks'],   picks))
 ipcMain.handle('mark-done',              (_, machines) => spawnPy([PICKING_HISTORY, 'mark-done'], machines))
+ipcMain.handle('get-history-dates',      ()         => spawnPy([PICKING_HISTORY, 'get-history-dates'], null))
+ipcMain.handle('get-history-by-date',    (_, date)  => spawnPy([PICKING_HISTORY, 'get-history-by-date', date], null))
 
 ipcMain.handle('print-all-picking-lists', async (_, data) => {
   function esc(s) {

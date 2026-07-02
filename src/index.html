@@ -1390,6 +1390,7 @@
     return result
   }
   let showAllMachines = false
+  let isHistoryMode = false
   let isEditMode = false
   let editMachine = null
   let editScrollTop = 0
@@ -1435,7 +1436,11 @@
       currentDetailMachine = null
       return
     }
-    const dateISO = document.getElementById('pick-date').value + 'T10:00:00'
+    const dateStr = document.getElementById('pick-date').value
+    const todayStr = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` })()
+    if (dateStr < todayStr) { await renderPickHistory(dateStr); return }
+    isHistoryMode = false
+    const dateISO = dateStr + 'T10:00:00'
     try {
       // 36h safety net
       await window.api.autoClearPicks()
@@ -1515,6 +1520,71 @@
       document.getElementById('pick-count').textContent = ''
     }
   }
+
+  async function renderPickHistory(dateStr) {
+    isHistoryMode = true
+    const listEl = document.getElementById('pick-machine-list')
+    document.getElementById('in-transit-panel').style.display = 'none'
+    document.getElementById('pick-print-all').disabled = true
+    currentPickList = []
+    const hist = await window.api.getHistoryByDate(dateStr)
+    const machines = Object.keys(hist)
+    document.getElementById('pick-count').textContent = machines.length ? `${machines.length} machine${machines.length !== 1 ? 's' : ''} picked` : ''
+    if (!machines.length) {
+      listEl.innerHTML = '<div class="pick-empty">No picking history for this date.</div>'
+      pickDetailSet('', '')
+      currentDetailMachine = null
+      return
+    }
+    machines.sort((a, b) => {
+      const ta = window.api.teamOf(a) || 'UNASSIGNED', tb = window.api.teamOf(b) || 'UNASSIGNED'
+      const p = t => t === '5530' ? 1 : t === '1126' ? 2 : t === 'UNASSIGNED' ? 3 : 4
+      const pa = p(ta), pb = p(tb)
+      if (pa !== pb) return pa - pb
+      if (pa === 4 && ta !== tb) return ta.localeCompare(tb)
+      return a.localeCompare(b)
+    })
+    listEl.innerHTML = ''
+    let curTeam = null
+    machines.forEach(mach => {
+      const team = window.api.teamOf(mach) || 'UNASSIGNED'
+      if (team !== curTeam) { curTeam = team; const h = document.createElement('div'); h.className = 'pick-team-hd'; h.textContent = 'Team ' + team; listEl.appendChild(h) }
+      const rows = hist[mach]
+      const doneCount = rows.filter(r => r.status === 'done').length
+      const badgeClass = doneCount === rows.length ? 'daily' : 'amber'
+      const badgeText = `${doneCount}/${rows.length} lanes`
+      const row = document.createElement('div'); row.className = 'pick-mach'
+      row.dataset.machine = mach
+      row.innerHTML = `<span>${mach}</span><span class="pick-badge ${badgeClass}">${badgeText}</span>`
+      row.onclick = () => { document.querySelectorAll('.pick-mach.active').forEach(e => e.classList.remove('active')); row.classList.add('active'); renderHistoryDetail(mach, dateStr, hist[mach]) }
+      listEl.appendChild(row)
+    })
+    if (currentDetailMachine && hist[currentDetailMachine]) {
+      const activeRow = listEl.querySelector(`[data-machine="${currentDetailMachine}"]`)
+      if (activeRow) activeRow.classList.add('active')
+      renderHistoryDetail(currentDetailMachine, dateStr, hist[currentDetailMachine])
+    } else {
+      currentDetailMachine = null
+      pickDetailSet('', '<div class="pick-empty">Select a machine to view its picking history.</div>')
+    }
+  }
+
+  function renderHistoryDetail(machine, dateStr, rows) {
+    currentDetailMachine = machine
+    const team = window.api.teamOf(machine) || '—'
+    let hdHtml = `<div class="pick-hd"><button class="pick-icon-btn" onclick="clearPickDetail()" title="Back to list"><span class="icon">home</span></button><div style="flex:1"><div class="nm">${machine}</div><div class="sub">Picking history ${dateStr} &nbsp;·&nbsp; Restock team ${team}</div></div></div>`
+    hdHtml += `<div class="edit-banner">🕘&nbsp; Historical view &mdash; read-only</div>`
+    let bodyHtml = `<table class="lv-tbl pick-tbl"><thead><tr><th data-col="lane">Lane</th><th data-col="product">Product</th><th data-col="qty">Picked Qty</th><th data-col="status">Status</th></tr></thead><tbody>`
+    rows.forEach(r => {
+      const tag = r.out_of_stock ? '<span class="pick-out-tag">OUT</span>' : ''
+      const cls = r.out_of_stock ? 'pick-out' : ''
+      bodyHtml += `<tr class="${cls}"><td>${r.lane_no}</td><td>${r.product_name || r.product_id}${tag}${laneTypeBadge(r.product_id)}</td><td>${r.picked_qty}</td><td>${r.status}</td></tr>`
+    })
+    bodyHtml += '</tbody></table>'
+    pickDetailSet(hdHtml, bodyHtml)
+    makeSortable(document.getElementById('pick-detail').querySelector('table.pick-tbl'))
+  }
+
   function filterPickTable(query) {
     filterTable(document.querySelector('table.pick-tbl'), query, { cols: ['product'] })
   }

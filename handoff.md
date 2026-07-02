@@ -111,6 +111,14 @@
 - Print out：显示原产品 + replacement，员工清楚知道哪个 lane 换什么
 - **关联 Q3**：Q3 自动建议替代品 → Q7 Edit Mode 确认/修改
 
+### ✅ Q1：Picking List Sidebar — 历史查询（2026-07-02 本 session 完成）
+- 问题：Sidebar 之前无论选哪个日期都用当前报告重新计算"资格"，选历史日期看不到当天实际拣了什么
+- `src/picking_history.py` 新增 `get-history-by-date <date>`（按 pick_date 分组返回每台机器的 lane/product/qty/OOS/status）、`get-history-dates`（列出有记录的日期）
+- IPC：`get-history-by-date` / `get-history-dates`（main.js + preload.js）
+- `renderPicks()` 判断所选日期早于今天 → 改走 `renderPickHistory()`，从 `picking_history` 表读取当天实际拣货记录，不再用当前报告重算资格；今天/未来日期仍走原实时逻辑
+- `renderHistoryDetail()`：只读表格（Lane / Product / Picked Qty / Status），带"Historical view — read-only"标识，不显示 Edit/Queue 按钮
+- 已用真实历史数据（2026-06-27、2026-07-01）验证 Python 层输出正确；用户已在实机测试确认正常
+
 ### Q3：Slow Movers → Picking List 替代品建议（新功能）
 - 目标：picking list 补货时，若该产品属于 slow mover，自动建议同 tray 内销量更好的替代品
 - 机器结构：每部机器 = Cold machine + Warm machine，各 6 层合并成 3 个 tray 组合（COLD 1/2/3、WARM 1/2/3）
@@ -137,11 +145,6 @@
 - 目前栏位：No / Product / Replacement / Bal / Lane / Restock / Buffer Qty
 - 新增 Replacement 和 Buffer Qty 后，A4 纸可能太挤
 - 待 Q7 完成后打印样本，再决定是否调整栏位宽度或字体大小
-
-### Q1：Picking List Sidebar — 历史查询
-- 现状：Sidebar 只根据当前报告数据计算资格，无法还原历史
-- 实现思路：picking_history 有 `pick_date` 字段，可查出历史上某天做过哪些机器
-- 工作量：中等
 
 ### Q10：OOS 历史报告
 - 数据来源：`picking_history` 数据库（已记录每次 picking 的 `out_of_stock` 状态）

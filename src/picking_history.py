@@ -90,6 +90,39 @@ elif cmd == 'save-picks':
     conn.commit(); conn.close()
     print(json.dumps({"saved": saved}))
 
+elif cmd == 'get-history-dates':
+    if not DB.exists():
+        print(json.dumps([])); sys.exit(0)
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT DISTINCT pick_date FROM picking_history ORDER BY pick_date DESC"
+    ).fetchall()
+    conn.close()
+    print(json.dumps([r['pick_date'] for r in rows]))
+
+elif cmd == 'get-history-by-date':
+    date = sys.argv[2] if len(sys.argv) > 2 else ''
+    if not DB.exists() or not date:
+        print(json.dumps({})); sys.exit(0)
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT machine, lane_no, product_id, product_name, picked_qty, out_of_stock, status "
+        "FROM picking_history WHERE pick_date=? ORDER BY machine, CAST(lane_no AS INTEGER)",
+        (date,)
+    ).fetchall()
+    conn.close()
+    result = {}
+    for r in rows:
+        result.setdefault(r['machine'], []).append({
+            'lane_no': r['lane_no'],
+            'product_id': r['product_id'],
+            'product_name': r['product_name'],
+            'picked_qty': r['picked_qty'],
+            'out_of_stock': r['out_of_stock'],
+            'status': r['status'],
+        })
+    print(json.dumps(result))
+
 elif cmd == 'mark-done':
     machines = json.loads(sys.stdin.read())
     if not machines:

@@ -44,6 +44,8 @@ contextBridge.exposeInMainWorld('api', {
   getOosCounts:         ()               => ipcRenderer.invoke('get-oos-counts'),
   savePicks:            (picks)          => ipcRenderer.invoke('save-picks', picks),
   markDone:             (machines)       => ipcRenderer.invoke('mark-done', machines),
+  getHistoryDates:      ()               => ipcRenderer.invoke('get-history-dates'),
+  getHistoryByDate:     (date)           => ipcRenderer.invoke('get-history-by-date', date),
 
   parseExcel(filePath) {
     return parseRows(filePath)
