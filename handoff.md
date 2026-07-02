@@ -37,6 +37,57 @@
 - 搜索栏统一用 `.pick-search-bar` 样式
 - 覆盖范围：Main list ✅ Picking list ✅ Slow mover ✅ Buffer stock ✅
 
+### ✅ 列表布局统一化 — 第一阶段（2026-07-02 本 session 完成）
+起因：所有列表各自实现布局，冻结表头时卡片头和表头之间出现缝隙，滚动数据从缝隙中穿透显示。
+
+**Bug 修复**（Picking List 详情表 + Buffer Stock lane 表）：
+- 根因：卡片头 `.pick-hd` 和表头 `th` 是两个独立 `position:sticky` 的兄弟元素，靠 JS 一次性测量高度（`--pick-hd-h`）对齐偏移，测量值有误差就露缝
+- 修复：卡片头+搜索栏移出滚动容器（静态区），只有 `<table>` 放进独立滚动子容器，`th` 用单层 `top:0` sticky —— 不再需要 JS 测量，架构上不可能露缝
+- Buffer Stock 表头之前完全没冻结，现已一并修复
+
+**共享基础设施**（`src/index.html`）：
+- `.lv-shell` / `.lv-shell-hd` / `.lv-shell-scroll` — 通用 CSS class，静态卡片头+搜索栏 / 独立滚动表格体的标准结构。`#pick-detail`、`#buf-detail` 已采用
+- `table.lv-tbl` — 通用表格基础样式，页面专属皮肤（`.pick-tbl` / `.buf-tbl`）在其后声明可覆盖
+- `buildListTable(scrollEl, {columns, rows, rowClass, rowAttrs, emptyMessage, tableClass})` — 列定义驱动的表格渲染器，取代手写模板字符串。每列 `{key, label, render(row,i), sortable, headerStyle, cellStyle}`，自动生成 `data-col` 属性、接线 `makeSortable`
+- `filterTable(table, query, {cols:[...]})` — 扩展为支持按 `data-col` 限定列的过滤（为未来分列进阶搜索打基础），不传 `cols` 时行为不变
+- `renderSearchBar(inputId, placeholder, onInput, onClear)` — 统一搜索栏 markup 生成
+
+**已迁移到新架构**：
+- Buffer Stock lane 表 — 完整迁移到 `buildListTable`（含 checkbox、number input、suggestion 高亮列），过滤策略从"整表重建"改为共享的 DOM-hide `filterTable`
+- Picking List 详情表 — 表头加 `data-col`，`filterPickTable` 改为调用共享 `filterTable`（未迁移到 `buildListTable`，因 contenteditable + swap 按钮的行内逻辑较复杂）
+- Main table / Slow Mover — 表头加 `data-col`（为未来分列搜索铺路），未改动渲染逻辑
+
+### ✅ Main table + Slow Mover 冻结表头 — 追加修复（2026-07-02 同 session，用户回报后发现）
+第一阶段完成后误判 Main table / Slow Mover 没有冻结表头问题（只读代码没有实机验证），用户回报后在真实 app 中复现，发现两个跟 Picking List/Buffer Stock 完全不同根因的独立 bug：
+
+- **Main table**：`thead tr { background:#c0392b }` 把背景色设在 `<tr>` 上，但 sticky 的是 `<th>`。sticky 元素被"钉住"后渲染在新位置，`tr` 的背景不会跟过去——`th` 自己是透明的，导致表头完全隐形（白字配透明底，滚动时整条红色表头直接消失，不是缝隙是完全看不见）。**修复**：背景色改设在 `thead th` 本身（[index.html:422-431](src/index.html:422)）
+- **Slow Mover**：`#slow-body`（滚动容器）本身带 `padding:12px 16px`。CSS 规范里，滚动容器的 padding 区域属于可视 scrollport 的一部分——滚动内容会正常经过那 12px，但 sticky `th{top:0}` 只贴合 content 边缘，不会往上覆盖 padding 那 12px，留出一条没被表头盖住、但内容仍然可见的窄缝，滚动数据从里面露出来。**修复**：把 padding 从 `#slow-body` 移除，改成 `#slow-table-wrap` 的 `margin`（[index.html:231-232](src/index.html:231)）——滚动容器本身不再有 padding，sticky 不会有夹缝
+- **额外发现**：点击排序（`makeSortable` 触发 `tbody.appendChild` 重排序）后，Chromium 有时不会重绘 sticky `<th>`（`getBoundingClientRect()` 位置正确、背景不透明，但画面上表头视觉消失，直到下次强制 repaint）。已在 `makeSortable` 排序完成后加一个 `display:none` → `offsetHeight` → `display:''` 的强制重绘（[index.html:1288-1292](src/index.html:1288)）
+- 顺便把 Slow Mover 表头对比度调高（原本 `#f9fafb` 底 + `#6b7280` 字，太浅在压缩截图里几乎看不出来），改成 `#eef1f5` 底 + `#4b5563` 字 + 底部实线
+- 三个表（Main / Picking List / Buffer Stock / Slow Mover）都已在真实 app 里用 DevTools 逐一验证：滚动+排序组合下表头零缝隙、不透明、不消失
+
+### ✅ 四个列表表头风格统一 + 固定高度（2026-07-02 同 session，用户再次回报后修复）
+用户回报：Main panel 表头颜色跟其他列表不一致；Slow Mover 表头在向下滚动时会稍微变短；四个列表（Main / Slow Mover / Buffer Stock / Picking List）风格必须统一。
+
+- 之前每个列表的表头样式（背景色、字色、字号、padding）各自独立声明在 `thead th` / `table.pick-tbl th` / `.buf-tbl th` / `#slow-table-wrap th` 四处，互相不同步，改一处不会影响其他三处
+- **统一方案**：只保留一份表头样式 `table.lv-tbl th`（[index.html:502-518](src/index.html:502)），删除其余三处的重复/冲突声明；四个 `<table>` 现在都带 `class="lv-tbl"`（`#data-table`、`.pick-tbl`×2、Slow Mover 表、`.buf-tbl` 经 `buildListTable` 自动带）。以后要改表头外观（颜色/字体/高度），只改这一处
+- 统一后的样式：白底 `#fff` + 灰字 `#6b7280`，11px / 600 字重，不用大写变形
+- **固定高度修复"滚动变短"**：改用 `height:34px; line-height:34px`（而非靠 padding 撑高度），行高不再依赖字体渲染细节，sticky 前后完全一致，不会出现肉眼可见的"变矮"
+- Buffer Stock 的 "Sug Normal"/"Sug Sem Break" 两栏保留各自的绿/橙 `headerStyle` 颜色（表达"建议增/减"的语义），这是有意保留的例外，不算风格不统一
+
+### ✅ Slow Mover 整体布局改用 Main table 样式（2026-07-02 同 session，用户要求"重做"）
+之前表头颜色/高度统一了，但 Slow Mover 的**整体列表外观**仍跟 Main table 不同：`#slow-table-wrap` 带 `margin:12px 16px` + `border-radius:8px` + `box-shadow`，做成一张浮在灰色背景上的白色圆角卡片；搜索栏也是手写 inline style，不是共用的 `.pick-search-bar`。Main table（以及 Picking List、Buffer Stock）的列表都是"贴边、无卡片"的扁平风格。
+
+- 移除 `#slow-table-wrap` 的 `margin` / `border-radius` / `box-shadow`，表格现在贴着搜索栏下方铺满，跟 `#table-wrap` 一样没有卡片感（[index.html:230-235](src/index.html:230)）
+- 搜索栏改用 `class="pick-search-bar"`（跟 Main / Picking List / Buffer Stock 完全一样的 markup + 样式），删除原本手写的 inline style 版本
+- 原本 `#slow-sub-toolbar` 把状态文字（"Showing all N products…"）和搜索框挤在同一行 flex 布局里，现在拆成两个独立的 flush 区块：`#slow-status`（状态行）+ `#slow-search-bar`（跟其他三个列表一模一样的搜索栏），JS 里两处 `#slow-sub-toolbar` 的 display 切换也改成分别控制这两个元素
+- 已验证：滚动冻结、排序、搜索过滤在新布局下都正常
+
+**未完成（下一步可继续）**：
+- Picking List 详情表、Slow Mover 表尚未迁移到 `buildListTable`（列渲染逻辑复杂/成本较高，风险高于收益，暂缓）
+- 机器侧栏（`#pick-machine-list` / `#buf-machine-list`）、Queue 弹窗列表仍是 div-based，未纳入统一
+- 分列进阶搜索 UI（用户在特定列输入关键字）尚未实现，仅打好了 `data-col` + `filterTable({cols})` 的底层支持
+
 ---
 
 ## Known Issues
@@ -106,3 +157,17 @@
 - 问题：lane 资料来自每天的报告；没有下载报告时，设定页面能否显示？
 - 现状：页面要求先 load 报告文件（`lastFilePath`），无报告时显示 "Load a report first."
 - 待 cc 确认是否可接受此行为，或需要独立存储 lane 清单
+
+---
+
+## Future Extensions
+
+### FE-1：云端数据库（Google Drive 同步）
+- **场景**：单写多读——写入机运行完整 app，多台读取机只查看数据
+- **方案**：app 内部通过 `googleapis` npm 包直接与 Google Drive API 交互，不依赖任何外部客户端
+- **写入机流程**：写入本地 SQLite → 后台静默上传 `.db` 文件到 Drive（用户无感知）
+- **读取机流程**：App 启动 / 用户刷新 → 从 Drive 下载最新 `.db` → 本地正常读取
+- **认证**：Service Account（JSON 密钥文件随 app 分发，无需用户登录）
+- **费用**：Google Cloud Console + Drive API 对此规模完全免费，无需绑定信用卡
+- **依赖**：`npm install googleapis`（仅一个包）
+- **待决定**：读取机同步频率（启动时一次 vs 定时轮询）

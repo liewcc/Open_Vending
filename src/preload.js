@@ -120,5 +120,6 @@ contextBridge.exposeInMainWorld('api', {
   setBufferQty:           (rows) => ipcRenderer.invoke('set-buffer-qty', rows),
   calcBufferSuggestions:  ()     => ipcRenderer.invoke('calc-buffer-suggestions'),
   loadBufferSuggestions:  ()     => ipcRenderer.invoke('load-buffer-suggestions'),
+  getLaneTypes:           ()     => ipcRenderer.invoke('get-lane-types'),
 })
 

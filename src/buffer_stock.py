@@ -6,6 +6,7 @@ Commands:
   set         <data_db>                   stdin: [{machine, lane_no, pid, normal_qty, sembreak_qty}, ...]
   suggest     <data_db> <sales_detail_db> Calculate suggestions, save to DB, return data
   get_suggest <data_db>                   Return saved suggestions from DB
+  get_lane_types <data_db>               Return {pid: lane_type} dict from product_lane_type table
 """
 import sys, json, sqlite3
 from pathlib import Path
@@ -48,10 +49,37 @@ def cmd_init(db_path):
             PRIMARY KEY (machine, lane_no)
         )
     """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS product_lane_type (
+            pid          TEXT PRIMARY KEY,
+            lane_type    TEXT CHECK(lane_type IN ('cold', 'ambient', 'unknown')),
+            product_name TEXT,
+            source       TEXT
+        )
+    """)
     _migrate_suggestions_table(conn)
     conn.commit()
     conn.close()
     print(json.dumps({'ok': True}))
+
+
+def cmd_get_lane_types(db_path):
+    """Return {pid: lane_type} for all classified products."""
+    if not Path(db_path).exists():
+        print(json.dumps({'ok': True, 'data': {}}))
+        return
+    conn = get_conn(db_path)
+    try:
+        rows = conn.execute(
+            "SELECT pid, lane_type, product_name FROM product_lane_type"
+        ).fetchall()
+    except Exception:
+        print(json.dumps({'ok': True, 'data': {}}))
+        conn.close()
+        return
+    conn.close()
+    data = {r['pid']: {'type': r['lane_type'], 'name': r['product_name'] or ''} for r in rows}
+    print(json.dumps({'ok': True, 'data': data}))
 
 
 def cmd_get(db_path):
@@ -196,6 +224,8 @@ if __name__ == '__main__':
             cmd_suggest(sys.argv[2], sys.argv[3])
         elif cmd == 'get_suggest':
             cmd_get_suggest(sys.argv[2])
+        elif cmd == 'get_lane_types':
+            cmd_get_lane_types(sys.argv[2])
         else:
             print(json.dumps({'ok': False, 'error': f'unknown command: {cmd}'}))
     except Exception as e:

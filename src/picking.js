@@ -201,8 +201,10 @@ function buildPickingList(reportRows, machine, pendingByLane, oosByLane, forecas
     const forecastQty = semBreak ? 0 : Math.round((forecastByPid[pid] || 0));
 
     // Step F: buffer qty
+    const laneSize = num(row[5]);
     const bufferQty = bufferByLane[laneNo] || 0;
-    const finalRestock = Math.max(0, actualRestock + forecastQty + bufferQty);
+    const cappedRestock = laneSize > 0 ? Math.min(actualRestock + forecastQty, laneSize) : actualRestock + forecastQty;
+    const finalRestock = Math.max(0, cappedRestock + bufferQty);
 
     visibleRows.push({
       no: row[1],

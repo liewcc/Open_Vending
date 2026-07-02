@@ -226,13 +226,13 @@
     border-radius: 6px; font-size: 12px; cursor: pointer; display: none;
   }
   #btn-sm-print:hover { background: #f3f4f6; }
-  #slow-sub-toolbar { flex-shrink: 0; padding: 6px 16px; background: #fff; border-bottom: 0.5px solid #e5e7eb; display: flex; align-items: center; gap: 10px; min-height: 36px; }
-  #slow-status { font-size: 11px; color: #6b7280; flex: 1; }
-  #slow-body { flex: 1; overflow-y: auto; padding: 12px 16px; min-height: 0; }
-  #slow-table-wrap { border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,.07); }
+  /* Same flush, card-free layout as Main table's #table-wrap: no margin,
+     no border-radius, no box-shadow — the table sits directly under the
+     search bar like every other list. */
+  #slow-status { flex-shrink: 0; padding: 6px 16px; background: #fff; font-size: 11px; color: #6b7280; display: none; }
+  #slow-body { flex: 1; overflow-y: auto; min-height: 0; }
   #slow-table-wrap table { width: 100%; border-collapse: collapse; background: #fff; }
-  #slow-table-wrap th, #slow-table-wrap td { padding: 7px 10px; font-size: 12px; border-bottom: 1px solid #f3f4f6; text-align: left; }
-  #slow-table-wrap th { font-size: 11px; font-weight: 600; color: #6b7280; text-transform: uppercase; background: #f9fafb; position: sticky; top: 0; z-index: 1; }
+  #slow-table-wrap td { padding: 7px 10px; font-size: 12px; border-bottom: 1px solid #f3f4f6; text-align: left; }
   #slow-table-wrap td:nth-child(1), #slow-table-wrap th:nth-child(1) { width: 5%; text-align: center; color: #9ca3af; }
   #slow-table-wrap td:nth-child(3), #slow-table-wrap th:nth-child(3),
   #slow-table-wrap td:nth-child(4), #slow-table-wrap th:nth-child(4),
@@ -419,17 +419,6 @@
     font-size: 12px;
   }
 
-  thead tr { background: #c0392b; color: #fff; }
-  thead th {
-    padding: 9px 12px;
-    text-align: left;
-    font-weight: 600;
-    white-space: nowrap;
-    position: sticky;
-    top: 0;
-    z-index: 1;
-  }
-
   tbody tr:nth-child(even) { background: #f9fafb; }
   tbody tr:hover           { background: #fef2f2; }
 
@@ -493,6 +482,42 @@
     padding: 40px 0;
   }
 
+  /* ── Shared list-table shell ──
+     Structural pattern used by every scrollable list: a static header slot
+     (card header + search bar, position:sticky-free, never moves) sitting
+     directly above a scrolling body that owns its own single-tier sticky
+     <thead>. This is what keeps the frozen row flush with no seam — see
+     #pick-detail / #buf-detail for the two containers using it.
+     .lv-tbl is the ONE canonical header/table skin shared by every list
+     (Main table, Picking List, Buffer Stock, Slow Mover — all four carry
+     class="lv-tbl" on their <table>). Do not add page-specific th overrides
+     for color/background/font/height here — that's exactly the duplication
+     that caused the four lists to drift out of sync before. Change the
+     header look in exactly one place: this rule.
+     Height is fixed (height + line-height, not padding-driven) so the row
+     can never visually shrink/reflow between static and stuck sticky states. */
+  .lv-shell { display:flex; flex-direction:column; overflow:hidden; }
+  .lv-shell-hd { flex-shrink:0; }
+  .lv-shell-scroll { flex:1; overflow-y:auto; min-height:0; }
+  table.lv-tbl { width:100%; border-collapse:collapse; font-size:12px; }
+  table.lv-tbl th {
+    box-sizing: border-box;
+    height: 34px;
+    line-height: 34px;
+    padding: 0 12px;
+    text-align: left;
+    font-size: 11px;
+    font-weight: 600;
+    color: #6b7280;
+    background: #fff;
+    border-bottom: 1px solid #e5e7eb;
+    white-space: nowrap;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+  }
+  table.lv-tbl td { padding:6px 12px; border-bottom:0.5px solid #f3f4f6; }
+
   /* ── Pick Panel Styles ── */
   #pick-toolbar { display:flex; align-items:center; gap:12px; padding:9px 14px; background:#fff; border-bottom:0.5px solid #e2e4e9; font-size:12px; }
   #pick-count { color:#6b7280; }
@@ -505,7 +530,7 @@
   .pick-icon-btn .icon { font-size:32px; font-variation-settings:'FILL' 0,'wght' 300,'GRAD' 0,'opsz' 24; }
   #pick-body { display:flex; flex:1; min-height:0; }
   #pick-machine-list { width:210px; border-right:0.5px solid #e2e4e9; overflow-y:auto; background:#fafbfc; padding:8px; font-size:12px; }
-  #pick-detail { flex:1; overflow-y:auto; background:#fff; padding:0; min-width:0; }
+  #pick-detail { flex:1; background:#fff; padding:0; min-width:0; }
   .pick-team-hd { color:#9ca3af; font-size:10px; letter-spacing:.04em; margin:8px 4px 5px; text-transform:uppercase; }
   .pick-mach { display:flex; align-items:center; gap:6px; padding:6px 8px; border-radius:6px; cursor:pointer; margin-bottom:2px; color:#1f2937; }
   .pick-mach:hover { background:#eef1f5; }
@@ -513,24 +538,24 @@
   .pick-badge { margin-left:auto; border-radius:8px; padding:1px 7px; font-size:9.5px; white-space:nowrap; }
   .pick-badge.daily { background:#e1f0e1; color:#3b6d11; }
   .pick-badge.amber { background:#fae8d4; color:#854f0b; }
-  .pick-hd { padding:10px 14px; border-bottom:0.5px solid #eee; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:2; background:#fff; }
+  .pick-hd { padding:10px 14px; border-bottom:0.5px solid #eee; display:flex; align-items:center; justify-content:space-between; background:#fff; }
   .pick-hd .nm { font-size:13px; font-weight:500; color:#1f2937; }
   .pick-hd .sub { font-size:10.5px; color:#6b7280; margin-top:2px; }
   table.pick-tbl { width:100%; border-collapse:collapse; font-size:11.5px; }
-  table.pick-tbl th { text-align:left; color:#9ca3af; font-size:10px; font-weight:500; padding:5px 14px; border-bottom:0.5px solid #eee; position:sticky; top:var(--pick-hd-h, 52px); z-index:1; background:#fff; }
   table.pick-tbl td { padding:5px 14px; border-bottom:0.5px solid #f3f3f3; }
   tr.pick-out td { background:#fcebeb; }
   tr.pick-fast td { background:#fff7e6; }
   tr.pick-fast.pick-out td { background:#fce0d8; }
   .pick-fast-tag { background:#fde68a; color:#92400e; border-radius:7px; padding:0 6px; font-size:9px; margin-left:6px; }
+  .lt-badge { border-radius:5px; padding:0 5px; font-size:9px; font-weight:600; vertical-align:middle; margin-left:5px; }
+  .lt-cold    { background:#dbeafe; color:#1d4ed8; }
+  .lt-ambient { background:#fef3c7; color:#92400e; }
   td.bal-out { color:#a32d2d; }
   .pick-out-tag { background:#f7c1c1; color:#791f1f; border-radius:7px; padding:0 6px; font-size:9px; margin-left:6px; }
 .buf-machine-item { padding:7px 14px; font-size:12.5px; cursor:pointer; border-radius:4px; margin:1px 4px; }
   .buf-machine-item:hover { background:#f3f4f6; }
   .buf-machine-item.active { background:#e0e7ff; color:#3730a3; font-weight:500; }
   .buf-tbl { width:100%; border-collapse:collapse; font-size:12.5px; }
-  .buf-tbl thead tr { background:transparent; color:inherit; }
-  .buf-tbl th { text-align:left; padding:6px 10px; border-bottom:1px solid #e5e7eb; font-weight:500; color:#6b7280; font-size:11px; background:#fff; }
   .buf-tbl td { padding:5px 10px; border-bottom:0.5px solid #f3f4f6; }
   .buf-tbl input[type=number] { width:60px; padding:3px 6px; border:1px solid #d1d5db; border-radius:4px; font-size:12px; text-align:center; }
   .buf-tbl input[type=number]:focus { outline:none; border-color:#6366f1; }
@@ -767,7 +792,10 @@
   </div>
     <div id="pick-body">
       <div id="pick-machine-list"></div>
-      <div id="pick-detail"></div>
+      <div id="pick-detail" class="lv-shell">
+        <div id="pick-detail-hd" class="lv-shell-hd"></div>
+        <div id="pick-detail-body" class="lv-shell-scroll"></div>
+      </div>
     </div>
   </div>
 
@@ -784,12 +812,10 @@
       <button id="btn-sm-generate" onclick="openGenerateModal()">Generate List</button>
       <button id="btn-sm-print" onclick="printSlowMovers()">Export PDF</button>
     </div>
-    <div id="slow-sub-toolbar" style="display:none;">
-      <div id="slow-status"></div>
-      <div id="slow-search-bar" style="display:none;align-items:center;gap:6px;">
-        <input type="text" id="slow-search-input" placeholder="Search product…" oninput="filterTable(document.querySelector('#slow-table-wrap table'),this.value)" style="padding:4px 8px;border:1px solid #d1d5db;border-radius:6px;font-size:11.5px;color:#374151;background:#fff;width:200px;">
-        <button onclick="document.getElementById('slow-search-input').value='';filterTable(document.querySelector('#slow-table-wrap table'),'')" style="padding:4px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:11.5px;background:#fff;color:#6b7280;cursor:pointer;">Clear</button>
-      </div>
+    <div id="slow-status"></div>
+    <div id="slow-search-bar" class="pick-search-bar" style="display:none;">
+      <input type="text" id="slow-search-input" placeholder="Search product…" oninput="filterTable(document.querySelector('#slow-table-wrap table'),this.value)">
+      <button onclick="document.getElementById('slow-search-input').value='';filterTable(document.querySelector('#slow-table-wrap table'),'')">Clear</button>
     </div>
     <div id="slow-body">
       <div id="slow-table-wrap"></div>
@@ -810,12 +836,13 @@
     </div>
     <div style="display:flex;flex:1;min-height:0;">
       <div id="buf-machine-list" style="width:210px;border-right:0.5px solid #e2e4e9;overflow-y:auto;background:#fafbfc;padding:8px;font-size:12px;flex-shrink:0;"></div>
-      <div id="buf-detail" style="flex:1;overflow-y:auto;background:#fff;min-width:0;">
-        <div class="pick-search-bar">
+      <div id="buf-detail" class="lv-shell" style="flex:1;background:#fff;min-width:0;">
+        <div id="buf-hd-slot" class="lv-shell-hd"></div>
+        <div class="pick-search-bar lv-shell-hd">
           <input type="text" id="buf-search" placeholder="Search lane / product…" oninput="bufFilterLanes(this.value)">
           <button onclick="document.getElementById('buf-search').value='';bufFilterLanes('')">Clear</button>
         </div>
-        <div id="buf-lane-wrap" style="padding:0;">
+        <div id="buf-lane-wrap" class="lv-shell-scroll" style="padding:0;">
           <div style="color:#9ca3af;font-size:13px;padding:40px 0;text-align:center;">Select a machine from the list.</div>
         </div>
       </div>
@@ -845,7 +872,7 @@
     </div>
 
     <div id="table-wrap">
-      <table id="data-table">
+      <table id="data-table" class="lv-tbl">
         <thead id="thead"></thead>
         <tbody id="tbody"></tbody>
       </table>
@@ -946,6 +973,7 @@
     rows[0].forEach(h => {
       const th = document.createElement('th')
       th.textContent = h
+      th.dataset.col = String(h).toLowerCase().replace(/[^a-z0-9]+/g, '-')
       hRow.appendChild(th)
     })
     thead.appendChild(hRow)
@@ -1048,6 +1076,17 @@
   window.api.getBufferSettings().then(r => {
     if (r && r.ok) currentBuffer = r.data || {}
   })
+
+  window.api.getLaneTypes().then(r => {
+    if (r && r.ok) laneTypes = r.data || {}
+  })
+
+  function laneTypeBadge(pid) {
+    const t = (laneTypes[String(pid)] || {}).type
+    if (t === 'cold')    return '<span class="lt-badge lt-cold">Cold</span>'
+    if (t === 'ambient') return '<span class="lt-badge lt-ambient">Ambient</span>'
+    return ''
+  }
 
   function onHeadedChange(checked) {
     applySetting('headedBrowser', checked)
@@ -1246,17 +1285,78 @@
           const cmp = !isNaN(an) && !isNaN(bn) ? an - bn : av.localeCompare(bv, undefined, { numeric: true })
           return th._sortDir * cmp
         }).forEach(r => tbody.appendChild(r))
+        // Chromium sometimes fails to repaint position:sticky <th> cells after this
+        // synchronous tbody reorder (geometry stays correct, but the header goes
+        // visually blank until something else forces a repaint). Force one here.
+        table.style.display = 'none'
+        void table.offsetHeight
+        table.style.display = ''
       })
     })
   }
 
-  function filterTable(table, query) {
+  // opts.cols: optional array of column keys (matching th[data-col]) to restrict the match to.
+  // Omitted/empty = match against every cell, same as before. This is the hook future
+  // per-column advanced search will call into — it just needs to pass {cols:[...]}.
+  function filterTable(table, query, opts) {
     if (!table) return
     const q = (query || '').trim().toLowerCase()
+    const cols = opts && opts.cols
+    let cellIdxs = null
+    if (cols && cols.length) {
+      const ths = Array.from(table.querySelectorAll('thead th'))
+      cellIdxs = ths.reduce((acc, th, i) => { if (cols.includes(th.dataset.col)) acc.push(i); return acc }, [])
+    }
     table.querySelectorAll('tbody tr').forEach(tr => {
-      const text = Array.from(tr.cells).map(td => td.textContent).join(' ').toLowerCase()
+      const cells = cellIdxs ? cellIdxs.map(i => tr.cells[i]).filter(Boolean) : Array.from(tr.cells)
+      const text = cells.map(td => td.textContent).join(' ').toLowerCase()
       tr.style.display = (!q || text.includes(q)) ? '' : 'none'
     })
+  }
+
+  // Shared list-table renderer, driven by a column schema instead of hand-written
+  // template strings. One place to change table markup/behavior across every list.
+  //
+  // opts = {
+  //   columns: [{ key, label, render(row,i)=>html, className?, headerStyle?, sortable?=true }],
+  //   rows: [...],                      // arbitrary row objects, passed to each column's render()
+  //   rowClass(row,i)=>string,          // optional <tr> class
+  //   rowAttrs(row,i)=>{attr:val},      // optional extra <tr> data-* attributes
+  //   emptyMessage: string,             // shown instead of the table when rows is empty
+  //   tableClass: string                // extra class(es) on <table>, e.g. 'pick-tbl'
+  // }
+  // Renders into scrollEl.innerHTML, wires makeSortable, and returns the <table> (or null if empty).
+  function buildListTable(scrollEl, opts) {
+    const { columns, rows, rowClass, rowAttrs, emptyMessage, tableClass } = opts
+    if (!rows || !rows.length) {
+      scrollEl.innerHTML = `<div class="pick-empty">${emptyMessage || 'No data.'}</div>`
+      return null
+    }
+    const skipCols = []
+    let html = `<table class="lv-tbl${tableClass ? ' ' + tableClass : ''}"><thead><tr>`
+    columns.forEach((c, i) => {
+      if (c.sortable === false) skipCols.push(i)
+      html += `<th data-col="${c.key}"${c.headerStyle ? ` style="${c.headerStyle}"` : ''}>${c.label ?? ''}</th>`
+    })
+    html += '</tr></thead><tbody>'
+    rows.forEach((row, i) => {
+      const cls = rowClass ? rowClass(row, i) : ''
+      const attrs = rowAttrs ? rowAttrs(row, i) : {}
+      const attrStr = Object.entries(attrs).map(([k, v]) => ` ${k}="${v}"`).join('')
+      html += `<tr${cls ? ` class="${cls}"` : ''}${attrStr}>`
+      columns.forEach(c => { html += `<td${c.cellStyle ? ` style="${c.cellStyle}"` : ''}>${c.render ? c.render(row, i) : (row[c.key] ?? '')}</td>` })
+      html += '</tr>'
+    })
+    html += '</tbody></table>'
+    scrollEl.innerHTML = html
+    const table = scrollEl.querySelector('table.lv-tbl')
+    makeSortable(table, { skipCols })
+    return table
+  }
+
+  // Consistent search-bar markup, reused by every list instead of hand-copied template strings.
+  function renderSearchBar(inputId, placeholder, onInput, onClear) {
+    return `<div class="pick-search-bar"><input type="text" id="${inputId}" placeholder="${placeholder}" oninput="${onInput}"><button onclick="${onClear || (`document.getElementById('${inputId}').value='';` + onInput.replace(/this\.value/g, "''"))}">Clear</button></div>`
   }
 
   function redownload() {
@@ -1278,6 +1378,7 @@
   let currentBuffer = {}     // {machine: {lane_no: {normal_qty, sembreak_qty, pid}}}
   let bufferMode = 'normal'  // 'normal' | 'sembreak' | 'none'
   let semBreakMode = false
+  let laneTypes = {}          // {pid: {type: 'cold'|'ambient'|'unknown', name: string}}
 
   function getBufferByLane(machine) {
     if (bufferMode === 'none') return {}
@@ -1300,8 +1401,8 @@
     showPanel('pick')
     if (isEditMode && editMachine) {
       renderPickDetail(editMachine).then(() => {
-        const detailEl = document.getElementById('pick-detail')
-        if (detailEl && editScrollTop) detailEl.scrollTop = editScrollTop
+        const bodyEl = document.getElementById('pick-detail-body')
+        if (bodyEl && editScrollTop) bodyEl.scrollTop = editScrollTop
       })
     } else {
       renderPicks()
@@ -1309,7 +1410,6 @@
   }
   async function renderPicks() {
     const listEl = document.getElementById('pick-machine-list')
-    const detailEl = document.getElementById('pick-detail')
     const itPanel = document.getElementById('in-transit-panel')
     // Update report mtime display
     if (window.api.getReportMtime) {
@@ -1327,7 +1427,7 @@
     }
     if (!lastFilePath) {
       listEl.innerHTML = '<div class="pick-empty">No report loaded yet.</div>'
-      detailEl.innerHTML = ''
+      pickDetailSet('', '')
       document.getElementById('pick-count').textContent = ''
       itPanel.style.display = 'none'
       currentPickList = []
@@ -1383,7 +1483,7 @@
         : list
 
       listEl.innerHTML = ''
-      if (!displayList.length) { listEl.innerHTML = '<div class="pick-empty">Nothing to pick for this date.</div>'; detailEl.innerHTML=''; return }
+      if (!displayList.length) { listEl.innerHTML = '<div class="pick-empty">Nothing to pick for this date.</div>'; pickDetailSet('', ''); return }
       let curTeam = null
       displayList.forEach(m => {
         if (m.team !== curTeam) { curTeam = m.team; const h=document.createElement('div'); h.className='pick-team-hd'; h.textContent='Team '+m.team; listEl.appendChild(h) }
@@ -1406,21 +1506,17 @@
         const activeRow = listEl.querySelector(`[data-machine="${currentDetailMachine}"]`)
         if (activeRow) activeRow.classList.add('active')
       } else {
-        detailEl.innerHTML = '<div class="pick-empty">Select a machine to view its picking list.</div>'
+        pickDetailSet('', '<div class="pick-empty">Select a machine to view its picking list.</div>')
       }
     } catch (err) {
       console.error(err)
       listEl.innerHTML = `<div class="pick-empty" style="color:#e05c5c">Error loading picking list: ${err.message || err}</div>`
-      detailEl.innerHTML = ''
+      pickDetailSet('', '')
       document.getElementById('pick-count').textContent = ''
     }
   }
   function filterPickTable(query) {
-    const q = query.trim().toLowerCase()
-    document.querySelectorAll('table.pick-tbl tbody tr').forEach(tr => {
-      const name = tr.cells[1] ? tr.cells[1].textContent.toLowerCase() : ''
-      tr.style.display = (!q || name.includes(q)) ? '' : 'none'
-    })
+    filterTable(document.querySelector('table.pick-tbl'), query, { cols: ['product'] })
   }
 
   function clearPickSearch() {
@@ -1451,6 +1547,10 @@
     await window.api.markDone(checked)
     renderPicks()
   }
+  function pickDetailSet(hdHtml, bodyHtml) {
+    document.getElementById('pick-detail-hd').innerHTML = hdHtml || ''
+    document.getElementById('pick-detail-body').innerHTML = bodyHtml || ''
+  }
   async function renderPickDetail(machine) {
     const detailEl = document.getElementById('pick-detail')
     try {
@@ -1463,24 +1563,24 @@
         const date = dateStr.replace(/-/g, '')
         const saved = await window.api.loadPickEdit(machine, date)
         if (saved && saved.rows) rows = saved.rows
-        let html = `<div class="pick-hd"><div><div class="nm">${machine}</div><div class="sub">Picking date ${dateStr} &nbsp;·&nbsp; Restock team ${team}</div></div><button class="pick-icon-btn" onclick="exitEditMode()" title="Save &amp; Exit Edit"><span class="icon">save</span></button></div>`
-        html += `<div class="edit-banner">&#9998;&nbsp; Edit mode &mdash; changes auto-saved</div>`
-        html += `<div class="pick-search-bar"><input type="text" id="pick-search-input" placeholder="Search product…" oninput="filterPickTable(this.value)"><button onclick="clearPickSearch()">Clear</button></div>`
-        if (!rows.length) { html += '<div class="pick-empty">All lanes sufficiently stocked.</div>' }
+        let hdHtml = `<div class="pick-hd"><div><div class="nm">${machine}</div><div class="sub">Picking date ${dateStr} &nbsp;·&nbsp; Restock team ${team}</div></div><button class="pick-icon-btn" onclick="exitEditMode()" title="Save &amp; Exit Edit"><span class="icon">save</span></button></div>`
+        hdHtml += `<div class="edit-banner">&#9998;&nbsp; Edit mode &mdash; changes auto-saved</div>`
+        hdHtml += `<div class="pick-search-bar"><input type="text" id="pick-search-input" placeholder="Search product…" oninput="filterPickTable(this.value)"><button onclick="clearPickSearch()">Clear</button></div>`
+        let bodyHtml
+        if (!rows.length) { bodyHtml = '<div class="pick-empty">All lanes sufficiently stocked.</div>' }
         else {
-          html += `<table class="pick-tbl"><thead><tr><th>No</th><th>Product</th><th>Bal</th><th>Lane</th><th>Forecast</th><th>Buffer</th><th>Restock</th><th>Replacement</th><th></th></tr></thead><tbody>`
+          bodyHtml = `<table class="lv-tbl pick-tbl"><thead><tr><th data-col="no">No</th><th data-col="product">Product</th><th data-col="bal">Bal</th><th data-col="lane">Lane</th><th data-col="forecast">Forecast</th><th data-col="buffer">Buffer</th><th data-col="restock">Restock</th><th data-col="replacement">Replacement</th><th></th></tr></thead><tbody>`
           rows.forEach(r => {
             const tag = r.outOfStock ? '<span class="pick-out-tag">OUT</span>' : ''
             const ftag = r.fastMover ? '<span class="pick-fast-tag">FAST</span>' : ''
             const cls = [r.outOfStock?'pick-out':'', r.fastMover?'pick-fast':''].filter(Boolean).join(' ')
             const bufCol = r.bufferQty ? `<span style="color:#0891b2">${r.bufferQty > 0 ? '+' : ''}${r.bufferQty}</span>` : '—'
             const repl = r.replacement || ''
-            html += `<tr class="${cls}"><td>${r.no}</td><td contenteditable="true" spellcheck="false">${r.product}${tag}${ftag}</td><td contenteditable="true" spellcheck="false">${r.bal}</td><td contenteditable="true" spellcheck="false">${r.lane}</td><td style="color:#6b7280">${r.forecastQty > 0 ? '+' + r.forecastQty : '—'}</td><td>${bufCol}</td><td contenteditable="true" spellcheck="false">${r.restock}</td><td contenteditable="true" spellcheck="false">${repl}</td><td><button class="pick-swap-btn" onclick="handleSwap(this)" title="Swap lane with another row">⇅</button></td></tr>`
+            bodyHtml += `<tr class="${cls}"><td>${r.no}</td><td contenteditable="true" spellcheck="false">${r.product}${tag}${ftag}${laneTypeBadge(r.productId)}</td><td contenteditable="true" spellcheck="false">${r.bal}</td><td contenteditable="true" spellcheck="false">${r.lane}</td><td style="color:#6b7280">${r.forecastQty > 0 ? '+' + r.forecastQty : '—'}</td><td>${bufCol}</td><td contenteditable="true" spellcheck="false">${r.restock}</td><td contenteditable="true" spellcheck="false">${repl}</td><td><button class="pick-swap-btn" onclick="handleSwap(this)" title="Swap lane with another row">⇅</button></td></tr>`
           })
-          html += '</tbody></table>'
+          bodyHtml += '</tbody></table>'
         }
-        detailEl.innerHTML = html
-        detailEl.style.setProperty('--pick-hd-h', detailEl.querySelector('.pick-hd').offsetHeight + 'px')
+        pickDetailSet(hdHtml, bodyHtml)
         makeSortable(detailEl.querySelector('table.pick-tbl'), { skipCols: [8] })
         const tbl = detailEl.querySelector('table.pick-tbl')
         if (tbl) {
@@ -1492,43 +1592,44 @@
             }, 1000)
           })
         }
-        detailEl.onscroll = () => { if (isEditMode) editScrollTop = detailEl.scrollTop }
-        if (editScrollTop > 0) setTimeout(() => { detailEl.scrollTop = editScrollTop }, 50)
+        const bodyEl = document.getElementById('pick-detail-body')
+        bodyEl.onscroll = () => { if (isEditMode) editScrollTop = bodyEl.scrollTop }
+        if (editScrollTop > 0) setTimeout(() => { bodyEl.scrollTop = editScrollTop }, 50)
       } else {
         const inQueue = Object.keys(currentPending[machine] || {}).length > 0
         const savedView = await window.api.loadPickEdit(machine, dateStr.replace(/-/g,''))
         const replMap = {}
         if (savedView?.rows) savedView.rows.forEach(r => { if (r.replacement) replMap[String(r.lane)] = r.replacement })
         const hasEdit = savedView?.rows?.some(r => r.replacement)
-        let html = `<div class="pick-hd"><button class="pick-icon-btn" onclick="clearPickDetail()" title="Back to list"><span class="icon">home</span></button><div style="flex:1"><div class="nm">${machine}</div><div class="sub">Picking date ${dateStr} &nbsp;·&nbsp; Restock team ${team}</div></div><button class="pick-icon-btn${hasEdit?' has-edit':''}" onclick="enterEditMode('${machine.replace(/'/g,"\\'")}')" title="Edit replacements"><span class="icon">edit</span></button><button class="pick-icon-btn${inQueue?' in-queue':''}" onclick="confirmAndQueuePrintCurrent()" title="${inQueue?'Already in queue':'Add to Queue'}"><span class="icon">check_box</span></button></div>`
-        html += `<div class="pick-search-bar"><input type="text" id="pick-search-input" placeholder="Search product…" oninput="filterPickTable(this.value)"><button onclick="clearPickSearch()">Clear</button></div>`
-        if (!pl.rows.length) { html += '<div class="pick-empty">All lanes sufficiently stocked.</div>' }
+        let hdHtml = `<div class="pick-hd"><button class="pick-icon-btn" onclick="clearPickDetail()" title="Back to list"><span class="icon">home</span></button><div style="flex:1"><div class="nm">${machine}</div><div class="sub">Picking date ${dateStr} &nbsp;·&nbsp; Restock team ${team}</div></div><button class="pick-icon-btn${hasEdit?' has-edit':''}" onclick="enterEditMode('${machine.replace(/'/g,"\\'")}')" title="Edit replacements"><span class="icon">edit</span></button><button class="pick-icon-btn${inQueue?' in-queue':''}" onclick="confirmAndQueuePrintCurrent()" title="${inQueue?'Already in queue':'Add to Queue'}"><span class="icon">check_box</span></button></div>`
+        hdHtml += `<div class="pick-search-bar"><input type="text" id="pick-search-input" placeholder="Search product…" oninput="filterPickTable(this.value)"><button onclick="clearPickSearch()">Clear</button></div>`
+        let bodyHtml
+        if (!pl.rows.length) { bodyHtml = '<div class="pick-empty">All lanes sufficiently stocked.</div>' }
         else {
-          html += `<table class="pick-tbl"><thead><tr><th>No</th><th>Product</th><th>Bal</th><th>Lane</th><th>Forecast</th><th>Buffer</th><th>Restock</th></tr></thead><tbody>`
+          bodyHtml = `<table class="lv-tbl pick-tbl"><thead><tr><th data-col="no">No</th><th data-col="product">Product</th><th data-col="bal">Bal</th><th data-col="lane">Lane</th><th data-col="forecast">Forecast</th><th data-col="buffer">Buffer</th><th data-col="restock">Restock</th></tr></thead><tbody>`
           pl.rows.forEach(r => {
             const tag = r.outOfStock ? '<span class="pick-out-tag">OUT</span>' : ''
             const ftag = r.fastMover ? '<span class="pick-fast-tag">FAST</span>' : ''
             const cls = [r.outOfStock?'pick-out':'', r.fastMover?'pick-fast':''].filter(Boolean).join(' ')
             const bufCol = r.bufferQty ? `<span style="color:#0891b2">${r.bufferQty > 0 ? '+' : ''}${r.bufferQty}</span>` : '—'
             const replNote = replMap[String(r.lane)] ? `<div class="pick-repl">→ ${replMap[String(r.lane)]}</div>` : ''
-            html += `<tr class="${cls}" data-lane="${r.lane}"><td>${r.no}</td><td>${r.product}${tag}${ftag}${replNote}</td><td class="${r.outOfStock?'bal-out':''}">${r.bal}</td><td>${r.lane}</td><td style="color:#6b7280">${r.forecastQty > 0 ? '+' + r.forecastQty : '—'}</td><td>${bufCol}</td><td>${r.restock}</td></tr>`
+            bodyHtml += `<tr class="${cls}" data-lane="${r.lane}"><td>${r.no}</td><td>${r.product}${tag}${ftag}${replNote}${laneTypeBadge(r.productId)}</td><td class="${r.outOfStock?'bal-out':''}">${r.bal}</td><td>${r.lane}</td><td style="color:#6b7280">${r.forecastQty > 0 ? '+' + r.forecastQty : '—'}</td><td>${bufCol}</td><td>${r.restock}</td></tr>`
           })
-          html += '</tbody></table>'
-          html += `<div class="pick-hidden-note">${pl.hiddenCount} rows hidden (Restock 0 or Bal &gt; 10)</div>`
+          bodyHtml += '</tbody></table>'
+          bodyHtml += `<div class="pick-hidden-note">${pl.hiddenCount} rows hidden (Restock 0 or Bal &gt; 10)</div>`
         }
-        detailEl.innerHTML = html
-        detailEl.style.setProperty('--pick-hd-h', detailEl.querySelector('.pick-hd').offsetHeight + 'px')
+        pickDetailSet(hdHtml, bodyHtml)
         makeSortable(detailEl.querySelector('table.pick-tbl'))
         detailEl.querySelectorAll('table.pick-tbl tbody tr[data-lane]').forEach(tr => {
           tr.style.cursor = 'pointer'
           tr.addEventListener('click', () => showChart(machine, tr.dataset.lane, `${machine} · Lane ${tr.dataset.lane}`))
         })
-        detailEl.onscroll = null
+        document.getElementById('pick-detail-body').onscroll = null
         currentDetailMachine = machine
       }
     } catch (err) {
       console.error(err)
-      detailEl.innerHTML = `<div class="pick-empty" style="color:#e05c5c">Error loading detail: ${err.message || err}</div>`
+      pickDetailSet('', `<div class="pick-empty" style="color:#e05c5c">Error loading detail: ${err.message || err}</div>`)
     }
   }
   async function confirmAndQueuePrint(machine) {
@@ -1592,7 +1693,7 @@
   }
   function clearPickDetail() {
     document.querySelectorAll('.pick-mach').forEach(el => el.classList.remove('active'))
-    document.getElementById('pick-detail').innerHTML = ''
+    pickDetailSet('', '')
     currentDetailMachine = null
   }
 
@@ -1717,63 +1818,57 @@ function bufRenderMachineList(filter) {
 
   let bufAllLaneRows = []   // cache for filter
 
+  const bufColumns = [
+    { key: 'chk', label: '<input type="checkbox" id="buf-chk-all" title="Select all" onchange="bufToggleAllChk(this)">', headerStyle: 'width:28px;', cellStyle: 'text-align:center;', sortable: false,
+      render: r => `<input type="checkbox" class="buf-chk" data-lane="${r.laneNo}" data-pid="${r.pid}" data-sugn="${r.sugN ?? ''}" data-sugs="${r.sugS ?? ''}" ${r.hasSug ? '' : 'disabled'}>` },
+    { key: 'lane', label: 'Lane', render: r => r.laneNo },
+    { key: 'pid', label: 'PID', headerStyle: 'color:#9ca3af', render: r => `<span style="color:#9ca3af;font-size:11px;">${r.pid}</span>${laneTypeBadge(r.pid)}` },
+    { key: 'product', label: 'Product', render: r => r.prod },
+    { key: 'sugnormal', label: 'Sug Normal', headerStyle: 'color:#059669', render: r => r.sugN != null ? `<span style="color:#059669">${r.sugN > 0 ? '+' : ''}${r.sugN}</span>` : '<span class="buf-no-data">—</span>' },
+    { key: 'sugsembreak', label: 'Sug Sem Break', headerStyle: 'color:#d97706', render: r => r.sugS != null ? `<span style="color:#d97706">${r.sugS}</span>` : '<span class="buf-no-data">—</span>' },
+    { key: 'normal', label: 'Normal', render: r => `<input type="number" data-lane="${r.laneNo}" data-pid="${r.pid}" data-field="normal_qty" value="${r.norm}" placeholder="0" onchange="bufOnEdit('${r.mEsc}',this)">` },
+    { key: 'sembreak', label: 'Sem Break', render: r => `<input type="number" data-lane="${r.laneNo}" data-pid="${r.pid}" data-field="sembreak_qty" value="${r.sem}" placeholder="0" onchange="bufOnEdit('${r.mEsc}',this)">` },
+  ]
+
   function bufRenderLanes(machine) {
+    const hdSlot = document.getElementById('buf-hd-slot')
     const wrap = document.getElementById('buf-lane-wrap')
-    if (!lastFilePath) { wrap.innerHTML = '<div class="pick-empty">Load a report first.</div>'; return }
+    if (!lastFilePath) { hdSlot.innerHTML = ''; wrap.innerHTML = '<div class="pick-empty">Load a report first.</div>'; return }
     const rows = window.api.parseExcel(lastFilePath)
     bufAllLaneRows = rows.slice(1).filter(r => r[0] === machine)
-    if (!bufAllLaneRows.length) { wrap.innerHTML = '<div class="pick-empty">No lanes found.</div>'; return }
-
-    // sticky header matching pick-hd style
-    const mEsc = machine.replace(/'/g, "\\'")
-    let html = `<div class="pick-hd"><div><div class="nm">${machine}</div><div class="sub">Set Normal and Sem Break buffer qty per lane</div></div></div>`
-    html += bufBuildTable(machine, bufAllLaneRows, '')
-    wrap.innerHTML = html
-    wrap.parentElement.style.setProperty('--pick-hd-h', (wrap.querySelector('.pick-hd')?.offsetHeight || 52) + 'px')
-    makeSortable(wrap.querySelector('table.buf-tbl'), { skipCols: [0] })
+    hdSlot.innerHTML = `<div class="pick-hd"><div><div class="nm">${machine}</div><div class="sub">Set Normal and Sem Break buffer qty per lane</div></div></div>`
+    bufBuildTable(machine, bufAllLaneRows)
   }
 
-  function bufBuildTable(machine, machRows, filter) {
-    const q = filter.toLowerCase()
+  function bufRowData(machine, r) {
     const machineBuf = Object.assign({}, currentBuffer[machine] || {}, bufEdits[machine] || {})
     const machineSug = bufSuggestions[machine] || {}
-    const mEsc = machine.replace(/'/g, "\\'")
+    const laneNo = String(r[1])
+    const pid    = String(r[2])
+    const prod   = String(r[3] || '')
+    const saved  = machineBuf[laneNo] || {}
+    const sug    = machineSug[pid] || {}
+    const sugN   = sug.normal   != null ? sug.normal   : null
+    const sugS   = sug.sembreak != null ? sug.sembreak : null
+    return {
+      laneNo, pid, prod,
+      sugN, sugS,
+      hasSug: sugN != null || sugS != null,
+      norm: saved.normal_qty   != null ? saved.normal_qty   : '',
+      sem:  saved.sembreak_qty != null ? saved.sembreak_qty : '',
+      mEsc: machine.replace(/'/g, "\\'"),
+    }
+  }
 
-    let html = `<table class="buf-tbl"><thead><tr>
-      <th style="width:28px;"><input type="checkbox" id="buf-chk-all" title="Select all" onchange="bufToggleAllChk(this)"></th>
-      <th>Lane</th><th>PID</th><th>Product</th><th style="color:#059669">Sug Normal</th><th style="color:#d97706">Sug Sem Break</th><th>Normal</th><th>Sem Break</th>
-    </tr></thead><tbody>`
-
-    let count = 0
-    machRows.forEach(r => {
-      const laneNo = String(r[1])
-      const pid    = String(r[2])
-      const prod   = String(r[3] || '')
-      if (q && !prod.toLowerCase().includes(q) && !laneNo.includes(q)) return
-      count++
-      const saved  = machineBuf[laneNo] || {}
-      const sug    = machineSug[pid] || {}
-      const sugN   = sug.normal   != null ? sug.normal   : null
-      const sugS   = sug.sembreak != null ? sug.sembreak : null
-      const hasSug = sugN != null || sugS != null
-      const sugNTxt = sugN != null ? `<span style="color:#059669">${sugN > 0 ? '+' : ''}${sugN}</span>` : '<span class="buf-no-data">—</span>'
-      const sugSTxt = sugS != null ? `<span style="color:#d97706">${sugS}</span>`                        : '<span class="buf-no-data">—</span>'
-      const norm   = saved.normal_qty   != null ? saved.normal_qty   : ''
-      const sem    = saved.sembreak_qty != null ? saved.sembreak_qty : ''
-      html += `<tr>
-        <td style="text-align:center;"><input type="checkbox" class="buf-chk" data-lane="${laneNo}" data-pid="${pid}" data-sugn="${sugN ?? ''}" data-sugs="${sugS ?? ''}" ${hasSug ? '' : 'disabled'}></td>
-        <td>${laneNo}</td>
-        <td style="color:#9ca3af;font-size:11px;">${pid}</td>
-        <td>${prod}</td>
-        <td>${sugNTxt}</td>
-        <td>${sugSTxt}</td>
-        <td><input type="number" data-lane="${laneNo}" data-pid="${pid}" data-field="normal_qty"   value="${norm}" placeholder="0" onchange="bufOnEdit('${mEsc}',this)"></td>
-        <td><input type="number" data-lane="${laneNo}" data-pid="${pid}" data-field="sembreak_qty" value="${sem}"  placeholder="0" onchange="bufOnEdit('${mEsc}',this)"></td>
-      </tr>`
+  function bufBuildTable(machine, machRows) {
+    const wrap = document.getElementById('buf-lane-wrap')
+    const rowData = machRows.map(r => bufRowData(machine, r))
+    buildListTable(wrap, {
+      columns: bufColumns,
+      rows: rowData,
+      emptyMessage: 'No lanes found.',
+      tableClass: 'buf-tbl',
     })
-    if (!count) html += `<tr><td colspan="8" style="padding:20px 14px;color:#9ca3af;text-align:center;">No results.</td></tr>`
-    html += '</tbody></table>'
-    return html
   }
 
   function bufToggleAllChk(master) {
@@ -1783,11 +1878,8 @@ function bufRenderMachineList(filter) {
 
   function bufFilterLanes(val) {
     if (!bufCurrentMachine) return
-    const wrap = document.getElementById('buf-lane-wrap')
-    const tbl = wrap.querySelector('table')
-    if (tbl) tbl.outerHTML = bufBuildTable(bufCurrentMachine, bufAllLaneRows, val)
-    else wrap.innerHTML += bufBuildTable(bufCurrentMachine, bufAllLaneRows, val)
-    makeSortable(wrap.querySelector('table.buf-tbl'), { skipCols: [0] })
+    const table = document.querySelector('#buf-lane-wrap table.buf-tbl')
+    filterTable(table, val, { cols: ['lane', 'product'] })
   }
 
   function bufOnEdit(machine, input) {
@@ -1911,19 +2003,19 @@ function bufRenderMachineList(filter) {
     const bodyRows = smAllRows.map((r, i) => {
       const daysCls = (r.days == null || r.days > 90) ? ' class="days-bad"' : ''
       const daysStr = r.days != null ? r.days + 'd' : 'Never'
-      return `<tr><td>${i+1}</td><td>${esc(r.name)}</td><td>${r.total}</td><td>${esc(r.last_sale) || '—'}</td><td${daysCls}>${daysStr}</td></tr>`
+      return `<tr><td>${i+1}</td><td>${esc(r.name)}${laneTypeBadge(r.pid)}</td><td>${r.total}</td><td>${esc(r.last_sale) || '—'}</td><td${daysCls}>${daysStr}</td></tr>`
     }).join('')
 
     wrapEl.innerHTML = `
-      <table>
-        <thead><tr><th>#</th><th>Product Name</th><th>Total Sales</th><th>Last Sale</th><th>Days Since</th></tr></thead>
+      <table class="lv-tbl">
+        <thead><tr><th data-col="no">#</th><th data-col="product">Product Name</th><th data-col="total">Total Sales</th><th data-col="lastsale">Last Sale</th><th data-col="daysince">Days Since</th></tr></thead>
         <tbody>${bodyRows}</tbody>
       </table>
       <div class="sm-note">&#9888; These products are still in the machine. Change on next visit — do not empty the lane in advance.</div>`
 
     makeSortable(wrapEl.querySelector('table'), { skipCols: [0] })
 
-    document.getElementById('slow-sub-toolbar').style.display = 'flex'
+    document.getElementById('slow-status').style.display = 'block'
     const searchBar = document.getElementById('slow-search-bar')
     if (searchBar) {
       searchBar.style.display = 'flex'
@@ -1938,7 +2030,7 @@ function bufRenderMachineList(filter) {
     const statusEl = document.getElementById('slow-status')
     const wrapEl   = document.getElementById('slow-table-wrap')
     const printBtn = document.getElementById('btn-sm-print')
-    document.getElementById('slow-sub-toolbar').style.display = 'flex'
+    statusEl.style.display = 'block'
     document.getElementById('slow-search-bar').style.display = 'none'
     statusEl.textContent = 'Analyzing…'
     wrapEl.innerHTML = ''
