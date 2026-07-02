@@ -102,6 +102,25 @@
 
 ## Pending Features（优先顺序）
 
+### ⚠️ Q-new：Schedule-aware Forecast — route_plan.scheduleDays 接入补货预测（2026-07-02 讨论，未开始实现）
+**状态：仅完成设计讨论，等待来回确认结构无误后才能动工。这是核心补货演算改动，务必谨慎，不要在没有再次确认的情况下直接实现。**
+
+**问题起源**：讨论 route_plan 如何跟数据库有意义地交互时发现——`route_plan.scheduleDays` 目前只用来决定"今天要不要去这台机器"（[picking.js:83-97](src/picking.js:83)，`scheduled || pct >= 0.25` 二选一即触发），跟 forecast 补货量完全没关联。
+
+**现状缺陷**：`forecastQty` 只取补货当天一个 weekday 的平均销量（[picking.js:201](src/picking.js:201)），唯一的例外是硬编码"周六补货时用周日的 forecast 代替"（index.html `renderPicks()` 里 `if (forecastWeekday === 5) forecastWeekday = 6`）。这个特例只覆盖固定的周六/周日，对其他排程（比如 9058 team 只在周五跑，中间隔 6 天）完全没有对应处理——forecast 没算到这些机器实际的探访间隔缺口，這也是 Q6 buffer stock 需要另外用 max−avg 经验公式打补丁的根本原因（两边在解决同一个问题）。
+
+**同意的设计方向**（务必按此隔离原则实现，不要图省事直接改核心函数）：
+1. **核心引擎零改动**：`buildPickingList()` / `machinesToPickToday()`（picking.js）完全不碰，继续只认 `forecastByPid = {pid: qty}` 扁平结构，不管这个数字是单日算的还是多日加总的。已有的 self-check 单元测试保持不变，回归风险为零。
+2. **新增独立纯函数**（picking.js 或新文件，需自带单元测试）：`scheduleGapWeekdays(machine, date, routePlan)` — 只负责"给机器名+日期，算出到下次排程探访之间要覆盖哪些 weekday"，不碰任何补货数字。没有 `scheduleDays` 的机器（25%规则触发型）fallback 返回当天（跟现状一致）；未来可考虑改用 `picking_history` 里的实际历史 `pick_date` 统计经验探访间隔，但那需要先累积数据（跟 Q10 一样的前提）。
+3. **开关放在数据准备层，不进核心引擎**：`renderPicks()`（index.html）里判断开关状态，开→用 `scheduleGapWeekdays()` 算出的多天列表，循环调用现有 `getForecastByWeekday()` 累加进 `currentForecast`；关→维持现状单日查询。`getForecastByWeekday` IPC 本身不用改。
+4. **开关设计**：跟 `semBreakMode` 同模式——pick-toolbar 加图标按钮，状态存 `getSettings`/`setSetting`（已有持久化机制），**默认 OFF**。方便先跑几天跟现有数字比对，确认合理再考虑默认开启。
+5. **不会被污染的部分**：Buffer Stock（`buffer_stock.py`）、OOS 计数、lane type 分类都不读 `forecastByPid`，天然不受影响。
+
+**下一步（务必先讨论确认，不要跳过）**：
+- 先写 `scheduleGapWeekdays()` 纯函数 + 单元测试（风险最低的部分，可独立验证）
+- 测试用例通过、结构确认无误后，才讨论怎么接进 `renderPicks()` 和开关 UI
+- 每一步都要跟用户来回确认，这是直接影响每天实际补货数量的核心公式，出错代价高
+
 ### Q7：Picking List 替换产品标注
 - 场景：review picking list 时，在原有产品旁边注明建议替换的产品，员工到机器时执行更换
 - 在 Edit Mode 扩展：
