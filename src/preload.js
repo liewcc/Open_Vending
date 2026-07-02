@@ -2,7 +2,7 @@ const { contextBridge, ipcRenderer, shell } = require('electron')
 const path = require('path')
 const xlsx = require(path.join(__dirname, '..', 'node_modules', 'xlsx'))
 const picking = require(path.join(__dirname, 'picking.js'))
-const routePlan = require(path.join(__dirname, 'route_plan.json'))
+const routePlan = require(path.join(__dirname, '..', 'db', 'route_plan.json'))
 
 function parseRows(filePath) {
   const wb = xlsx.readFile(filePath)
@@ -60,6 +60,13 @@ contextBridge.exposeInMainWorld('api', {
   },
   teamOf(machine) {
     return (routePlan.machines[machine] && routePlan.machines[machine].team) || null
+  },
+  getRoutePlan() {
+    return routePlan
+  },
+  saveRoutePlan(machines) {
+    routePlan.machines = machines
+    return ipcRenderer.invoke('save-route-plan', routePlan)
   },
   getAllMachines(filePath, pendingByMachine) {
     const rows = parseRows(filePath)

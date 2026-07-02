@@ -413,6 +413,15 @@ const BUFFER_STOCK         = path.join(__dirname, 'buffer_stock.py')
 const SALES_DETAIL_DB      = path.join(ROOT, 'db', 'sales_detail.db')
 const SALES_FORECAST_DB    = path.join(ROOT, 'db', 'sales_forecast.db')
 const DATA_DB              = path.join(ROOT, 'db', 'data.db')
+const ROUTE_PLAN_PATH      = path.join(ROOT, 'db', 'route_plan.json')
+ipcMain.handle('save-route-plan', (_, data) => {
+  try {
+    fs.writeFileSync(ROUTE_PLAN_PATH, JSON.stringify(data, null, 2))
+    return { ok: true }
+  } catch (e) {
+    return { ok: false, error: e.message }
+  }
+})
 ipcMain.handle('get-restock-history', (_, { machine, lane }) =>
   new Promise(resolve => {
     const pythonExe = path.join(ROOT, 'python', 'python.exe')

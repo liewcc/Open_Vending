@@ -11,7 +11,7 @@ Electron main process   src/main.js          Node.js, IPC handlers, PDF generati
 Preload bridge          src/preload.js        contextBridge → window.api (renderer ↔ main)
 Renderer UI             src/index.html        All panels in a single-page app
 Picking logic           src/picking.js        Pure JS, no side effects, unit-testable
-Route plan              src/route_plan.json   44 machines, team assignments, scheduleDays
+Route plan              db/route_plan.json    44 machines, team assignments, scheduleDays
 Python scripts          src/*.py              Spawned as child processes via spawnPy()
 ```
 
@@ -256,7 +256,7 @@ All Python scripts communicate via **stdout JSON** (return value) and **stdin JS
 
 - **No nodeIntegration in renderer** — all Node/file access must go through IPC.
 - **`picking.js` is pure** — no IPC, no fs, no DB. Safe to call synchronously in renderer.
-- **`route_plan.json`** is the authoritative source for team assignments and schedule rules. Machines absent from it are ignored by `machinesToPickToday` and `getAllMachines`.
+- **`db/route_plan.json`** is the authoritative source for team assignments and schedule rules. Machines absent from it are ignored by `machinesToPickToday` and `getAllMachines`. Editable via the Route Plan panel (Q8), which writes back through `save-route-plan` IPC. Lives under `db/` (gitignored directory) but stays tracked in git since it was already committed before the move — git only skips *untracked* files matching an ignore rule.
 - **`semBreakMode`** is a session-only global in the renderer (not persisted in settings). Managed in the picking panel toolbar.
 - **Pick edits** (`pick_edit_*.json`) are per-machine per-date flat JSON files — no DB table. They store replacement annotations and any manual row overrides from Edit Mode.
 - **`src/src/`** is a stale duplicate directory — the app loads from `src/` only. Do not edit files under `src/src/`.

@@ -152,9 +152,15 @@
 - **注意：需累积至少一个月数据才有意义**
 - 可导出 PDF 或 Excel
 
-### Q8：Route Plan UI（待 cc advise）
-- 现状：新增机器或修改排程需要手动编辑 `route_plan.json`，没有界面
-- 待 cc 确认是否需要 UI，以及设计建议
+### ✅ Q8：Route Plan UI（2026-07-02 本 session 完成，cc 无意见）
+- 现状：新增机器或修改排程之前需要手动编辑 `route_plan.json`，没有界面
+- `route-plan-panel` 改为可编辑表格：Machine / Team / Schedule Days（7 个复选框，全不选 = 25% 规则）/ 删除
+- 工具栏：➕ 新增机器、💾 保存；搜索框可按机器名/team 过滤
+- IPC：`save-route-plan`（main.js 写入 `route_plan.json`）；`preload.js` 新增 `getRoutePlan()` / `saveRoutePlan()`，保存时同步更新内存中的 `routePlan.machines`，全 app 立即生效不用重启
+- 重复机器名保存时自动合并（后者覆盖），状态栏提示
+- 已用真实 `route_plan.json` 做写入/回滚验证（写入→校验→还原），Electron 实机启动无报错
+
+- **✅ 路径迁移已完成**（同 session）：`route_plan.json` 从 `src/` 搬到 `db/`。`main.js` 的 `ROUTE_PLAN_PATH`、`preload.js` 的 `require()` 都已同步改路径。`db/` 目录整体被 `.gitignore` 排除，但因为这个文件搬移前已被 git 追踪，`git mv` 后仍保持追踪状态（git 的 ignore 规则只对未追踪文件生效）——已用 `git check-ignore` 验证确认。真机启动测试无报错。
 
 ### Q9：Buffer Stock 页面数据来源（已部分解决）
 - 问题：lane 资料来自每天的报告；没有下载报告时，设定页面能否显示？

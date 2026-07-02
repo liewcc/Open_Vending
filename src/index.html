@@ -822,9 +822,20 @@
     </div>
   </div>
 
-  <div id="route-plan-panel" style="display:none;flex-direction:column;flex:1;padding:24px;">
-    <h2 style="margin-bottom:16px;">Route Plan</h2>
-    <p style="color:var(--text-secondary);">Coming soon — manage machine schedules and team assignments.</p>
+  <div id="route-plan-panel" class="lv-shell" style="display:none;flex:1;min-width:0;background:#fff;">
+    <div class="lv-shell-hd">
+      <div id="rp-toolbar" style="display:flex;align-items:center;gap:12px;padding:9px 14px;background:#fff;border-bottom:0.5px solid #e2e4e9;font-size:12px;">
+        <span style="font-weight:500;color:#1f2937;">Route Plan</span>
+        <span id="rp-status" style="font-size:11px;color:#6b7280;"></span>
+        <button id="rp-btn-add" class="pick-icon-btn" style="margin-left:auto;" onclick="rpAddMachine()" title="Add machine"><span class="icon">add</span></button>
+        <button id="rp-btn-save" class="pick-icon-btn" onclick="rpSaveAll()" title="Save changes"><span class="icon">save</span></button>
+      </div>
+      <div class="pick-search-bar">
+        <input type="text" id="rp-search" placeholder="Search machine…" oninput="rpFilter(this.value)">
+        <button onclick="document.getElementById('rp-search').value='';rpFilter('')">Clear</button>
+      </div>
+    </div>
+    <div id="rp-wrap" class="lv-shell-scroll"></div>
   </div>
 
   <div id="buffer-stock-panel" style="display:none;flex-direction:column;flex:1;min-width:0;background:#f0f2f5;">
@@ -1826,7 +1837,84 @@
     showPanel('slow')
     if (!smAllRows.length) smRestoreFromStorage()
   }
-  function showRoutePlanView() { showPanel('route-plan') }
+  function showRoutePlanView() { showPanel('route-plan'); rpLoad() }
+
+  // ── Route Plan (Q8) ─────────────────────────────────────────────────────────
+  const RP_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+  let rpRows = []   // [{origName, name, team, days:[bool x7]}]
+
+  function rpLoad() {
+    const plan = window.api.getRoutePlan()
+    rpRows = Object.entries(plan.machines || {}).map(([name, v]) => ({
+      origName: name, name, team: v.team || '', days: RP_DAYS.map(d => (v.scheduleDays || []).includes(d))
+    }))
+    rpRows.sort((a, b) => a.name.localeCompare(b.name))
+    document.getElementById('rp-status').textContent = ''
+    rpRender()
+  }
+
+  const rpColumns = [
+    { key: 'name', label: 'Machine', render: (r, i) => `<input type="text" value="${r.name}" data-i="${i}" data-f="name" onchange="rpEdit(this)" style="width:200px;">` },
+    { key: 'team', label: 'Team', render: (r, i) => `<input type="text" value="${r.team}" data-i="${i}" data-f="team" onchange="rpEdit(this)" style="width:90px;">` },
+    { key: 'days', label: 'Schedule Days (none = 25% rule)', sortable: false, render: (r, i) => RP_DAYS.map((d, di) => `<label style="margin-right:8px;font-size:11px;white-space:nowrap;"><input type="checkbox" data-i="${i}" data-d="${di}" ${r.days[di] ? 'checked' : ''} onchange="rpToggleDay(this)"> ${d}</label>`).join('') },
+    { key: 'del', label: '', sortable: false, render: (r, i) => `<button class="pick-icon-btn" onclick="rpDeleteRow(${i})" title="Delete"><span class="icon">delete</span></button>` },
+  ]
+
+  function rpRender() {
+    const wrap = document.getElementById('rp-wrap')
+    buildListTable(wrap, { columns: rpColumns, rows: rpRows, emptyMessage: 'No machines in route plan.', tableClass: 'rp-tbl' })
+  }
+
+  function rpEdit(input) {
+    const i = Number(input.dataset.i), f = input.dataset.f
+    rpRows[i][f] = input.value.trim()
+  }
+
+  function rpToggleDay(cb) {
+    const i = Number(cb.dataset.i), d = Number(cb.dataset.d)
+    rpRows[i].days[d] = cb.checked
+  }
+
+  function rpAddMachine() {
+    rpRows.push({ origName: null, name: '', team: '', days: RP_DAYS.map(() => false) })
+    rpRender()
+    const wrap = document.getElementById('rp-wrap')
+    const inputs = wrap.querySelectorAll('input[data-f="name"]')
+    const last = inputs[inputs.length - 1]
+    if (last) last.focus()
+  }
+
+  function rpDeleteRow(i) {
+    rpRows.splice(i, 1)
+    rpRender()
+  }
+
+  function rpFilter(val) {
+    filterTable(document.querySelector('#rp-wrap table.rp-tbl'), val, { cols: ['name', 'team'] })
+  }
+
+  async function rpSaveAll() {
+    const machines = {}
+    const seen = new Set()
+    let dupes = false
+    for (const r of rpRows) {
+      const name = r.name.trim()
+      if (!name) continue
+      if (seen.has(name)) dupes = true
+      seen.add(name)
+      machines[name] = { team: r.team.trim() || 'UNASSIGNED', scheduleDays: RP_DAYS.filter((d, di) => r.days[di]) }
+    }
+    const statusEl = document.getElementById('rp-status')
+    const res = await window.api.saveRoutePlan(machines)
+    if (res && res.ok) {
+      statusEl.textContent = dupes ? 'Saved (duplicate names were merged)' : 'Saved'
+      statusEl.style.color = '#059669'
+    } else {
+      statusEl.textContent = 'Save failed: ' + ((res && res.error) || 'unknown error')
+      statusEl.style.color = '#dc2626'
+    }
+    rpLoad()
+  }
 
   let bufCurrentMachine = null
   let bufSuggestions = {}   // {machine: {pid: {normal, sembreak}}} — loaded from DB
