@@ -141,6 +141,33 @@ function machinesToPickToday(reportRows, routePlan, date, pendingByMachine) {
 }
 
 /**
+ * KI-2 fix: forecastByPid holds machine-level totals (avg qty for that PID
+ * across the whole machine); when the same PID occupies N lanes, applying
+ * the full total per lane overcounts N×. Splits each PID's qty evenly
+ * across the lanes it occupies on this machine.
+ * @param {any[][]} reportRows
+ * @param {string} machine
+ * @param {object} forecastByPid - {pid: avg_qty, ...}
+ * @returns {object} - {pid: avg_qty / laneCount, ...}
+ */
+function splitForecastAcrossLanes(reportRows, machine, forecastByPid) {
+  if (!forecastByPid || !Object.keys(forecastByPid).length) return forecastByPid || {};
+  const laneCount = {};
+  for (let i = 1; i < reportRows.length; i++) {
+    const row = reportRows[i];
+    if (row && row[0] === machine) {
+      const pid = String(row[2]);
+      laneCount[pid] = (laneCount[pid] || 0) + 1;
+    }
+  }
+  const out = {};
+  for (const pid in forecastByPid) {
+    out[pid] = laneCount[pid] > 1 ? forecastByPid[pid] / laneCount[pid] : forecastByPid[pid];
+  }
+  return out;
+}
+
+/**
  * Builds the picking list for a single machine.
  * @param {any[][]} reportRows
  * @param {string} machine
@@ -232,7 +259,8 @@ module.exports = {
   num,
   weekdayName,
   machinesToPickToday,
-  buildPickingList
+  buildPickingList,
+  splitForecastAcrossLanes
 };
 
 // Self-check block
@@ -326,6 +354,21 @@ if (require.main === module) {
   assert.strictEqual(pickList.rows[1].outOfStock, false);
   assert.strictEqual(pickList.rows[1].bal, 5);
   assert.strictEqual(pickList.rows[1].restock, 3);
+
+  // Verify splitForecastAcrossLanes (KI-2 fix)
+  const mockReportMultiLane = [
+    ['Machine','No.','Product ID','Product Name','Bal Qty','Lane Size','Restock'],
+    ['MachY', '1', 'P362', 'Water', '5', '10', '3'],
+    ['MachY', '2', 'P362', 'Water', '5', '10', '3'],
+    ['MachY', '3', 'P362', 'Water', '5', '10', '3'],
+    ['MachY', '4', 'P362', 'Water', '5', '10', '3'],
+    ['MachY', '5', 'P999', 'Soda',  '5', '10', '3'],  // single-lane PID
+  ];
+  const split = splitForecastAcrossLanes(mockReportMultiLane, 'MachY', { P362: 20, P999: 8, P404: 5 });
+  assert.strictEqual(split.P362, 5);   // 20 / 4 lanes
+  assert.strictEqual(split.P999, 8);   // 1 lane -> unchanged
+  assert.strictEqual(split.P404, 5);   // PID not on this machine's report -> unchanged
+  assert.deepStrictEqual(splitForecastAcrossLanes(mockReportMultiLane, 'MachY', {}), {});
 
   console.log("picking.js self-check OK");
 }

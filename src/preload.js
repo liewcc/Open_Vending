@@ -56,7 +56,8 @@ contextBridge.exposeInMainWorld('api', {
   },
   getPickList(filePath, machine, pendingByLane, oosByLane, forecastByPid, semBreak, bufferByLane) {
     const rows = parseRows(filePath)
-    return picking.buildPickingList(rows, machine, pendingByLane || {}, oosByLane || {}, forecastByPid || {}, semBreak || false, bufferByLane || {})
+    const splitForecast = picking.splitForecastAcrossLanes(rows, machine, forecastByPid || {})
+    return picking.buildPickingList(rows, machine, pendingByLane || {}, oosByLane || {}, splitForecast, semBreak || false, bufferByLane || {})
   },
   teamOf(machine) {
     return (routePlan.machines[machine] && routePlan.machines[machine].team) || null

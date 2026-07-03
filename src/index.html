@@ -528,6 +528,8 @@
   .pick-icon-btn.in-queue { color:#22c55e; }
   .pick-icon-btn.in-queue .icon { font-variation-settings:'FILL' 1,'wght' 400,'GRAD' 0,'opsz' 24; }
   .pick-icon-btn .icon { font-size:32px; font-variation-settings:'FILL' 0,'wght' 300,'GRAD' 0,'opsz' 24; }
+  .restock-mode-group { display:flex; gap:0; }
+  .restock-mode-btn { width:30px; font-size:20px; font-weight:600; line-height:1; }
   #pick-body { display:flex; flex:1; min-height:0; }
   #pick-machine-list { width:210px; border-right:0.5px solid #e2e4e9; overflow-y:auto; background:#fafbfc; padding:8px; font-size:12px; }
   #pick-detail { flex:1; background:#fff; padding:0; min-width:0; }
@@ -775,7 +777,11 @@
     <input type="date" id="pick-date" onchange="renderPicks()">
     <span id="pick-count"></span>
     <span id="report-mtime" style="color:#9ca3af;font-size:10.5px;margin-left:2px;"></span>
-    <button id="btn-sem-break" class="pick-icon-btn" onclick="toggleSemBreak()" title="Sem Break mode (forecast off)"><span class="icon">school</span></button>
+    <div class="restock-mode-group">
+      <button id="btn-mode-normal" class="pick-icon-btn restock-mode-btn" onclick="setRestockMode('normal')" title="Normal days — buffer on, Sat covers Sun">+</button>
+      <button id="btn-mode-short" class="pick-icon-btn restock-mode-btn" onclick="setRestockMode('short')" title="Short break — follow portal qty exactly">0</button>
+      <button id="btn-mode-sembreak" class="pick-icon-btn restock-mode-btn" onclick="setRestockMode('sembreak')" title="Sem Break — negative buffer to draw down stock">−</button>
+    </div>
     <button id="btn-show-all" class="pick-icon-btn" onclick="toggleShowAll()" title="Show all machines"><span class="icon">view_list</span></button>
     <button id="btn-queue-view" class="pick-icon-btn" onclick="showQueueView()" title="View Queue"><span class="icon">pending_actions</span></button>
     <button id="pick-print-all" class="pick-icon-btn" onclick="printAll()" title="Export PDF"><span class="icon">picture_as_pdf</span></button>
@@ -1076,12 +1082,9 @@
     if (s.smDbPath)      document.getElementById('sm-db-path').value = s.smDbPath
     if (s.smGenDbPath)   window._smGenDbPath = s.smGenDbPath
     if (s.sdCsvPath)     document.getElementById('sd-csv-path').value = s.sdCsvPath
-    if (s.semBreakMode) {
-      semBreakMode = true
-      const btn = document.getElementById('btn-sem-break')
-      if (btn) { btn.classList.add('in-queue'); btn.title = 'Sem Break ON (forecast off) — click to disable' }
-    }
-    if (s.bufferMode) bufferMode = s.bufferMode
+    if (s.restockMode) restockMode = s.restockMode
+    else if (s.semBreakMode) restockMode = 'sembreak'  // migrate old boolean setting
+    updateRestockModeButtons()
   })
 
   window.api.getBufferSettings().then(r => {
@@ -1387,18 +1390,23 @@
   let currentOos = {}
   let currentForecast = {}   // {machine: {pid: avg_qty}}
   let currentBuffer = {}     // {machine: {lane_no: {normal_qty, sembreak_qty, pid}}}
-  let bufferMode = 'normal'  // 'normal' | 'sembreak' | 'none'
-  let semBreakMode = false
+  let restockMode = 'normal'  // 'normal' | 'short' | 'sembreak'
   let laneTypes = {}          // {pid: {type: 'cold'|'ambient'|'unknown', name: string}}
 
   function getBufferByLane(machine) {
-    if (bufferMode === 'none') return {}
+    if (restockMode === 'short') return {}
     const machineBuf = currentBuffer[machine] || {}
     const result = {}
     for (const [laneNo, v] of Object.entries(machineBuf)) {
-      result[laneNo] = bufferMode === 'sembreak' ? (v.sembreak_qty || 0) : (v.normal_qty || 0)
+      result[laneNo] = restockMode === 'sembreak' ? (v.sembreak_qty || 0) : (v.normal_qty || 0)
     }
     return result
+  }
+  function updateRestockModeButtons() {
+    ;['normal', 'short', 'sembreak'].forEach(m => {
+      const b = document.getElementById('btn-mode-' + m)
+      if (b) b.classList.toggle('in-queue', m === restockMode)
+    })
   }
   let showAllMachines = false
   let isHistoryMode = false
@@ -1463,13 +1471,18 @@
       currentPending = pendingRaw || {}
       currentOos = oosRaw || {}
 
-      // Load forecast for the selected date's weekday (0=Mon…6=Sun)
-      // Saturday (5) uses Sunday (6) forecast per Q2 spec
-      const selDate = new Date(document.getElementById('pick-date').value + 'T12:00:00')
-      let forecastWeekday = (selDate.getDay() + 6) % 7  // JS 0=Sun → remap to 0=Mon
-      if (forecastWeekday === 5) forecastWeekday = 6     // Sat → use Sun forecast
-      const forecastRaw = await window.api.getForecastByWeekday(forecastWeekday)
-      currentForecast = (forecastRaw && forecastRaw.ok) ? forecastRaw.data : {}
+      // Forecast only applies in Normal days mode, and only to cover Saturday's
+      // picking list for Sunday (no one restocks on Sunday). No other weekday
+      // forecast — that overlaps with buffer qty and double-counts.
+      currentForecast = {}
+      if (restockMode === 'normal') {
+        const selDate = new Date(document.getElementById('pick-date').value + 'T12:00:00')
+        const dow = (selDate.getDay() + 6) % 7  // JS 0=Sun → remap to 0=Mon…6=Sun
+        if (dow === 5) {  // Saturday → use Sunday's forecast
+          const forecastRaw = await window.api.getForecastByWeekday(6)
+          if (forecastRaw && forecastRaw.ok) currentForecast = forecastRaw.data
+        }
+      }
 
       // Render in-transit panel
       const pendingMachines = Object.keys(currentPending)
@@ -1616,14 +1629,12 @@
     renderPicks()
   }
 
-  function toggleSemBreak() {
-    semBreakMode = !semBreakMode
-    const btn = document.getElementById('btn-sem-break')
-    btn.classList.toggle('in-queue', semBreakMode)
-    btn.title = semBreakMode ? 'Sem Break ON (forecast off) — click to disable' : 'Sem Break mode (forecast off)'
-    window.api.setSetting('semBreakMode', semBreakMode)
-    renderPicks()
-    if (currentDetailMachine) renderPickDetail(currentDetailMachine)
+  async function setRestockMode(mode) {
+    restockMode = mode
+    updateRestockModeButtons()
+    window.api.setSetting('restockMode', mode)
+    await renderPicks()
+    if (currentDetailMachine && !isHistoryMode) renderPickDetail(currentDetailMachine)
   }
   async function markInTransitDone() {
     const checked = [...document.querySelectorAll('#in-transit-panel input[type=checkbox]:checked')].map(cb => cb.value)
@@ -1639,7 +1650,7 @@
     const detailEl = document.getElementById('pick-detail')
     try {
       const oosByLane = (currentOos[machine]) || {}
-      const pl = window.api.getPickList(lastFilePath, machine, {}, oosByLane, currentForecast[machine] || {}, semBreakMode, getBufferByLane(machine))
+      const pl = window.api.getPickList(lastFilePath, machine, {}, oosByLane, currentForecast[machine] || {}, restockMode !== 'normal', getBufferByLane(machine))
       const team = window.api.teamOf(machine) || '—'
       const dateStr = document.getElementById('pick-date').value
       let rows = pl.rows
@@ -1719,7 +1730,7 @@
   async function confirmAndQueuePrint(machine) {
     const pendingByLane = (currentPending[machine]) || {}
     const oosByLane     = (currentOos[machine])     || {}
-    const pl = window.api.getPickList(lastFilePath, machine, pendingByLane, oosByLane, currentForecast[machine] || {}, semBreakMode, getBufferByLane(machine))
+    const pl = window.api.getPickList(lastFilePath, machine, pendingByLane, oosByLane, currentForecast[machine] || {}, restockMode !== 'normal', getBufferByLane(machine))
     const today = document.getElementById('pick-date').value
     const picks = pl.rows.map(r => ({
       machine,
@@ -2230,7 +2241,7 @@ function bufRenderMachineList(filter) {
     const data = (await Promise.all(currentPickList.map(async m => {
       const pendingByLane = (currentPending[m.machine]) || {}
       const oosByLane = (currentOos[m.machine]) || {}
-      const pl = window.api.getPickList(lastFilePath, m.machine, pendingByLane, oosByLane, currentForecast[m.machine] || {}, semBreakMode, getBufferByLane(m.machine))
+      const pl = window.api.getPickList(lastFilePath, m.machine, pendingByLane, oosByLane, currentForecast[m.machine] || {}, restockMode !== 'normal', getBufferByLane(m.machine))
       const saved = await window.api.loadPickEdit(m.machine, dateKey)
       const replMap = {}
       if (saved?.rows) saved.rows.forEach(r => { if (r.replacement) replMap[String(r.lane)] = r.replacement })
