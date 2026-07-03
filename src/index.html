@@ -1409,7 +1409,10 @@
 
   function showPickView() {
     const di = document.getElementById('pick-date')
-    if (!di.value) { const d = new Date(); di.value = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` }
+    if (!(isEditMode && editMachine)) {
+      const d = new Date()
+      di.value = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+    }
     showPanel('pick')
     if (isEditMode && editMachine) {
       renderPickDetail(editMachine).then(() => {
