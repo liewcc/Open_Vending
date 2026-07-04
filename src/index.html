@@ -1671,7 +1671,7 @@
             const cls = [r.outOfStock?'pick-out':'', r.fastMover?'pick-fast':''].filter(Boolean).join(' ')
             const bufCol = r.bufferQty ? `<span style="color:#0891b2">${r.bufferQty > 0 ? '+' : ''}${r.bufferQty}</span>` : '—'
             const repl = r.replacement || ''
-            bodyHtml += `<tr class="${cls}"><td>${r.no}</td><td contenteditable="true" spellcheck="false">${r.product}${tag}${ftag}${laneTypeBadge(r.productId)}</td><td contenteditable="true" spellcheck="false">${r.bal}</td><td contenteditable="true" spellcheck="false">${r.lane}</td><td style="color:#6b7280">${r.forecastQty > 0 ? '+' + r.forecastQty : '—'}</td><td>${bufCol}</td><td contenteditable="true" spellcheck="false">${r.restock}</td><td contenteditable="true" spellcheck="false">${repl}</td><td><button class="pick-swap-btn" onclick="handleSwap(this)" title="Swap lane with another row">⇅</button></td></tr>`
+            bodyHtml += `<tr class="${cls}" data-pid="${r.productId || ''}"><td>${r.no}</td><td contenteditable="true" spellcheck="false">${r.product}${tag}${ftag}${laneTypeBadge(r.productId)}</td><td contenteditable="true" spellcheck="false">${r.bal}</td><td contenteditable="true" spellcheck="false">${r.lane}</td><td style="color:#6b7280">${r.forecastQty > 0 ? '+' + r.forecastQty : '—'}</td><td>${bufCol}</td><td contenteditable="true" spellcheck="false">${r.restock}</td><td contenteditable="true" spellcheck="false">${repl}</td><td><button class="pick-swap-btn" onclick="handleSwap(this)" title="Swap lane with another row">⇅</button></td></tr>`
           })
           bodyHtml += '</tbody></table>'
         }
@@ -1694,7 +1694,7 @@
         const inQueue = Object.keys(currentPending[machine] || {}).length > 0
         const savedView = await window.api.loadPickEdit(machine, dateStr.replace(/-/g,''))
         const replMap = {}
-        if (savedView?.rows) savedView.rows.forEach(r => { if (r.replacement) replMap[String(r.lane)] = r.replacement })
+        if (savedView?.rows) savedView.rows.forEach(r => { if (r.replacement) replMap[String(r.no)] = r.replacement })
         const hasEdit = savedView?.rows?.some(r => r.replacement)
         let hdHtml = `<div class="pick-hd"><button class="pick-icon-btn" onclick="clearPickDetail()" title="Back to list"><span class="icon">home</span></button><div style="flex:1"><div class="nm">${machine}</div><div class="sub">Picking date ${dateStr} &nbsp;·&nbsp; Restock team ${team}</div></div><button class="pick-icon-btn${hasEdit?' has-edit':''}" onclick="enterEditMode('${machine.replace(/'/g,"\\'")}')" title="Edit replacements"><span class="icon">edit</span></button><button class="pick-icon-btn${inQueue?' in-queue':''}" onclick="confirmAndQueuePrintCurrent()" title="${inQueue?'Already in queue':'Add to Queue'}"><span class="icon">check_box</span></button></div>`
         hdHtml += `<div class="pick-search-bar"><input type="text" id="pick-search-input" placeholder="Search product…" oninput="filterPickTable(this.value)"><button onclick="clearPickSearch()">Clear</button></div>`
@@ -1707,8 +1707,8 @@
             const ftag = r.fastMover ? '<span class="pick-fast-tag">FAST</span>' : ''
             const cls = [r.outOfStock?'pick-out':'', r.fastMover?'pick-fast':''].filter(Boolean).join(' ')
             const bufCol = r.bufferQty ? `<span style="color:#0891b2">${r.bufferQty > 0 ? '+' : ''}${r.bufferQty}</span>` : '—'
-            const replNote = replMap[String(r.lane)] ? `<div class="pick-repl">→ ${replMap[String(r.lane)]}</div>` : ''
-            bodyHtml += `<tr class="${cls}" data-lane="${r.lane}"><td>${r.no}</td><td>${r.product}${tag}${ftag}${replNote}${laneTypeBadge(r.productId)}</td><td class="${r.outOfStock?'bal-out':''}">${r.bal}</td><td>${r.lane}</td><td style="color:#6b7280">${r.forecastQty > 0 ? '+' + r.forecastQty : '—'}</td><td>${bufCol}</td><td>${r.restock}</td></tr>`
+            const replNote = replMap[String(r.no)] ? `<div class="pick-repl">→ ${replMap[String(r.no)]}</div>` : ''
+            bodyHtml += `<tr class="${cls}" data-lane="${r.no}"><td>${r.no}</td><td>${r.product}${tag}${ftag}${replNote}${laneTypeBadge(r.productId)}</td><td class="${r.outOfStock?'bal-out':''}">${r.bal}</td><td>${r.lane}</td><td style="color:#6b7280">${r.forecastQty > 0 ? '+' + r.forecastQty : '—'}</td><td>${bufCol}</td><td>${r.restock}</td></tr>`
           })
           bodyHtml += '</tbody></table>'
           bodyHtml += `<div class="pick-hidden-note">${pl.hiddenCount} rows hidden (Restock 0 or Bal &gt; 10)</div>`
@@ -1814,12 +1814,19 @@
     currentDetailMachine = machine
     if (machine) await renderPickDetail(machine)
   }
+  function cleanProductName(td) {
+    // Product cells carry OUT/FAST/Cold/Ambient tags as <span> children;
+    // the product name itself is plain text nodes.
+    const clone = td.cloneNode(true)
+    clone.querySelectorAll('span').forEach(s => s.remove())
+    return clone.textContent.trim()
+  }
   function collectEditRows() {
     const rows = []
     document.querySelectorAll('table.pick-tbl tbody tr').forEach(tr => {
       const tds = tr.querySelectorAll('td')
       if (tds.length < 5) return
-      rows.push({ no: tds[0].textContent.trim(), product: tds[1].textContent.trim(), bal: tds[2].textContent.trim(), lane: tds[3].textContent.trim(), restock: tds[6].textContent.trim(), replacement: tds[7]?.textContent.trim() || '', outOfStock: tr.classList.contains('pick-out'), fastMover: tr.classList.contains('pick-fast') })
+      rows.push({ no: tds[0].textContent.trim(), productId: tr.dataset.pid || '', product: cleanProductName(tds[1]), bal: tds[2].textContent.trim(), lane: tds[3].textContent.trim(), restock: tds[6].textContent.trim(), replacement: tds[7]?.textContent.trim() || '', outOfStock: tr.classList.contains('pick-out'), fastMover: tr.classList.contains('pick-fast') })
     })
     return rows.length ? rows : null
   }
@@ -1833,11 +1840,14 @@
       tr.classList.remove('swap-sel')
       swapSelectedRow = null
     } else {
+      // Cross-annotate both rows: each lane's Replacement points at the
+      // other lane's product, so the printout tells staff what to swap.
       const tdsA = swapSelectedRow.querySelectorAll('td')
       const tdsB = tr.querySelectorAll('td')
-      const tmpLane = tdsA[3].textContent
-      tdsA[3].textContent = tdsB[3].textContent
-      tdsB[3].textContent = tmpLane
+      const prodA = cleanProductName(tdsA[1]), prodB = cleanProductName(tdsB[1])
+      const noA = tdsA[0].textContent.trim(), noB = tdsB[0].textContent.trim()
+      tdsA[7].textContent = `⇄ L${noB} ${prodB}`
+      tdsB[7].textContent = `⇄ L${noA} ${prodA}`
       swapSelectedRow.classList.remove('swap-sel')
       swapSelectedRow = null
       tr.closest('table').dispatchEvent(new Event('input', { bubbles: true }))
@@ -2244,8 +2254,8 @@ function bufRenderMachineList(filter) {
       const pl = window.api.getPickList(lastFilePath, m.machine, pendingByLane, oosByLane, currentForecast[m.machine] || {}, restockMode !== 'normal', getBufferByLane(m.machine))
       const saved = await window.api.loadPickEdit(m.machine, dateKey)
       const replMap = {}
-      if (saved?.rows) saved.rows.forEach(r => { if (r.replacement) replMap[String(r.lane)] = r.replacement })
-      const rows = pl.rows.map(r => ({ ...r, replacement: replMap[String(r.lane)] || '' }))
+      if (saved?.rows) saved.rows.forEach(r => { if (r.replacement) replMap[String(r.no)] = r.replacement })
+      const rows = pl.rows.map(r => ({ ...r, replacement: replMap[String(r.no)] || '' }))
       return { machine: m.machine, team: m.team, date: dateFormatted, rows }
     }))).filter(m => m.rows.length > 0)
     if (!data.length) return
