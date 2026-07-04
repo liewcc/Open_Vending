@@ -1718,7 +1718,7 @@
         const replMap = {}
         if (savedView?.rows) savedView.rows.forEach(r => { if (r.replacement) replMap[String(r.no)] = r.replacement })
         const hasEdit = savedView?.rows?.some(r => r.replacement)
-        let hdHtml = `<div class="pick-hd"><button class="pick-icon-btn" onclick="clearPickDetail()" title="Back to list"><span class="icon">home</span></button><div style="flex:1"><div class="nm">${machine}</div><div class="sub">Picking date ${dateStr} &nbsp;·&nbsp; Restock team ${team}</div></div><button class="pick-icon-btn${hasEdit?' has-edit':''}" onclick="enterEditMode('${machine.replace(/'/g,"\\'")}')" title="Edit replacements"><span class="icon">edit</span></button><button class="pick-icon-btn${inQueue?' in-queue':''}" onclick="confirmAndQueuePrintCurrent()" title="${inQueue?'Already in queue':'Add to Queue'}"><span class="icon">check_box</span></button></div>`
+        let hdHtml = `<div class="pick-hd"><button class="pick-icon-btn" onclick="clearPickDetail()" title="Back to list"><span class="icon">home</span></button><div style="flex:1"><div class="nm">${machine}</div><div class="sub">Picking date ${dateStr} &nbsp;·&nbsp; Restock team ${team}</div></div><button class="pick-icon-btn${hasEdit?' has-edit':''}" onclick="enterEditMode('${machine.replace(/'/g,"\\'")}')" title="Edit replacements"><span class="icon">edit</span></button><button class="pick-icon-btn" onclick="printCurrentMachine()" title="Print this machine"><span class="icon">picture_as_pdf</span></button><button class="pick-icon-btn${inQueue?' in-queue':''}" onclick="confirmAndQueuePrintCurrent()" title="${inQueue?'Already in queue':'Add to Queue'}"><span class="icon">check_box</span></button></div>`
         hdHtml += `<div class="pick-search-bar"><input type="text" id="pick-search-input" placeholder="Search product…" oninput="filterPickTable(this.value)"><button onclick="clearPickSearch()">Clear</button></div>`
         let bodyHtml
         if (!pl.rows.length) { bodyHtml = '<div class="pick-empty">All lanes sufficiently stocked.</div>' }
@@ -2377,6 +2377,25 @@ function bufRenderMachineList(filter) {
     }))).filter(m => m.rows.length > 0)
     if (!data.length) return
     const result = await window.api.printAll(data)
+    if (result && result.ok) alert('PDF saved: ' + result.filePath)
+  }
+  async function printCurrentMachine() {
+    if (!currentDetailMachine || !lastFilePath) return
+    const machine = currentDetailMachine
+    const dateStr = document.getElementById('pick-date').value
+    const [y, mo, d] = dateStr.split('-')
+    const dateFormatted = `${d}/${mo}/${y}`
+    const dateKey = dateStr.replace(/-/g, '')
+    const team = window.api.teamOf(machine) || '—'
+    const pendingByLane = (currentPending[machine]) || {}
+    const oosByLane = (currentOos[machine]) || {}
+    const pl = window.api.getPickList(lastFilePath, machine, pendingByLane, oosByLane, currentForecast[machine] || {}, restockMode !== 'normal', getBufferByLane(machine))
+    if (!pl.rows.length) return
+    const saved = await window.api.loadPickEdit(machine, dateKey)
+    const replMap = {}
+    if (saved?.rows) saved.rows.forEach(r => { if (r.replacement) replMap[String(r.no)] = r.replacement })
+    const rows = pl.rows.map(r => ({ ...r, replacement: replMap[String(r.no)] || '' }))
+    const result = await window.api.printAll([{ machine, team, date: dateFormatted, rows }])
     if (result && result.ok) alert('PDF saved: ' + result.filePath)
   }
 
