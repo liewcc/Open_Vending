@@ -33,6 +33,7 @@ function saveSettings() {
 }
 
 const LOCAL_VERSION  = require('../package.json').version
+const xlsx = require(path.join(__dirname, '..', 'node_modules', 'xlsx'))
 const REPO_PKG_URL   = 'https://raw.githubusercontent.com/liewcc/Open_Vending/main/package.json'
 const REPO_ZIP_URL   = 'https://github.com/liewcc/Open_Vending/archive/refs/heads/main.zip'
 const UPDATE_EXCLUDE = ['node_modules', 'python', 'browsers', 'node', 'db', '.claude', '.git']
@@ -545,6 +546,51 @@ ipcMain.handle('print-slow-movers', async (_, { rows, dateRange }) => {
   </body></html>`
 
   const defaultPath = path.join(os.homedir(), 'Desktop', 'slow-movers.pdf')
+  const { canceled, filePath } = await dialog.showSaveDialog({ defaultPath, filters: [{ name: 'PDF', extensions: ['pdf'] }] })
+  if (canceled || !filePath) return { ok: false }
+
+  const printWin = new BrowserWindow({ show: false, webPreferences: { contextIsolation: true } })
+  printWin.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html))
+  await new Promise(resolve => printWin.webContents.once('did-finish-load', resolve))
+  const pdfBuffer = await printWin.webContents.printToPDF({ printBackground: false })
+  printWin.destroy()
+  fs.writeFileSync(filePath, pdfBuffer)
+  return { ok: true, filePath }
+})
+
+ipcMain.handle('export-queue-excel', async (_, rows) => {
+  const defaultPath = path.join(os.homedir(), 'Desktop', 'in-transit-queue.xlsx')
+  const { canceled, filePath } = await dialog.showSaveDialog({ defaultPath, filters: [{ name: 'Excel', extensions: ['xlsx'] }] })
+  if (canceled || !filePath) return { ok: false }
+
+  const aoa = [['Machine', 'Lane', 'Qty'], ...rows.map(r => [r.machine, r.lane, r.qty])]
+  const ws = xlsx.utils.aoa_to_sheet(aoa)
+  const wb = xlsx.utils.book_new()
+  xlsx.utils.book_append_sheet(wb, ws, 'Queue')
+  xlsx.writeFile(wb, filePath)
+  return { ok: true, filePath }
+})
+
+ipcMain.handle('export-queue-pdf', async (_, rows) => {
+  function esc(s) {
+    return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+  }
+  const tableRows = rows.map(r => `<tr><td>${esc(r.machine)}</td><td>${esc(r.lane)}</td><td>${esc(r.qty)}</td></tr>`).join('')
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:Arial,sans-serif;font-size:11px}
+    @page{size:A4 portrait;margin:15mm}
+    h2{font-size:14px;margin-bottom:10px}
+    table{width:100%;border-collapse:collapse}
+    th,td{border:1px dashed #aaa;padding:4px 6px;text-align:left}
+    th{font-weight:600;font-size:10px;text-transform:uppercase}
+    th:nth-child(2),td:nth-child(2),th:nth-child(3),td:nth-child(3){width:15%;text-align:center}
+  </style></head><body>
+    <h2>In-Transit Queue</h2>
+    <table><thead><tr><th>Machine</th><th>Lane</th><th>Qty</th></tr></thead><tbody>${tableRows}</tbody></table>
+  </body></html>`
+
+  const defaultPath = path.join(os.homedir(), 'Desktop', 'in-transit-queue.pdf')
   const { canceled, filePath } = await dialog.showSaveDialog({ defaultPath, filters: [{ name: 'PDF', extensions: ['pdf'] }] })
   if (canceled || !filePath) return { ok: false }
 

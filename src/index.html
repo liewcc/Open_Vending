@@ -1787,7 +1787,7 @@
         const laneCount = Object.keys(lanes).length
         html += `<div class="q-item"><div style="flex:1"><span class="q-machine" onclick="enterEditMode('${em}')">${mach}</span><div class="q-sub">${units} units &middot; ${laneCount} lane${laneCount!==1?'s':''}</div></div><div class="q-item-acts"><button class="q-icon-btn" onclick="enterEditMode('${em}')" title="Edit"><span class="icon">edit</span></button><button class="q-icon-btn" onclick="deleteFromQueue('${em}')" title="Remove"><span class="icon">delete</span></button></div></div>`
       })
-      html += `<div class="q-footer"><button class="q-icon-btn" onclick="updateQueue()" title="Refresh"><span class="icon">refresh</span></button><button class="q-icon-btn" onclick="deleteAllQueue()" title="Delete All"><span class="icon">delete_forever</span></button></div>`
+      html += `<div class="q-footer"><button class="q-icon-btn" onclick="exportQueueExcel()" title="Export as Excel"><span class="icon">table_view</span></button><button class="q-icon-btn" onclick="exportQueuePdf()" title="Export as PDF"><span class="icon">picture_as_pdf</span></button><button class="q-icon-btn" onclick="updateQueue()" title="Refresh"><span class="icon">refresh</span></button><button class="q-icon-btn" onclick="deleteAllQueue()" title="Delete All"><span class="icon">delete_forever</span></button></div>`
       body.innerHTML = html
     }
     document.getElementById('queue-modal').style.display = 'flex'
@@ -1807,6 +1807,28 @@
   async function updateQueue() {
     await renderPicks()
     showQueueView()
+  }
+  function collectQueueRows() {
+    const rows = []
+    Object.keys(currentPending).forEach(mach => {
+      const lanes = currentPending[mach]
+      Object.keys(lanes).forEach(laneNo => {
+        rows.push({ machine: mach, lane: laneNo, qty: Number(lanes[laneNo]) || 0 })
+      })
+    })
+    return rows
+  }
+  async function exportQueueExcel() {
+    const rows = collectQueueRows()
+    if (!rows.length) return
+    const r = await window.api.exportQueueExcel(rows)
+    if (r && r.ok) addLog('Queue exported: ' + r.filePath)
+  }
+  async function exportQueuePdf() {
+    const rows = collectQueueRows()
+    if (!rows.length) return
+    const r = await window.api.exportQueuePdf(rows)
+    if (r && r.ok) addLog('Queue exported: ' + r.filePath)
   }
   function clearPickDetail() {
     document.querySelectorAll('.pick-mach').forEach(el => el.classList.remove('active'))

@@ -138,5 +138,7 @@ contextBridge.exposeInMainWorld('api', {
   suggestReplacements(pickRows, machineLanes, catalog, machineSales, globalSales, thresholdPct, topN) {
     return picking.suggestReplacements(pickRows, machineLanes, catalog, machineSales, globalSales, thresholdPct, topN)
   },
+  exportQueueExcel: (rows) => ipcRenderer.invoke('export-queue-excel', rows),
+  exportQueuePdf:   (rows) => ipcRenderer.invoke('export-queue-pdf', rows),
 })
 
