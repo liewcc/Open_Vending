@@ -140,5 +140,6 @@ contextBridge.exposeInMainWorld('api', {
   },
   exportQueueExcel: (rows) => ipcRenderer.invoke('export-queue-excel', rows),
   exportQueuePdf:   (rows) => ipcRenderer.invoke('export-queue-pdf', rows),
+  analyzeSlowMachine: (machine) => ipcRenderer.invoke('analyze-slow-machine', machine),
 })
 

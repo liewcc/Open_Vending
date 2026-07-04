@@ -123,6 +123,39 @@ def analyze_db(db_path, top_n):
     }))
 
 
+def analyze_machine(sales_detail_db, machine):
+    """Per-machine slow/fast mover ranking, all-time (no window), from sales_detail.db.
+
+    Unlike analyze_db() (global, uses the separate slow_movers.db built from
+    product.csv + a sales CSV), this reads sales_detail.db directly — same
+    source Q3's replacement suggestions use — since it already has
+    franchisename. The picking-list report supplies which products are
+    currently stocked on the machine; this only supplies sales counts.
+    """
+    from pathlib import Path
+    if not Path(sales_detail_db).exists():
+        print(json.dumps({'ok': False, 'error': 'sales_detail.db not found — build it in Settings first'}))
+        return
+
+    conn = sqlite3.connect(sales_detail_db)
+    db_rows = conn.execute(
+        "SELECT pid, COUNT(*), MAX(transdate) FROM sales WHERE franchisename=? GROUP BY pid",
+        (machine,),
+    ).fetchall()
+    conn.close()
+
+    today = date.today()
+    rows = {}
+    for pid, total, last in db_rows:
+        try:
+            days = (today - datetime.strptime(last[:10], '%Y-%m-%d').date()).days if last else None
+        except (ValueError, TypeError):
+            days = None
+        rows[pid] = {'total': total, 'last_sale': (last or '')[:10], 'days': days}
+
+    print(json.dumps({'ok': True, 'rows': rows}))
+
+
 def main():
     product_csv = sys.argv[1]
     sales_csv   = sys.argv[2]
@@ -197,6 +230,8 @@ if __name__ == '__main__':
             build_db(sys.argv[2], sys.argv[3], sys.argv[4])
         elif len(sys.argv) > 1 and sys.argv[1] == 'analyze':
             analyze_db(sys.argv[2], int(sys.argv[3]) if len(sys.argv) > 3 else 20)
+        elif len(sys.argv) > 1 and sys.argv[1] == 'machine':
+            analyze_machine(sys.argv[2], sys.argv[3])
         else:
             main()
     except Exception as e:

@@ -516,6 +516,10 @@ ipcMain.handle('analyze-slow-movers', (_, { productCsv, salesCsv, topN }) =>
   spawnPy([SLOW_MOVERS, productCsv, salesCsv, String(topN || 20)], null)
 )
 
+ipcMain.handle('analyze-slow-machine', (_, machine) =>
+  spawnPy([SLOW_MOVERS, 'machine', SALES_DETAIL_DB, machine], null)
+)
+
 ipcMain.handle('print-slow-movers', async (_, { rows, dateRange }) => {
   function esc(s) {
     return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')

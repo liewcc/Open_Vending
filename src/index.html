@@ -821,7 +821,9 @@
   <div id="slow-panel">
     <div id="slow-toolbar">
       <h2>Slow Movers</h2>
-      <div class="sm-path-row">
+      <button id="btn-slow-mode-global" class="pick-icon-btn in-queue" onclick="setSlowMoverMode('global')" title="Global ranking (all machines combined)"><span class="icon">list_alt</span></button>
+      <button id="btn-slow-mode-machine" class="pick-icon-btn" onclick="setSlowMoverMode('machine')" title="Per machine (uses sales_detail.db)"><span class="icon">storefront</span></button>
+      <div class="sm-path-row" id="slow-global-controls">
         <span class="sm-path-label">DB File:</span>
         <input id="sm-db-path" class="sm-path-input" readonly placeholder="Select generated DB file…" style="width:260px;">
         <button class="sm-browse" onclick="browseDb()">Browse</button>
@@ -830,13 +832,28 @@
       <button id="btn-sm-generate" onclick="openGenerateModal()">Generate List</button>
       <button id="btn-sm-print" onclick="printSlowMovers()">Export PDF</button>
     </div>
-    <div id="slow-status"></div>
-    <div id="slow-search-bar" class="pick-search-bar" style="display:none;">
-      <input type="text" id="slow-search-input" placeholder="Search product…" oninput="filterTable(document.querySelector('#slow-table-wrap table'),this.value)">
-      <button onclick="document.getElementById('slow-search-input').value='';filterTable(document.querySelector('#slow-table-wrap table'),'')">Clear</button>
+    <div id="slow-global-view" style="display:flex; flex-direction:column; flex:1; min-height:0;">
+      <div id="slow-status"></div>
+      <div id="slow-search-bar" class="pick-search-bar" style="display:none;">
+        <input type="text" id="slow-search-input" placeholder="Search product…" oninput="filterTable(document.querySelector('#slow-table-wrap table'),this.value)">
+        <button onclick="document.getElementById('slow-search-input').value='';filterTable(document.querySelector('#slow-table-wrap table'),'')">Clear</button>
+      </div>
+      <div id="slow-body">
+        <div id="slow-table-wrap"></div>
+      </div>
     </div>
-    <div id="slow-body">
-      <div id="slow-table-wrap"></div>
+    <div id="slow-machine-view" style="display:none; flex:1; min-height:0;">
+      <div id="slow-machine-list" style="width:210px;border-right:0.5px solid #e2e4e9;overflow-y:auto;background:#fafbfc;padding:8px;font-size:12px;flex-shrink:0;"></div>
+      <div id="slow-machine-detail" class="lv-shell" style="flex:1;background:#fff;min-width:0;">
+        <div id="slow-machine-hd-slot" class="lv-shell-hd"></div>
+        <div class="pick-search-bar lv-shell-hd">
+          <input type="text" id="slow-machine-search" placeholder="Search product…" oninput="slowFilterMachineTable(this.value)">
+          <button onclick="document.getElementById('slow-machine-search').value='';slowFilterMachineTable('')">Clear</button>
+        </div>
+        <div id="slow-machine-wrap" class="lv-shell-scroll">
+          <div style="color:#9ca3af;font-size:13px;padding:40px 0;text-align:center;">Select a machine from the list.</div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -1098,6 +1115,8 @@
     else if (s.semBreakMode) restockMode = 'sembreak'  // migrate old boolean setting
     updateRestockModeButtons()
     if (s.q3ThresholdPct) q3ThresholdPct = s.q3ThresholdPct
+    if (s.slowMoverMode) slowMoverMode = s.slowMoverMode
+    updateSlowModeButtons()
   })
 
   window.api.getBufferSettings().then(r => {
@@ -1977,6 +1996,118 @@
   function showSlowView() {
     showPanel('slow')
     if (!smAllRows.length) smRestoreFromStorage()
+    updateSlowModeButtons()
+    if (slowMoverMode === 'machine') slowRenderMachineList()
+  }
+
+  // ── Slow Movers: per-machine mode (uses sales_detail.db, same source as Q3) ──
+  let slowMoverMode = 'global'   // 'global' | 'machine'
+  let slowCurrentMachine = null
+
+  function updateSlowModeButtons() {
+    const isMachine = slowMoverMode === 'machine'
+    document.getElementById('btn-slow-mode-global').classList.toggle('in-queue', !isMachine)
+    document.getElementById('btn-slow-mode-machine').classList.toggle('in-queue', isMachine)
+    document.getElementById('slow-global-view').style.display = isMachine ? 'none' : 'flex'
+    document.getElementById('slow-machine-view').style.display = isMachine ? 'flex' : 'none'
+  }
+
+  function setSlowMoverMode(mode) {
+    slowMoverMode = mode
+    window.api.setSetting('slowMoverMode', mode)
+    updateSlowModeButtons()
+    if (mode === 'machine') slowRenderMachineList()
+  }
+
+  function slowRenderMachineList(filter) {
+    const listEl = document.getElementById('slow-machine-list')
+    if (!lastFilePath) {
+      listEl.innerHTML = '<div class="pick-empty">Load a report first.</div>'
+      return
+    }
+    const q = (filter || '').toLowerCase()
+    const allMachines = window.api.getAllMachines(lastFilePath, {})
+    listEl.innerHTML = ''
+    let curTeam = null
+    allMachines.forEach(m => {
+      if (q && !m.machine.toLowerCase().includes(q)) return
+      if (m.team !== curTeam) {
+        curTeam = m.team
+        const h = document.createElement('div')
+        h.className = 'pick-team-hd'
+        h.textContent = 'Team ' + m.team
+        listEl.appendChild(h)
+      }
+      const row = document.createElement('div')
+      row.className = 'pick-mach' + (m.machine === slowCurrentMachine ? ' active' : '')
+      row.dataset.machine = m.machine
+      row.innerHTML = `<span>${m.machine}</span>`
+      row.onclick = () => {
+        listEl.querySelectorAll('.pick-mach').forEach(e => e.classList.remove('active'))
+        row.classList.add('active')
+        slowSelectMachine(m.machine)
+      }
+      listEl.appendChild(row)
+    })
+  }
+
+  function slowSelectMachine(machine) {
+    slowCurrentMachine = machine
+    slowRenderMachineDetail(machine)
+  }
+
+  async function slowRenderMachineDetail(machine) {
+    const hdSlot = document.getElementById('slow-machine-hd-slot')
+    const wrap = document.getElementById('slow-machine-wrap')
+    if (!lastFilePath) { hdSlot.innerHTML = ''; wrap.innerHTML = '<div class="pick-empty">Load a report first.</div>'; return }
+    hdSlot.innerHTML = `<div class="pick-hd"><div><div class="nm">${machine}</div><div class="sub">All-time sales ranking — click "Total Sales" to sort slow ↔ fast</div></div></div>`
+    wrap.innerHTML = '<div class="pick-empty">Loading…</div>'
+
+    const reportRows = window.api.parseExcel(lastFilePath)
+    const lanes = window.api.getMachineLanes(lastFilePath, machine)
+    if (!lanes.length) { wrap.innerHTML = '<div class="pick-empty">No lanes found.</div>'; return }
+
+    const sales = await window.api.analyzeSlowMachine(machine)
+    if (!sales || !sales.ok) {
+      wrap.innerHTML = `<div class="pick-empty" style="color:#e05c5c">${(sales && sales.error) || 'Could not load sales data.'}</div>`
+      return
+    }
+
+    // Dedupe by pid — a product spanning several lanes is one ranking row;
+    // keep the first lane it occupies for context (same convention as Q3).
+    const byPid = {}
+    lanes.forEach(l => { if (!(l.pid in byPid)) byPid[l.pid] = l })
+    const rows = Object.values(byPid).map(l => {
+      const s = sales.rows[l.pid] || {}
+      return {
+        pid: l.pid, product: l.product, laneNo: l.laneNo, laneSize: l.laneSize,
+        total: s.total || 0, last_sale: s.last_sale || '', days: s.days != null ? s.days : null,
+      }
+    })
+    rows.sort((a, b) => (a.total - b.total) || (-(a.days != null ? a.days : 9999) - -(b.days != null ? b.days : 9999)))
+
+    slowRenderMachineTable(rows)
+  }
+
+  function slowRenderMachineTable(rows) {
+    const wrap = document.getElementById('slow-machine-wrap')
+    const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    if (!rows.length) { wrap.innerHTML = '<div class="pick-empty">No products found.</div>'; return }
+    const bodyRows = rows.map((r, i) => {
+      const daysCls = (r.days == null || r.days > 90) ? ' class="days-bad"' : ''
+      const daysStr = r.days != null ? r.days + 'd' : 'Never'
+      return `<tr><td>${i+1}</td><td>${esc(r.product)}${laneTypeBadge(r.pid)}</td><td>${r.laneNo}</td><td>${r.laneSize}</td><td>${r.total}</td><td>${esc(r.last_sale) || '—'}</td><td${daysCls}>${daysStr}</td></tr>`
+    }).join('')
+    wrap.innerHTML = `<table class="lv-tbl">
+      <thead><tr><th data-col="no">#</th><th data-col="product">Product Name</th><th data-col="lane">Lane</th><th data-col="lanesize">Lane Size</th><th data-col="total">Total Sales</th><th data-col="lastsale">Last Sale</th><th data-col="daysince">Days Since</th></tr></thead>
+      <tbody>${bodyRows}</tbody>
+    </table>`
+    makeSortable(wrap.querySelector('table'), { skipCols: [0] })
+  }
+
+  function slowFilterMachineTable(query) {
+    const table = document.querySelector('#slow-machine-wrap table')
+    if (table) filterTable(table, query)
   }
   function showRoutePlanView() { showPanel('route-plan'); rpLoad() }
 
@@ -2121,6 +2252,7 @@ function bufRenderMachineList(filter) {
     { key: 'chk', label: '<input type="checkbox" id="buf-chk-all" title="Select all" onchange="bufToggleAllChk(this)">', headerStyle: 'width:28px;', cellStyle: 'text-align:center;', sortable: false,
       render: r => `<input type="checkbox" class="buf-chk" data-lane="${r.laneNo}" data-pid="${r.pid}" data-sugn="${r.sugN ?? ''}" data-sugs="${r.sugS ?? ''}" ${r.hasSug ? '' : 'disabled'}>` },
     { key: 'lane', label: 'Lane', render: r => r.laneNo },
+    { key: 'lanesize', label: 'Lane Size', headerStyle: 'color:#9ca3af', render: r => r.laneSize },
     { key: 'pid', label: 'PID', headerStyle: 'color:#9ca3af', render: r => `<span style="color:#9ca3af;font-size:11px;">${r.pid}</span>${laneTypeBadge(r.pid)}` },
     { key: 'product', label: 'Product', render: r => r.prod },
     { key: 'sugnormal', label: 'Sug Normal', headerStyle: 'color:#059669', render: r => r.sugN != null ? `<span style="color:#059669">${r.sugN > 0 ? '+' : ''}${r.sugN}</span>` : '<span class="buf-no-data">—</span>' },
@@ -2142,15 +2274,16 @@ function bufRenderMachineList(filter) {
   function bufRowData(machine, r) {
     const machineBuf = Object.assign({}, currentBuffer[machine] || {}, bufEdits[machine] || {})
     const machineSug = bufSuggestions[machine] || {}
-    const laneNo = String(r[1])
-    const pid    = String(r[2])
-    const prod   = String(r[3] || '')
+    const laneNo   = String(r[1])
+    const pid      = String(r[2])
+    const prod     = String(r[3] || '')
+    const laneSize = r[5]
     const saved  = machineBuf[laneNo] || {}
     const sug    = machineSug[pid] || {}
     const sugN   = sug.normal   != null ? sug.normal   : null
     const sugS   = sug.sembreak != null ? sug.sembreak : null
     return {
-      laneNo, pid, prod,
+      laneNo, pid, prod, laneSize,
       sugN, sugS,
       hasSug: sugN != null || sugS != null,
       norm: saved.normal_qty   != null ? saved.normal_qty   : '',

@@ -180,7 +180,7 @@ function listMachineLanes(reportRows, machine) {
   for (let i = 1; i < reportRows.length; i++) {
     const row = reportRows[i];
     if (row && row[0] === machine) {
-      lanes.push({ laneNo: String(row[1]), pid: String(row[2]), laneSize: num(row[5]) });
+      lanes.push({ laneNo: String(row[1]), pid: String(row[2]), product: String(row[3] || ''), laneSize: num(row[5]) });
     }
   }
   return lanes;
@@ -466,7 +466,7 @@ if (require.main === module) {
   ];
   const q3Lanes = listMachineLanes(mockReportQ3, 'MachZ');
   assert.strictEqual(q3Lanes.length, 4);
-  assert.deepStrictEqual(q3Lanes[0], { laneNo: '1', pid: 'P10', laneSize: 6 });
+  assert.deepStrictEqual(q3Lanes[0], { laneNo: '1', pid: 'P10', product: 'SlowCola', laneSize: 6 });
 
   const q3Catalog = {
     P10: { name: 'SlowCola',   tray: 'COLD 1', size: 6 },
