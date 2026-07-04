@@ -168,6 +168,89 @@ function splitForecastAcrossLanes(reportRows, machine, forecastByPid) {
 }
 
 /**
+ * Lists ALL lanes of a machine from the report, unfiltered.
+ * Q3 needs the full lane inventory (not the filtered picking rows) for
+ * tray-average calculation and "already stocked" candidate marking.
+ * @param {any[][]} reportRows
+ * @param {string} machine
+ * @returns {Array<{laneNo: string, pid: string, laneSize: number}>}
+ */
+function listMachineLanes(reportRows, machine) {
+  const lanes = [];
+  for (let i = 1; i < reportRows.length; i++) {
+    const row = reportRows[i];
+    if (row && row[0] === machine) {
+      lanes.push({ laneNo: String(row[1]), pid: String(row[2]), laneSize: num(row[5]) });
+    }
+  }
+  return lanes;
+}
+
+/**
+ * Q3: flags slow movers among the picking rows and proposes replacement
+ * candidates (same tray, same lane size, ranked by global sales).
+ *
+ * Slow test: machineSales[pid] < thresholdPct/100 × trayAvg, where trayAvg
+ * is the mean machineSales of DISTINCT pids of that tray currently stocked
+ * anywhere on this machine (a pid spanning several lanes counts once).
+ *
+ * @param {Array<{laneNo: string, productId: string, lane: number}>} pickRows
+ * @param {Array<{laneNo: string, pid: string, laneSize: number}>} machineLanes
+ * @param {object} catalog      - {pid: {name, tray, size}}
+ * @param {object} machineSales - {pid: count} this machine, 30d window
+ * @param {object} globalSales  - {pid: count} all machines, same window
+ * @param {number} thresholdPct - e.g. 50 → slow if below half of tray avg
+ * @param {number} [topN=3]
+ * @returns {object} - {laneNo: {candidates: [{pid, name, sales, inLane}]}}
+ */
+function suggestReplacements(pickRows, machineLanes, catalog, machineSales, globalSales, thresholdPct, topN) {
+  if (!topN) topN = 3;
+  if (!catalog || !Object.keys(catalog).length) return {};
+
+  // pid → first lane it occupies on this machine
+  const stockedLane = {};
+  for (const l of machineLanes) {
+    if (!(l.pid in stockedLane)) stockedLane[l.pid] = l.laneNo;
+  }
+
+  // tray → mean machineSales over distinct stocked pids of that tray
+  const traySums = {};
+  for (const pid in stockedLane) {
+    const cat = catalog[pid];
+    if (!cat) continue;
+    if (!traySums[cat.tray]) traySums[cat.tray] = { sum: 0, n: 0 };
+    traySums[cat.tray].sum += machineSales[pid] || 0;
+    traySums[cat.tray].n += 1;
+  }
+
+  const out = {};
+  for (const row of pickRows) {
+    const pid = String(row.productId || '');
+    const cat = catalog[pid];
+    if (!cat) continue;
+    const t = traySums[cat.tray];
+    if (!t || t.n === 0) continue;
+    const trayAvg = t.sum / t.n;
+    if (trayAvg <= 0) continue;
+    if ((machineSales[pid] || 0) >= (thresholdPct / 100) * trayAvg) continue;
+
+    const candidates = [];
+    for (const cPid in catalog) {
+      if (cPid === pid) continue;
+      const c = catalog[cPid];
+      if (c.tray !== cat.tray || c.size !== row.lane) continue;
+      const sales = globalSales[cPid] || 0;
+      if (sales <= 0) continue;
+      candidates.push({ pid: cPid, name: c.name, sales, inLane: stockedLane[cPid] || null });
+    }
+    if (!candidates.length) continue;
+    candidates.sort((a, b) => b.sales - a.sales);
+    out[String(row.laneNo)] = { candidates: candidates.slice(0, topN) };
+  }
+  return out;
+}
+
+/**
  * Builds the picking list for a single machine.
  * @param {any[][]} reportRows
  * @param {string} machine
@@ -260,7 +343,9 @@ module.exports = {
   weekdayName,
   machinesToPickToday,
   buildPickingList,
-  splitForecastAcrossLanes
+  splitForecastAcrossLanes,
+  listMachineLanes,
+  suggestReplacements
 };
 
 // Self-check block
@@ -369,6 +454,48 @@ if (require.main === module) {
   assert.strictEqual(split.P999, 8);   // 1 lane -> unchanged
   assert.strictEqual(split.P404, 5);   // PID not on this machine's report -> unchanged
   assert.deepStrictEqual(splitForecastAcrossLanes(mockReportMultiLane, 'MachY', {}), {});
+
+  // Verify listMachineLanes + suggestReplacements (Q3)
+  const mockReportQ3 = [
+    ['Machine','No.','Product ID','Product Name','Bal Qty','Lane Size','Restock'],
+    ['MachZ', '1', 'P10', 'SlowCola',  '2', '6', '3'],  // slow: sales 2 vs tray avg 10
+    ['MachZ', '2', 'P11', 'FastCola',  '2', '6', '3'],  // healthy: sales 18
+    ['MachZ', '3', 'P11', 'FastCola',  '2', '6', '3'],  // same pid 2nd lane (dedupe test)
+    ['MachZ', '4', 'P20', 'WarmChips', '2', '8', '3'],  // different tray
+    ['OtherM','1', 'P10', 'SlowCola',  '2', '6', '3'],  // other machine, must be ignored
+  ];
+  const q3Lanes = listMachineLanes(mockReportQ3, 'MachZ');
+  assert.strictEqual(q3Lanes.length, 4);
+  assert.deepStrictEqual(q3Lanes[0], { laneNo: '1', pid: 'P10', laneSize: 6 });
+
+  const q3Catalog = {
+    P10: { name: 'SlowCola',   tray: 'COLD 1', size: 6 },
+    P11: { name: 'FastCola',   tray: 'COLD 1', size: 6 },
+    P12: { name: 'NewJuice',   tray: 'COLD 1', size: 6 },  // not stocked, top global seller
+    P13: { name: 'DeadJuice',  tray: 'COLD 1', size: 6 },  // zero global sales → excluded
+    P14: { name: 'WrongSize',  tray: 'COLD 1', size: 8 },  // size mismatch → excluded
+    P20: { name: 'WarmChips',  tray: 'WARM 2', size: 8 },
+  };
+  // tray COLD 1 stocked pids: P10 (2) + P11 (18) → avg 10; P10 slow at 50% (2 < 5), P11 not (18 >= 5)
+  const q3MachineSales = { P10: 2, P11: 18, P20: 7 };
+  const q3GlobalSales  = { P10: 40, P11: 900, P12: 1500, P20: 300 };
+  const pickRowsQ3 = [
+    { laneNo: '1', productId: 'P10', lane: 6 },
+    { laneNo: '2', productId: 'P11', lane: 6 },
+    { laneNo: '9', productId: 'P99', lane: 6 },  // not in catalog → skipped
+  ];
+  const sug = suggestReplacements(pickRowsQ3, q3Lanes, q3Catalog, q3MachineSales, q3GlobalSales, 50);
+  assert.deepStrictEqual(Object.keys(sug), ['1']);              // only the slow lane
+  const cands = sug['1'].candidates;
+  assert.strictEqual(cands.length, 2);                          // P12 + P11 (P13 zero sales, P14 wrong size)
+  assert.strictEqual(cands[0].pid, 'P12');                      // global 1500 first
+  assert.strictEqual(cands[0].inLane, null);                    // not stocked here
+  assert.strictEqual(cands[1].pid, 'P11');
+  assert.strictEqual(cands[1].inLane, '2');                     // stocked → first lane it occupies
+  // threshold sensitivity: at 5% avg=10 → bar 0.5, P10 sales 2 no longer slow
+  assert.deepStrictEqual(suggestReplacements(pickRowsQ3, q3Lanes, q3Catalog, q3MachineSales, q3GlobalSales, 5), {});
+  // empty catalog → no suggestions, no crash
+  assert.deepStrictEqual(suggestReplacements(pickRowsQ3, q3Lanes, {}, q3MachineSales, q3GlobalSales, 50), {});
 
   console.log("picking.js self-check OK");
 }

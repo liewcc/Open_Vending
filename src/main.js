@@ -9,7 +9,7 @@ const CRED_FILE     = path.join(app.getPath('userData'), 'credentials.enc')
 const SETTINGS_FILE = path.join(app.getPath('userData'), 'settings.json')
 const LAST_REPORT   = path.join(ROOT, 'db', 'last_report.xlsx')
 const LAST_DIFFS    = path.join(ROOT, 'db', 'last_diffs.json')
-const DEFAULT_SETTINGS = { menuBar: false, showConsole: false, closeTray: false, notifyChanges: false, autoDownload: false, autoDownloadInterval: 30, headedBrowser: false, landingUrl: 'https://vendingportal.azurewebsites.net/SuperAdmin/SPLogin.aspx', restockMode: 'normal' }
+const DEFAULT_SETTINGS = { menuBar: false, showConsole: false, closeTray: false, notifyChanges: false, autoDownload: false, autoDownloadInterval: 30, headedBrowser: false, landingUrl: 'https://vendingportal.azurewebsites.net/SuperAdmin/SPLogin.aspx', restockMode: 'normal', q3ThresholdPct: 50 }
 const F9_TRIGGER    = path.join(ROOT, 'db', '.f9_trigger')
 const BROWSER_STOP  = path.join(ROOT, 'db', '.browser_stop')
 const ICON_PNG = path.join(ROOT, 'asset', 'image', 'icon_nobg.png')
@@ -410,6 +410,7 @@ const SLOW_MOVERS        = path.join(__dirname, 'slow_movers.py')
 const BUILD_SALES_DETAIL   = path.join(__dirname, 'build_sales_detail.py')
 const BUILD_SALES_FORECAST = path.join(__dirname, 'build_sales_forecast.py')
 const BUFFER_STOCK         = path.join(__dirname, 'buffer_stock.py')
+const REPL_SUGGEST         = path.join(__dirname, 'replacement_suggest.py')
 const SALES_DETAIL_DB      = path.join(ROOT, 'db', 'sales_detail.db')
 const SALES_FORECAST_DB    = path.join(ROOT, 'db', 'sales_forecast.db')
 const DATA_DB              = path.join(ROOT, 'db', 'data.db')
@@ -590,6 +591,7 @@ ipcMain.handle('set-buffer-qty',        (_, rows) => spawnPy([BUFFER_STOCK, 'set
 ipcMain.handle('calc-buffer-suggestions',()      => spawnPy([BUFFER_STOCK, 'suggest',     DATA_DB, SALES_DETAIL_DB], null))
 ipcMain.handle('load-buffer-suggestions',()      => spawnPy([BUFFER_STOCK, 'get_suggest',    DATA_DB], null))
 ipcMain.handle('get-lane-types',         ()      => spawnPy([BUFFER_STOCK, 'get_lane_types', DATA_DB], null))
+ipcMain.handle('get-replacement-data',   (_, machine) => spawnPy([REPL_SUGGEST, SALES_DETAIL_DB, settings.smProductPath || '', machine], null))
 
 ipcMain.handle('get-report-mtime', () => {
   try { return fs.statSync(LAST_REPORT).mtime.toISOString() } catch { return null }

@@ -554,6 +554,15 @@
   .lt-ambient { background:#fef3c7; color:#92400e; }
   td.bal-out { color:#a32d2d; }
   .pick-out-tag { background:#f7c1c1; color:#791f1f; border-radius:7px; padding:0 6px; font-size:9px; margin-left:6px; }
+  .pick-slow-tag { background:#e4e0f5; color:#4c3d99; border-radius:7px; padding:0 6px; font-size:9px; margin-left:6px; }
+  .pick-sug-btn { background:none; border:none; cursor:pointer; font-size:13px; padding:0 2px; opacity:.75; }
+  .pick-sug-btn:hover { opacity:1; }
+  #sug-menu { position:fixed; z-index:2000; background:#fff; border:1px solid #d1d5db; border-radius:8px; box-shadow:0 4px 16px rgba(0,0,0,.12); padding:4px; min-width:240px; display:none; font-size:11.5px; }
+  #sug-menu .sug-hd { padding:5px 8px 3px; color:#9ca3af; font-size:10px; letter-spacing:.03em; text-transform:uppercase; }
+  #sug-menu .sug-item { padding:6px 8px; border-radius:5px; cursor:pointer; display:flex; justify-content:space-between; gap:10px; }
+  #sug-menu .sug-item:hover { background:#f3f4f6; }
+  #sug-menu .sug-item .sug-sales { color:#6b7280; white-space:nowrap; }
+  #sug-menu .sug-item .sug-inlane { color:#0891b2; font-size:10px; }
 .buf-machine-item { padding:7px 14px; font-size:12.5px; cursor:pointer; border-radius:4px; margin:1px 4px; }
   .buf-machine-item:hover { background:#f3f4f6; }
   .buf-machine-item.active { background:#e0e7ff; color:#3730a3; font-weight:500; }
@@ -622,6 +631,9 @@
     <div id="chart-body"><div id="chart-loading">Loading…</div></div>
   </div>
 </div>
+
+<!-- Q3 replacement suggestion menu (positioned next to the clicked 💡) -->
+<div id="sug-menu"></div>
 
 <!-- Credential Modal -->
 <div id="cred-overlay">
@@ -1085,6 +1097,7 @@
     if (s.restockMode) restockMode = s.restockMode
     else if (s.semBreakMode) restockMode = 'sembreak'  // migrate old boolean setting
     updateRestockModeButtons()
+    if (s.q3ThresholdPct) q3ThresholdPct = s.q3ThresholdPct
   })
 
   window.api.getBufferSettings().then(r => {
@@ -1392,6 +1405,8 @@
   let currentBuffer = {}     // {machine: {lane_no: {normal_qty, sembreak_qty, pid}}}
   let restockMode = 'normal'  // 'normal' | 'short' | 'sembreak'
   let laneTypes = {}          // {pid: {type: 'cold'|'ambient'|'unknown', name: string}}
+  let q3Cache = {}            // {machine: replacement-data IPC result} session cache
+  let q3ThresholdPct = 50     // slow if machine 30d sales < pct% of tray avg
 
   function getBufferByLane(machine) {
     if (restockMode === 'short') return {}
@@ -1658,8 +1673,12 @@
         const date = dateStr.replace(/-/g, '')
         const saved = await window.api.loadPickEdit(machine, date)
         if (saved && saved.rows) rows = saved.rows
+        const q3 = await loadQ3Suggestions(machine, rows)
         let hdHtml = `<div class="pick-hd"><div><div class="nm">${machine}</div><div class="sub">Picking date ${dateStr} &nbsp;·&nbsp; Restock team ${team}</div></div><button class="pick-icon-btn" onclick="exitEditMode()" title="Save &amp; Exit Edit"><span class="icon">save</span></button></div>`
-        hdHtml += `<div class="edit-banner">&#9998;&nbsp; Edit mode &mdash; changes auto-saved</div>`
+        const q3Ctl = q3.ok
+          ? `<span style="margin-left:auto;font-weight:400;">Slow &lt; <input type="number" min="1" max="100" value="${q3ThresholdPct}" style="width:44px;padding:1px 4px;border:1px solid #d1d5db;border-radius:4px;font-size:11px;" onchange="onQ3ThresholdChange(this.value)"> % of tray avg</span>`
+          : `<span style="margin-left:auto;font-weight:400;color:#9ca3af;">Slow-mover suggestions off — ${q3.error || 'set product.csv in Slow Mover panel'}</span>`
+        hdHtml += `<div class="edit-banner" style="display:flex;align-items:center;gap:6px;">&#9998;&nbsp; Edit mode &mdash; changes auto-saved${q3Ctl}</div>`
         hdHtml += `<div class="pick-search-bar"><input type="text" id="pick-search-input" placeholder="Search product…" oninput="filterPickTable(this.value)"><button onclick="clearPickSearch()">Clear</button></div>`
         let bodyHtml
         if (!rows.length) { bodyHtml = '<div class="pick-empty">All lanes sufficiently stocked.</div>' }
@@ -1668,10 +1687,13 @@
           rows.forEach(r => {
             const tag = r.outOfStock ? '<span class="pick-out-tag">OUT</span>' : ''
             const ftag = r.fastMover ? '<span class="pick-fast-tag">FAST</span>' : ''
+            const sug = q3CurrentSug[String(r.no)]
+            const stag = sug ? '<span class="pick-slow-tag">SLOW</span>' : ''
+            const sugBtn = sug ? `<button class="pick-sug-btn" onclick="openSugMenu(this, '${r.no}')" title="Suggest replacements (same tray &amp; size)">💡</button>` : ''
             const cls = [r.outOfStock?'pick-out':'', r.fastMover?'pick-fast':''].filter(Boolean).join(' ')
             const bufCol = r.bufferQty ? `<span style="color:#0891b2">${r.bufferQty > 0 ? '+' : ''}${r.bufferQty}</span>` : '—'
             const repl = r.replacement || ''
-            bodyHtml += `<tr class="${cls}" data-pid="${r.productId || ''}"><td>${r.no}</td><td contenteditable="true" spellcheck="false">${r.product}${tag}${ftag}${laneTypeBadge(r.productId)}</td><td contenteditable="true" spellcheck="false">${r.bal}</td><td contenteditable="true" spellcheck="false">${r.lane}</td><td style="color:#6b7280">${r.forecastQty > 0 ? '+' + r.forecastQty : '—'}</td><td>${bufCol}</td><td contenteditable="true" spellcheck="false">${r.restock}</td><td contenteditable="true" spellcheck="false">${repl}</td><td><button class="pick-swap-btn" onclick="handleSwap(this)" title="Swap lane with another row">⇅</button></td></tr>`
+            bodyHtml += `<tr class="${cls}" data-pid="${r.productId || ''}"><td>${r.no}</td><td contenteditable="true" spellcheck="false">${r.product}${tag}${ftag}${stag}${laneTypeBadge(r.productId)}</td><td contenteditable="true" spellcheck="false">${r.bal}</td><td contenteditable="true" spellcheck="false">${r.lane}</td><td style="color:#6b7280">${r.forecastQty > 0 ? '+' + r.forecastQty : '—'}</td><td>${bufCol}</td><td contenteditable="true" spellcheck="false">${r.restock}</td><td contenteditable="true" spellcheck="false">${repl}</td><td style="white-space:nowrap">${sugBtn}<button class="pick-swap-btn" onclick="handleSwap(this)" title="Swap lane with another row">⇅</button></td></tr>`
           })
           bodyHtml += '</tbody></table>'
         }
@@ -1853,6 +1875,79 @@
       tr.closest('table').dispatchEvent(new Event('input', { bubbles: true }))
     }
   }
+
+  // ── Q3: slow-mover replacement suggestions (Edit Mode) ─────────────────────
+  let q3CurrentSug = {}   // {laneNo: {candidates: [...]}} for the machine being edited
+
+  async function loadQ3Suggestions(machine, rows) {
+    q3CurrentSug = {}
+    try {
+      if (!q3Cache[machine]) q3Cache[machine] = await window.api.getReplacementData(machine) || { ok: false, error: 'no data' }
+      const data = q3Cache[machine]
+      if (!data.ok) return { ok: false, error: data.error }
+      const lanes = window.api.getMachineLanes(lastFilePath, machine)
+      const pickRows = rows.map(r => ({ laneNo: String(r.no), productId: String(r.productId || ''), lane: Number(r.lane) || 0 }))
+      q3CurrentSug = window.api.suggestReplacements(pickRows, lanes, data.catalog, data.machineSales, data.globalSales, q3ThresholdPct)
+      return { ok: true }
+    } catch (e) {
+      return { ok: false, error: String(e.message || e) }
+    }
+  }
+
+  function openSugMenu(btn, laneNo) {
+    const menu = document.getElementById('sug-menu')
+    const sug = q3CurrentSug[String(laneNo)]
+    if (!sug || !sug.candidates.length) return
+    menu.innerHTML = '<div class="sug-hd">Better sellers — same tray &amp; size (30d, all machines)</div>'
+    sug.candidates.forEach(c => {
+      const item = document.createElement('div')
+      item.className = 'sug-item'
+      const nameSpan = document.createElement('span')
+      nameSpan.textContent = c.name
+      if (c.inLane) {
+        const il = document.createElement('span')
+        il.className = 'sug-inlane'
+        il.textContent = ` (in lane ${c.inLane})`
+        nameSpan.appendChild(il)
+      }
+      const salesSpan = document.createElement('span')
+      salesSpan.className = 'sug-sales'
+      salesSpan.textContent = c.sales
+      item.append(nameSpan, salesSpan)
+      item.onclick = () => applySuggestion(String(laneNo), c.name)
+      menu.appendChild(item)
+    })
+    menu.style.display = 'block'
+    const r = btn.getBoundingClientRect()
+    menu.style.top = Math.min(r.bottom + 4, window.innerHeight - menu.offsetHeight - 8) + 'px'
+    menu.style.left = Math.max(8, r.right - menu.offsetWidth) + 'px'
+  }
+
+  function applySuggestion(laneNo, name) {
+    const trs = document.querySelectorAll('#pick-detail table.pick-tbl tbody tr')
+    for (const tr of trs) {
+      if (tr.cells[0].textContent.trim() === laneNo) {
+        tr.cells[7].textContent = name
+        tr.closest('table').dispatchEvent(new Event('input', { bubbles: true }))
+        break
+      }
+    }
+    document.getElementById('sug-menu').style.display = 'none'
+  }
+
+  function onQ3ThresholdChange(v) {
+    const n = Math.max(1, Math.min(100, Number(v) || 50))
+    q3ThresholdPct = n
+    window.api.setSetting('q3ThresholdPct', n)
+    if (isEditMode && editMachine) renderPickDetail(editMachine)
+  }
+
+  document.addEventListener('click', e => {
+    const menu = document.getElementById('sug-menu')
+    if (menu && menu.style.display === 'block' && !menu.contains(e.target) && !e.target.closest('.pick-sug-btn')) {
+      menu.style.display = 'none'
+    }
+  })
 
   // ── Slow Movers ─────────────────────────────────────────────────────────────
   let smLastResult = null

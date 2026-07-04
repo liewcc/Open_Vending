@@ -131,5 +131,12 @@ contextBridge.exposeInMainWorld('api', {
   calcBufferSuggestions:  ()     => ipcRenderer.invoke('calc-buffer-suggestions'),
   loadBufferSuggestions:  ()     => ipcRenderer.invoke('load-buffer-suggestions'),
   getLaneTypes:           ()     => ipcRenderer.invoke('get-lane-types'),
+  getReplacementData:     (machine) => ipcRenderer.invoke('get-replacement-data', machine),
+  getMachineLanes(filePath, machine) {
+    return picking.listMachineLanes(parseRows(filePath), machine)
+  },
+  suggestReplacements(pickRows, machineLanes, catalog, machineSales, globalSales, thresholdPct, topN) {
+    return picking.suggestReplacements(pickRows, machineLanes, catalog, machineSales, globalSales, thresholdPct, topN)
+  },
 })
 
