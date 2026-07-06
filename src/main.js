@@ -616,7 +616,19 @@ ipcMain.handle('export-queue-pdf', async (_, { rows, pages }) => {
   function esc(s) {
     return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
   }
-  const tableRows = rows.map(r => `<tr><td>${esc(r.machine)}</td><td>${esc(r.lane)}</td><td>${esc(r.product)}</td><td>${esc(r.qty)}</td></tr>`).join('')
+  // Group rows by machine, preserving first-seen order — each machine gets
+  // its own table with the machine name as a heading row in <thead> (repeats
+  // on every printed page that table spans) instead of a per-row column.
+  const machines = []
+  const byMachine = {}
+  rows.forEach(r => {
+    if (!byMachine[r.machine]) { byMachine[r.machine] = []; machines.push(r.machine) }
+    byMachine[r.machine].push(r)
+  })
+  const tables = machines.map(mach => {
+    const tableRows = byMachine[mach].map(r => `<tr><td>${esc(r.lane)}</td><td>${esc(r.product)}</td><td>${esc(r.qty)}</td></tr>`).join('')
+    return `<table><thead><tr class="mhd"><th colspan="3">${esc(mach)}</th></tr><tr><th>Lane</th><th>Product Name</th><th>Qty</th></tr></thead><tbody>${tableRows}</tbody></table>`
+  }).join('')
   // Font sizes/padding in em relative to --fs so the fit loop below can scale
   // the whole document by changing one variable. body width = A4 printable
   // width (210mm - 2x15mm margins) so on-screen wrap matches print wrap.
@@ -625,15 +637,14 @@ ipcMain.handle('export-queue-pdf', async (_, { rows, pages }) => {
     :root{--fs:11px}
     body{font-family:Arial,sans-serif;font-size:var(--fs);width:180mm}
     @page{size:A4 portrait;margin:15mm}
-    h2{font-size:1.27em;margin-bottom:0.9em}
-    table{width:100%;border-collapse:collapse}
+    table{width:100%;border-collapse:collapse;margin-bottom:1.1em}
     th,td{border:1px dashed #aaa;padding:0.36em 0.55em;text-align:left}
     th{font-weight:600;font-size:0.9em;text-transform:uppercase}
-    th:nth-child(2),td:nth-child(2),th:nth-child(4),td:nth-child(4){width:12%;text-align:center}
+    tr.mhd th{border:none;font-size:1.1em;text-transform:none;padding:0.3em 0.1em}
+    th:nth-child(3),td:nth-child(3){width:15%;text-align:center}
     tr{page-break-inside:avoid}
   </style></head><body>
-    <h2>In-Transit Queue</h2>
-    <table><thead><tr><th>Machine</th><th>Lane</th><th>Product Name</th><th>Qty</th></tr></thead><tbody>${tableRows}</tbody></table>
+    ${tables}
   </body></html>`
 
   const defaultPath = path.join(os.homedir(), 'Desktop', 'in-transit-queue.pdf')
@@ -651,16 +662,19 @@ ipcMain.handle('export-queue-pdf', async (_, { rows, pages }) => {
   const PAGE_H = (297 - 30) / 25.4 * 96  // A4 printable height in CSS px (15mm margins)
   const simScript = `(() => {
     const pageH = ${PAGE_H.toFixed(2)};
-    const table = document.querySelector('table');
-    const thead = document.querySelector('thead');
-    if (!table || !thead) return 1;
-    const headerH = table.getBoundingClientRect().top - document.body.getBoundingClientRect().top;
-    const theadH = thead.getBoundingClientRect().height;
-    let used = headerH + theadH;
+    const tables = document.querySelectorAll('table');
+    if (!tables.length) return 1;
+    const bodyTop = document.body.getBoundingClientRect().top;
+    let used = tables[0].getBoundingClientRect().top - bodyTop;
     let n = 1;
-    document.querySelectorAll('tbody tr').forEach(tr => {
-      const h = tr.getBoundingClientRect().height;
-      if (used + h > pageH) { n++; used = theadH + h; } else { used += h; }
+    tables.forEach(table => {
+      const theadH = table.querySelector('thead').getBoundingClientRect().height;
+      if (used + theadH > pageH) { n++; used = 0; }
+      used += theadH;
+      table.querySelectorAll('tbody tr').forEach(tr => {
+        const h = tr.getBoundingClientRect().height;
+        if (used + h > pageH) { n++; used = theadH + h; } else { used += h; }
+      });
     });
     return n;
   })()`

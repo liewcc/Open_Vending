@@ -796,7 +796,7 @@
     </div>
     <button id="btn-show-all" class="pick-icon-btn" onclick="toggleShowAll()" title="Show all machines"><span class="icon">view_list</span></button>
     <button id="btn-queue-view" class="pick-icon-btn" onclick="showQueueView()" title="View Queue"><span class="icon">pending_actions</span></button>
-    <button id="pick-print-all" class="pick-icon-btn" onclick="printAll()" title="Export PDF"><span class="icon">picture_as_pdf</span></button>
+    <button id="pick-print-all" class="pick-icon-btn" onclick="exportQueuePdf()" title="Export PDF"><span class="icon">picture_as_pdf</span></button>
   </div>
     <div id="in-transit-panel" style="display:none;"></div>
   <div id="queue-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.35);z-index:1000;align-items:center;justify-content:center;">
@@ -1555,7 +1555,7 @@
       const list = window.api.getTodayPicks(lastFilePath, dateISO, currentPending)
       document.getElementById('pick-count').textContent = `${list.length} machines to pick`
       currentPickList = list
-      document.getElementById('pick-print-all').disabled = list.length === 0
+      document.getElementById('pick-print-all').disabled = pendingMachines.length === 0
 
       // Build a set of machines that qualify for picking today (for highlight in show-all mode)
       const pickSet = new Set(list.map(m => m.machine))
