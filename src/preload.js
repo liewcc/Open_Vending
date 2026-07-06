@@ -108,7 +108,7 @@ contextBridge.exposeInMainWorld('api', {
     })
     return results
   },
-  printAll: (data) => ipcRenderer.invoke('print-all-picking-lists', data),
+  printAll: (data, pages) => ipcRenderer.invoke('print-all-picking-lists', { data, pages }),
   openCsvDialog:     ()                            => ipcRenderer.invoke('open-csv-dialog'),
   analyzeSlowMovers: (productCsv, salesCsv, topN) => ipcRenderer.invoke('analyze-slow-movers', { productCsv, salesCsv, topN }),
   printSlowMovers:   (data)                        => ipcRenderer.invoke('print-slow-movers', data),
@@ -139,7 +139,7 @@ contextBridge.exposeInMainWorld('api', {
     return picking.suggestReplacements(pickRows, machineLanes, catalog, machineSales, globalSales, thresholdPct, topN)
   },
   exportQueueExcel: (rows) => ipcRenderer.invoke('export-queue-excel', rows),
-  exportQueuePdf:   (rows) => ipcRenderer.invoke('export-queue-pdf', rows),
+  exportQueuePdf:   (rows, pages) => ipcRenderer.invoke('export-queue-pdf', { rows, pages }),
   analyzeSlowMachine: (machine) => ipcRenderer.invoke('analyze-slow-machine', machine),
 })
 
