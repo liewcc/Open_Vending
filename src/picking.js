@@ -286,18 +286,16 @@ function buildPickingList(reportRows, machine, pendingByLane, oosByLane, forecas
     const laneInTransit = pendingByLane[laneNo] || 0;
     const actualRestock = Math.max(0, restock - laneInTransit);
 
-    // Step B: hide if actualRestock === 0
-    if (actualRestock === 0) {
-      hiddenCount++;
-      continue;
-    }
-
     const bal = num(row[4]); // Bal Qty is col 4
     // Step C: drop rows where num(balQty) > 10
     if (bal > 10) {
       hiddenCount++;
       continue;
     }
+
+    // Step B: zero-restock lanes stay visible (flagged) but never pick up
+    // forecast/buffer additions, so queue and print totals are unaffected
+    const zeroRestock = (actualRestock === 0);
 
     // Step A: out of stock
     const outOfStock = (bal === 0);
@@ -308,11 +306,11 @@ function buildPickingList(reportRows, machine, pendingByLane, oosByLane, forecas
 
     // Step E: forecast qty
     const pid = String(row[2]);
-    const forecastQty = semBreak ? 0 : Math.round((forecastByPid[pid] || 0));
+    const forecastQty = (semBreak || zeroRestock) ? 0 : Math.round((forecastByPid[pid] || 0));
 
     // Step F: buffer qty
     const laneSize = num(row[5]);
-    const bufferQty = bufferByLane[laneNo] || 0;
+    const bufferQty = zeroRestock ? 0 : (bufferByLane[laneNo] || 0);
     const cappedRestock = laneSize > 0 ? Math.min(actualRestock + forecastQty, laneSize) : actualRestock + forecastQty;
     const finalRestock = Math.max(0, cappedRestock + bufferQty);
 
@@ -327,6 +325,7 @@ function buildPickingList(reportRows, machine, pendingByLane, oosByLane, forecas
       bufferQty,
       outOfStock,
       fastMover,
+      zeroRestock,
       laneNo
     });
   }
@@ -419,7 +418,7 @@ if (require.main === module) {
   // Verify buildPickingList
   const mockReportList = [
     ['Machine','No.','Product ID','Product Name','Bal Qty','Lane Size','Restock'],
-    ['MachX', '1', 'P1', 'A', '5', '10', '0'],   // restock === 0 -> drop (Step B)
+    ['MachX', '1', 'P1', 'A', '5', '10', '0'],   // restock === 0 -> visible but flagged zeroRestock (Step B)
     ['MachX', '2', 'P2', 'B', '11', '10', '2'],  // balQty === 11 (> 10) -> drop (Step C)
     ['MachX', '3', 'P3', 'C', '0', '10', '4'],   // balQty === 0 (<=10, restock>0) -> survive, outOfStock = true
     ['MachX', '4', 'P4', 'D', '5', '10', '3'],   // balQty === 5 (<=10, restock>0) -> survive, outOfStock = false
@@ -427,18 +426,36 @@ if (require.main === module) {
 
   const pickList = buildPickingList(mockReportList, 'MachX', {}, {});
   assert.strictEqual(pickList.machine, 'MachX');
-  assert.strictEqual(pickList.hiddenCount, 2);
-  assert.strictEqual(pickList.rows.length, 2);
+  assert.strictEqual(pickList.hiddenCount, 1);
+  assert.strictEqual(pickList.rows.length, 3);
 
-  assert.strictEqual(pickList.rows[0].productId, 'P3');
-  assert.strictEqual(pickList.rows[0].outOfStock, true);
-  assert.strictEqual(pickList.rows[0].bal, 0);
-  assert.strictEqual(pickList.rows[0].restock, 4);
+  assert.strictEqual(pickList.rows[0].productId, 'P1');
+  assert.strictEqual(pickList.rows[0].zeroRestock, true);
+  assert.strictEqual(pickList.rows[0].restock, 0);
 
-  assert.strictEqual(pickList.rows[1].productId, 'P4');
-  assert.strictEqual(pickList.rows[1].outOfStock, false);
-  assert.strictEqual(pickList.rows[1].bal, 5);
-  assert.strictEqual(pickList.rows[1].restock, 3);
+  assert.strictEqual(pickList.rows[1].productId, 'P3');
+  assert.strictEqual(pickList.rows[1].outOfStock, true);
+  assert.strictEqual(pickList.rows[1].zeroRestock, false);
+  assert.strictEqual(pickList.rows[1].bal, 0);
+  assert.strictEqual(pickList.rows[1].restock, 4);
+
+  assert.strictEqual(pickList.rows[2].productId, 'P4');
+  assert.strictEqual(pickList.rows[2].outOfStock, false);
+  assert.strictEqual(pickList.rows[2].bal, 5);
+  assert.strictEqual(pickList.rows[2].restock, 3);
+
+  // zero-restock lane must ignore forecast and buffer (totals unchanged)
+  const plZero = buildPickingList(mockReportList, 'MachX', {}, {}, { P1: 6 }, false, { '1': 2 });
+  assert.strictEqual(plZero.rows[0].productId, 'P1');
+  assert.strictEqual(plZero.rows[0].restock, 0);
+  assert.strictEqual(plZero.rows[0].forecastQty, 0);
+  assert.strictEqual(plZero.rows[0].bufferQty, 0);
+
+  // fully in-transit lane counts as zeroRestock too
+  const plIT = buildPickingList(mockReportList, 'MachX', { '4': 3 }, {});
+  const rIT = plIT.rows.find(r => r.productId === 'P4');
+  assert.strictEqual(rIT.zeroRestock, true);
+  assert.strictEqual(rIT.restock, 0);
 
   // Verify splitForecastAcrossLanes (KI-2 fix)
   const mockReportMultiLane = [

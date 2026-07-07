@@ -521,7 +521,7 @@
   /* ── Pick Panel Styles ── */
   #pick-toolbar { display:flex; align-items:center; gap:12px; padding:9px 14px; background:#fff; border-bottom:0.5px solid #e2e4e9; font-size:12px; }
   #pick-count { color:#6b7280; }
-  #pick-print-all { margin-left:auto; }
+  #btn-show-all { margin-left:auto; }
   .pick-icon-btn { width:34px; height:34px; background:none; border:none; border-radius:6px; cursor:pointer; display:flex; align-items:center; justify-content:center; color:#6b7280; }
   .pick-icon-btn:hover:not(:disabled) { background:#f3f4f6; color:#1f2937; }
   .pick-icon-btn:disabled { color:#d1d5db; cursor:default; }
@@ -548,6 +548,7 @@
   tr.pick-out td { background:#fcebeb; }
   tr.pick-fast td { background:#fff7e6; }
   tr.pick-fast.pick-out td { background:#fce0d8; }
+  tr.pick-zero td { color:#9ca3af; }
   .pick-fast-tag { background:#fde68a; color:#92400e; border-radius:7px; padding:0 6px; font-size:9px; margin-left:6px; }
   .lt-badge { border-radius:5px; padding:0 5px; font-size:9px; font-weight:600; vertical-align:middle; margin-left:5px; }
   .lt-cold    { background:#dbeafe; color:#1d4ed8; }
@@ -808,7 +809,6 @@
     </div>
     <button id="btn-show-all" class="pick-icon-btn" onclick="toggleShowAll()" title="Show all machines"><span class="icon">view_list</span></button>
     <button id="btn-queue-view" class="pick-icon-btn" onclick="showQueueView()" title="View Queue"><span class="icon">pending_actions</span></button>
-    <button id="pick-print-all" class="pick-icon-btn" onclick="exportQueuePdf()" title="Export PDF"><span class="icon">picture_as_pdf</span></button>
   </div>
     <div id="in-transit-panel" style="display:none;"></div>
   <div id="queue-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.35);z-index:1000;align-items:center;justify-content:center;">
@@ -1526,7 +1526,6 @@
       document.getElementById('pick-count').textContent = ''
       itPanel.style.display = 'none'
       currentPickList = []
-      document.getElementById('pick-print-all').disabled = true
       currentDetailMachine = null
       return
     }
@@ -1576,7 +1575,6 @@
       const list = window.api.getTodayPicks(lastFilePath, dateISO, currentPending)
       document.getElementById('pick-count').textContent = `${list.length} machines to pick`
       currentPickList = list
-      document.getElementById('pick-print-all').disabled = pendingMachines.length === 0
 
       // Build a set of machines that qualify for picking today (for highlight in show-all mode)
       const pickSet = new Set(list.map(m => m.machine))
@@ -1624,7 +1622,6 @@
     isHistoryMode = true
     const listEl = document.getElementById('pick-machine-list')
     document.getElementById('in-transit-panel').style.display = 'none'
-    document.getElementById('pick-print-all').disabled = true
     currentPickList = []
     const hist = await window.api.getHistoryByDate(dateStr)
     const machines = Object.keys(hist)
@@ -1747,7 +1744,8 @@
             const sug = q3CurrentSug[String(r.no)]
             const stag = sug ? '<span class="pick-slow-tag">SLOW</span>' : ''
             const sugBtn = sug ? `<button class="pick-sug-btn" onclick="openSugMenu(this, '${r.no}')" title="Suggest replacements (same tray &amp; size)">💡</button>` : ''
-            const cls = [r.outOfStock?'pick-out':'', r.fastMover?'pick-fast':''].filter(Boolean).join(' ')
+            const zr = r.zeroRestock ?? ((Number(r.restock) || 0) === 0)
+            const cls = [r.outOfStock?'pick-out':'', r.fastMover?'pick-fast':'', zr?'pick-zero':''].filter(Boolean).join(' ')
             const bufCol = r.bufferQty ? `<span style="color:#0891b2">${r.bufferQty > 0 ? '+' : ''}${r.bufferQty}</span>` : '—'
             const repl = r.replacement || ''
             bodyHtml += `<tr class="${cls}" data-pid="${r.productId || ''}"><td>${r.no}</td><td contenteditable="true" spellcheck="false">${r.product}${tag}${ftag}${stag}${laneTypeBadge(r.productId)}</td><td contenteditable="true" spellcheck="false">${r.bal}</td><td contenteditable="true" spellcheck="false">${r.lane}</td><td style="color:#6b7280">${r.forecastQty > 0 ? '+' + r.forecastQty : '—'}</td><td>${bufCol}</td><td contenteditable="true" spellcheck="false">${r.restock}</td><td contenteditable="true" spellcheck="false">${repl}</td><td style="white-space:nowrap">${sugBtn}<button class="pick-swap-btn" onclick="handleSwap(this)" title="Swap lane with another row">⇅</button></td></tr>`
@@ -1784,13 +1782,13 @@
           pl.rows.forEach(r => {
             const tag = r.outOfStock ? '<span class="pick-out-tag">OUT</span>' : ''
             const ftag = r.fastMover ? '<span class="pick-fast-tag">FAST</span>' : ''
-            const cls = [r.outOfStock?'pick-out':'', r.fastMover?'pick-fast':''].filter(Boolean).join(' ')
+            const cls = [r.outOfStock?'pick-out':'', r.fastMover?'pick-fast':'', r.zeroRestock?'pick-zero':''].filter(Boolean).join(' ')
             const bufCol = r.bufferQty ? `<span style="color:#0891b2">${r.bufferQty > 0 ? '+' : ''}${r.bufferQty}</span>` : '—'
             const replNote = replMap[String(r.no)] ? `<div class="pick-repl">→ ${replMap[String(r.no)]}</div>` : ''
             bodyHtml += `<tr class="${cls}" data-lane="${r.no}"><td>${r.no}</td><td>${r.product}${tag}${ftag}${replNote}${laneTypeBadge(r.productId)}</td><td class="${r.outOfStock?'bal-out':''}">${r.bal}</td><td>${r.lane}</td><td style="color:#6b7280">${r.forecastQty > 0 ? '+' + r.forecastQty : '—'}</td><td>${bufCol}</td><td>${r.restock}</td></tr>`
           })
           bodyHtml += '</tbody></table>'
-          bodyHtml += `<div class="pick-hidden-note">${pl.hiddenCount} rows hidden (Restock 0 or Bal &gt; 10)</div>`
+          bodyHtml += `<div class="pick-hidden-note">${pl.hiddenCount} rows hidden (Bal &gt; 10)</div>`
         }
         pickDetailSet(hdHtml, bodyHtml)
         makeSortable(detailEl.querySelector('table.pick-tbl'))
@@ -1811,7 +1809,7 @@
     const oosByLane     = (currentOos[machine])     || {}
     const pl = window.api.getPickList(lastFilePath, machine, pendingByLane, oosByLane, currentForecast[machine] || {}, restockMode !== 'normal', getBufferByLane(machine))
     const today = document.getElementById('pick-date').value
-    const picks = pl.rows.map(r => ({
+    const picks = pl.rows.filter(r => !r.zeroRestock).map(r => ({
       machine,
       lane_no:      String(r.laneNo),
       product_id:   r.productId,
@@ -1820,6 +1818,7 @@
       out_of_stock: r.outOfStock ? 1 : 0,
       pick_date:    today
     }))
+    if (!picks.length) return
     await window.api.savePicks(picks)
     const pendingRaw = await window.api.getPendingInTransit()
     currentPending = pendingRaw || {}
@@ -2577,7 +2576,7 @@ function bufRenderMachineList(filter) {
       const saved = await window.api.loadPickEdit(m.machine, dateKey)
       const replMap = {}
       if (saved?.rows) saved.rows.forEach(r => { if (r.replacement) replMap[String(r.no)] = r.replacement })
-      const rows = pl.rows.map(r => ({ ...r, replacement: replMap[String(r.no)] || '' }))
+      const rows = pl.rows.filter(r => !r.zeroRestock).map(r => ({ ...r, replacement: replMap[String(r.no)] || '' }))
       return { machine: m.machine, team: m.team, date: dateFormatted, rows }
     }))).filter(m => m.rows.length > 0)
     if (!data.length) return
@@ -2603,7 +2602,8 @@ function bufRenderMachineList(filter) {
     const saved = await window.api.loadPickEdit(machine, dateKey)
     const replMap = {}
     if (saved?.rows) saved.rows.forEach(r => { if (r.replacement) replMap[String(r.no)] = r.replacement })
-    const rows = pl.rows.map(r => ({ ...r, replacement: replMap[String(r.no)] || '' }))
+    const rows = pl.rows.filter(r => !r.zeroRestock).map(r => ({ ...r, replacement: replMap[String(r.no)] || '' }))
+    if (!rows.length) return
     const result = await window.api.printAll([{ machine, team, date: dateFormatted, rows }], pages)
     if (result && result.ok) alert('PDF saved: ' + result.filePath)
   }
