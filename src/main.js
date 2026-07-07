@@ -9,7 +9,7 @@ const CRED_FILE     = path.join(app.getPath('userData'), 'credentials.enc')
 const SETTINGS_FILE = path.join(app.getPath('userData'), 'settings.json')
 const LAST_REPORT   = path.join(ROOT, 'db', 'last_report.xlsx')
 const LAST_DIFFS    = path.join(ROOT, 'db', 'last_diffs.json')
-const DEFAULT_SETTINGS = { menuBar: false, showConsole: false, closeTray: false, notifyChanges: false, autoDownload: false, autoDownloadInterval: 30, headedBrowser: false, landingUrl: 'https://vendingportal.azurewebsites.net/SuperAdmin/SPLogin.aspx', restockMode: 'normal', q3ThresholdPct: 50 }
+const DEFAULT_SETTINGS = { menuBar: false, showConsole: false, closeTray: false, notifyChanges: false, autoDownload: false, autoDownloadInterval: 30, headedBrowser: false, landingUrl: 'https://vendingportal.azurewebsites.net/SuperAdmin/SPLogin.aspx', restockMode: 'normal', q3ThresholdPct: 50, uiZoom: 100 }
 const F9_TRIGGER    = path.join(ROOT, 'db', '.f9_trigger')
 const BROWSER_STOP  = path.join(ROOT, 'db', '.browser_stop')
 const ICON_PNG = path.join(ROOT, 'asset', 'image', 'icon_nobg.png')
@@ -462,7 +462,7 @@ ipcMain.handle('print-all-picking-lists', async (_, { data, pages }) => {
     return `<div class="page"><table><thead><tr class="mhd"><th colspan="6"><div class="hdr"><span>${esc(m.date)}</span><span>${esc(m.machine)} ${esc(m.team)}</span></div></th></tr><tr><th>No.</th><th>Product Name</th><th>Replacement</th><th>Bal Qty</th><th>Lane Size</th><th>Restock</th></tr></thead><tbody>${rows}</tbody></table></div>`
   }).join('')
 
-  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{box-sizing:border-box;margin:0;padding:0}:root{--fs:11px}body{font-family:Arial,sans-serif;font-size:var(--fs);width:186mm}@page{size:A4 portrait;margin:12mm}.page{page-break-after:always;break-after:page}.page:last-child{page-break-after:avoid;break-after:avoid}tr.mhd th{border:none;padding:0 0 0.36em}.hdr{display:flex;justify-content:space-between;font-size:13px;font-weight:bold;padding-bottom:0.36em;border-bottom:1.5px solid #000}table{width:100%;border-collapse:collapse;font-size:1em}th,td{border:1px dashed #aaa;padding:0.36em 0.55em;text-align:left}th{font-weight:600}th:nth-child(1){width:5%}th:nth-child(2){width:38%}th:nth-child(3){width:22%}th:nth-child(4),th:nth-child(5),th:nth-child(6){width:10%;text-align:center}td:nth-child(4),td:nth-child(5),td:nth-child(6){text-align:center}tr{page-break-inside:avoid}tr.rep td.orig{text-decoration:line-through;color:#777}tr.rep td.col1{background-color:#ffffa0!important;font-weight:500}</style></head><body>${pageHtml}</body></html>`
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{box-sizing:border-box;margin:0;padding:0}:root{--fs:11px}body{font-family:'Calibri Light',Calibri,Arial,sans-serif;font-size:var(--fs);width:186mm}@page{size:A4 portrait;margin:12mm}.page{page-break-after:always;break-after:page}.page:last-child{page-break-after:avoid;break-after:avoid}tr.mhd th{border:none;padding:0 0 0.36em}.hdr{display:flex;justify-content:space-between;font-size:13px;font-weight:bold;padding-bottom:0.36em;border-bottom:1.5px solid #000}table{width:100%;border-collapse:collapse;font-size:1em}th,td{border:1px dashed #aaa;padding:0.36em 0.55em;text-align:left}th{font-weight:600}th:nth-child(1){width:5%}th:nth-child(2){width:38%}th:nth-child(3){width:22%}th:nth-child(4),th:nth-child(5),th:nth-child(6){width:10%;text-align:center}td:nth-child(4),td:nth-child(5),td:nth-child(6){text-align:center}tr{page-break-inside:avoid}tr.rep td.orig{text-decoration:line-through;color:#777}tr.rep td.col1{background-color:#ffffa0!important;font-weight:500}</style></head><body>${pageHtml}</body></html>`
 
   const defaultPath = settings.lastPdfPath || path.join(os.homedir(), 'Desktop', 'picking-list.pdf')
   const { canceled, filePath } = await dialog.showSaveDialog({ defaultPath, filters: [{ name: 'PDF', extensions: ['pdf'] }] })
@@ -566,7 +566,7 @@ ipcMain.handle('print-slow-movers', async (_, { rows, dateRange }) => {
   ).join('')
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
     *{box-sizing:border-box;margin:0;padding:0}
-    body{font-family:Arial,sans-serif;font-size:11px}
+    body{font-family:'Calibri Light',Calibri,Arial,sans-serif;font-size:11px}
     @page{size:A4 portrait;margin:15mm}
     h2{font-size:14px;margin-bottom:3px}
     .sub{font-size:10px;color:#555;margin-bottom:12px}
@@ -612,7 +612,7 @@ ipcMain.handle('export-queue-excel', async (_, rows) => {
   return { ok: true, filePath }
 })
 
-ipcMain.handle('export-queue-pdf', async (_, { rows, pages }) => {
+ipcMain.handle('export-queue-pdf', async (_, { rows, pages, date }) => {
   function esc(s) {
     return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
   }
@@ -625,9 +625,11 @@ ipcMain.handle('export-queue-pdf', async (_, { rows, pages }) => {
     if (!byMachine[r.machine]) { byMachine[r.machine] = []; machines.push(r.machine) }
     byMachine[r.machine].push(r)
   })
+  // Each machine gets its own .page section so it starts on a fresh sheet;
+  // the pages limit is a per-machine budget, not a whole-document one.
   const tables = machines.map(mach => {
     const tableRows = byMachine[mach].map(r => `<tr><td>${esc(r.lane)}</td><td>${esc(r.product)}</td><td>${esc(r.qty)}</td></tr>`).join('')
-    return `<table><thead><tr class="mhd"><th colspan="3">${esc(mach)}</th></tr><tr><th>Lane</th><th>Product Name</th><th>Qty</th></tr></thead><tbody>${tableRows}</tbody></table>`
+    return `<div class="page"><table><thead><tr class="mhd"><th colspan="3"><div class="mh"><span>${esc(mach)}</span><span>${esc(date)}</span></div></th></tr><tr><th>Lane</th><th>Product Name</th><th>Qty</th></tr></thead><tbody>${tableRows}</tbody></table></div>`
   }).join('')
   // Font sizes/padding in em relative to --fs so the fit loop below can scale
   // the whole document by changing one variable. body width = A4 printable
@@ -635,12 +637,15 @@ ipcMain.handle('export-queue-pdf', async (_, { rows, pages }) => {
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
     *{box-sizing:border-box;margin:0;padding:0}
     :root{--fs:11px}
-    body{font-family:Arial,sans-serif;font-size:var(--fs);width:180mm}
+    body{font-family:'Calibri Light',Calibri,Arial,sans-serif;font-size:var(--fs);width:180mm}
     @page{size:A4 portrait;margin:15mm}
-    table{width:100%;border-collapse:collapse;margin-bottom:1.1em}
+    .page{page-break-after:always;break-after:page}
+    .page:last-child{page-break-after:avoid;break-after:avoid}
+    table{width:100%;border-collapse:collapse}
     th,td{border:1px dashed #aaa;padding:0.36em 0.55em;text-align:left}
     th{font-weight:600;font-size:0.9em;text-transform:uppercase}
     tr.mhd th{border:none;font-size:1.1em;text-transform:none;padding:0.3em 0.1em}
+    .mh{display:flex;justify-content:space-between}
     th:nth-child(3),td:nth-child(3){width:15%;text-align:center}
     tr{page-break-inside:avoid}
   </style></head><body>
@@ -655,28 +660,30 @@ ipcMain.handle('export-queue-pdf', async (_, { rows, pages }) => {
   printWin.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html))
   await new Promise(resolve => printWin.webContents.once('did-finish-load', resolve))
 
-  // Shrink font until content fits the requested page count (min 5px).
+  // Shrink font until every machine's section fits its page budget (min 5px).
+  // pages = max pages per machine (each .page starts on a fresh sheet).
   // Simulate real print pagination: <thead> repeats on every page and rows
   // never split across pages, so continuous scrollHeight underestimates.
   const targetPages = Math.max(1, Number(pages) || 1)
   const PAGE_H = (297 - 30) / 25.4 * 96  // A4 printable height in CSS px (15mm margins)
   const simScript = `(() => {
     const pageH = ${PAGE_H.toFixed(2)};
-    const tables = document.querySelectorAll('table');
-    if (!tables.length) return 1;
-    const bodyTop = document.body.getBoundingClientRect().top;
-    let used = tables[0].getBoundingClientRect().top - bodyTop;
-    let n = 1;
-    tables.forEach(table => {
-      const theadH = table.querySelector('thead').getBoundingClientRect().height;
-      if (used + theadH > pageH) { n++; used = 0; }
-      used += theadH;
-      table.querySelectorAll('tbody tr').forEach(tr => {
+    let maxPages = 1;
+    document.querySelectorAll('.page').forEach(pg => {
+      const table = pg.querySelector('table');
+      const thead = pg.querySelector('thead');
+      if (!table || !thead) return;
+      const headerH = table.getBoundingClientRect().top - pg.getBoundingClientRect().top;
+      const theadH = thead.getBoundingClientRect().height;
+      let used = headerH + theadH;
+      let n = 1;
+      pg.querySelectorAll('tbody tr').forEach(tr => {
         const h = tr.getBoundingClientRect().height;
         if (used + h > pageH) { n++; used = theadH + h; } else { used += h; }
       });
+      maxPages = Math.max(maxPages, n);
     });
-    return n;
+    return maxPages;
   })()`
   let fs2 = 11
   for (let i = 0; i < 10; i++) {

@@ -1,107 +1,26 @@
 {
   "_note": "Generated from TABLE A new.xlsx. Key = report sheet name. scheduleDays empty => use 25% rule. UTARSL assigned to team 9058 (confirmed 2026-06-20). 9058 KMS/KK machines excluded (different portal account). ISB/UOW Cafe excluded (JV machines, separate account).",
   "machines": {
-    "KK3 M3": {
-      "team": "5530",
-      "scheduleDays": [
-        "Sat",
-        "Mon",
-        "Tue",
-        "Wed",
-        "Thu",
-        "Fri"
-      ]
-    },
-    "MF LAW M3": {
-      "team": "5530",
-      "scheduleDays": [
-        "Sat",
-        "Mon",
-        "Tue",
-        "Wed",
-        "Thu",
-        "Fri"
-      ]
-    },
-    "Sastera A M5": {
-      "team": "5530",
-      "scheduleDays": [
-        "Sat",
-        "Mon",
-        "Tue",
-        "Wed",
-        "Thu",
-        "Fri"
-      ]
-    },
-    "KK1 M3": {
-      "team": "5530",
-      "scheduleDays": [
-        "Sat",
-        "Mon",
-        "Tue",
-        "Wed",
-        "Thu",
-        "Fri"
-      ]
-    },
-    "KK5 M3": {
-      "team": "5530",
-      "scheduleDays": []
-    },
-    "KK11A New M3": {
-      "team": "5530",
-      "scheduleDays": []
-    },
-    "KK 11C M5": {
-      "team": "5530",
-      "scheduleDays": []
-    },
-    "KK2E M3": {
-      "team": "5530",
-      "scheduleDays": []
-    },
-    "KK 2F M5": {
-      "team": "5530",
-      "scheduleDays": []
-    },
-    "KK9 M3": {
-      "team": "5530",
-      "scheduleDays": []
-    },
     "Anjung Ilmu M3": {
       "team": "5530",
       "scheduleDays": []
     },
-    "KK6B M5": {
-      "team": "5530",
+    "Columbia Bukit Raja M3": {
+      "team": "1126",
       "scheduleDays": []
     },
-    "KK12C M3": {
-      "team": "5530",
-      "scheduleDays": []
+    "Concord Hostel": {
+      "team": "1126",
+      "scheduleDays": [
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri",
+        "Sat"
+      ]
     },
-    "Perdana Siswa M4 Single": {
-      "team": "5530",
-      "scheduleDays": []
-    },
-    "KK12A2 M3": {
-      "team": "5530",
-      "scheduleDays": []
-    },
-    "KK12D M3": {
-      "team": "5530",
-      "scheduleDays": []
-    },
-    "KK4F M3": {
-      "team": "5530",
-      "scheduleDays": []
-    },
-    "KK7 M3": {
-      "team": "5530",
-      "scheduleDays": []
-    },
-    "MF TERMAJU M5": {
+    "Dataran Sains M3": {
       "team": "5530",
       "scheduleDays": []
     },
@@ -109,7 +28,85 @@
       "team": "5530",
       "scheduleDays": []
     },
-    "Dataran Sains M3": {
+    "ELKEN HQ GF M4 Single": {
+      "team": "1126",
+      "scheduleDays": []
+    },
+    "KK 10 M5": {
+      "team": "5530",
+      "scheduleDays": []
+    },
+    "KK 11C M5": {
+      "team": "5530",
+      "scheduleDays": [
+        "Mon"
+      ]
+    },
+    "KK 2F M5": {
+      "team": "5530",
+      "scheduleDays": []
+    },
+    "KK1 M3": {
+      "team": "5530",
+      "scheduleDays": [
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri",
+        "Sat"
+      ]
+    },
+    "KK11A New M3": {
+      "team": "5530",
+      "scheduleDays": [
+        "Mon"
+      ]
+    },
+    "KK12A2 M3": {
+      "team": "5530",
+      "scheduleDays": []
+    },
+    "KK12C M3": {
+      "team": "5530",
+      "scheduleDays": []
+    },
+    "KK12D M3": {
+      "team": "5530",
+      "scheduleDays": [
+        "Mon"
+      ]
+    },
+    "KK2E M3": {
+      "team": "5530",
+      "scheduleDays": [
+        "Mon"
+      ]
+    },
+    "KK3 M3": {
+      "team": "5530",
+      "scheduleDays": [
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri",
+        "Sat"
+      ]
+    },
+    "KK4F M3": {
+      "team": "5530",
+      "scheduleDays": []
+    },
+    "KK5 M3": {
+      "team": "5530",
+      "scheduleDays": []
+    },
+    "KK6B M5": {
+      "team": "5530",
+      "scheduleDays": []
+    },
+    "KK7 M3": {
       "team": "5530",
       "scheduleDays": []
     },
@@ -121,22 +118,11 @@
       "team": "5530",
       "scheduleDays": []
     },
-    "KK 10 M5": {
+    "KK9 M3": {
       "team": "5530",
-      "scheduleDays": []
-    },
-
-    "UK KTSN B M3": {
-      "team": "1126",
-      "scheduleDays": []
-    },
-    "UK KTSN G M3": {
-      "team": "1126",
-      "scheduleDays": []
-    },
-    "UK KTSN DEWAN M3": {
-      "team": "1126",
-      "scheduleDays": []
+      "scheduleDays": [
+        "Mon"
+      ]
     },
     "KPZ Chilax M3": {
       "team": "1126",
@@ -146,7 +132,55 @@
       "team": "1126",
       "scheduleDays": []
     },
-    "UPM Perhutanan": {
+    "MF LAW M3": {
+      "team": "5530",
+      "scheduleDays": [
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri",
+        "Sat"
+      ]
+    },
+    "MF TERMAJU M5": {
+      "team": "5530",
+      "scheduleDays": []
+    },
+    "Perdana Siswa M4 Single": {
+      "team": "5530",
+      "scheduleDays": []
+    },
+    "Sastera A M5": {
+      "team": "5530",
+      "scheduleDays": [
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri",
+        "Sat"
+      ]
+    },
+    "UK KTSN B M3": {
+      "team": "1126",
+      "scheduleDays": [
+        "Mon"
+      ]
+    },
+    "UK KTSN DEWAN M3": {
+      "team": "1126",
+      "scheduleDays": [
+        "Mon"
+      ]
+    },
+    "UK KTSN G M3": {
+      "team": "1126",
+      "scheduleDays": [
+        "Mon"
+      ]
+    },
+    "UKB Bahasa Dan Linguistik M3 Twin": {
       "team": "1126",
       "scheduleDays": []
     },
@@ -154,67 +188,15 @@
       "team": "1126",
       "scheduleDays": []
     },
-    "UKB Bahasa Dan Linguistik M3 Twin": {
-      "team": "1126",
-      "scheduleDays": []
-    },
     "UKB Perpustakaan M4": {
       "team": "1126",
       "scheduleDays": []
-    },
-    "XIAMEN 1 M3": {
-      "team": "1126",
-      "scheduleDays": [
-        "Sat",
-        "Mon",
-        "Tue",
-        "Wed",
-        "Thu",
-        "Fri"
-      ]
-    },
-    "XIAMEN 2 M3": {
-      "team": "1126",
-      "scheduleDays": [
-        "Sat",
-        "Mon",
-        "Tue",
-        "Wed",
-        "Thu",
-        "Fri"
-      ]
-    },
-    "Xiamen B1 M3": {
-      "team": "1126",
-      "scheduleDays": [
-        "Sat",
-        "Mon",
-        "Tue",
-        "Wed",
-        "Thu",
-        "Fri"
-      ]
-    },
-    "Concord Hostel": {
-      "team": "1126",
-      "scheduleDays": [
-        "Sat",
-        "Mon",
-        "Tue",
-        "Wed",
-        "Thu",
-        "Fri"
-      ]
     },
     "UOW Hostel M5 Twin": {
       "team": "1126",
       "scheduleDays": []
     },
-    "ELKEN HQ GF M4 Single": {
-      "team": "1126",
-      "scheduleDays": []
-    },
-    "Columbia Bukit Raja M3": {
+    "UPM Perhutanan": {
       "team": "1126",
       "scheduleDays": []
     },
@@ -230,16 +212,49 @@
         "Fri"
       ]
     },
+    "UTARSL KB L3A M4 Single": {
+      "team": "9058",
+      "scheduleDays": [
+        "Fri"
+      ]
+    },
     "UTARSL KB L8 M3 Twin": {
       "team": "9058",
       "scheduleDays": [
         "Fri"
       ]
     },
-    "UTARSL KB L3A M4 Single": {
-      "team": "9058",
+    "XIAMEN 1 M3": {
+      "team": "1126",
       "scheduleDays": [
-        "Fri"
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri",
+        "Sat"
+      ]
+    },
+    "XIAMEN 2 M3": {
+      "team": "1126",
+      "scheduleDays": [
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri",
+        "Sat"
+      ]
+    },
+    "Xiamen B1 M3": {
+      "team": "1126",
+      "scheduleDays": [
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri",
+        "Sat"
       ]
     }
   }

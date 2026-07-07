@@ -139,7 +139,7 @@ contextBridge.exposeInMainWorld('api', {
     return picking.suggestReplacements(pickRows, machineLanes, catalog, machineSales, globalSales, thresholdPct, topN)
   },
   exportQueueExcel: (rows) => ipcRenderer.invoke('export-queue-excel', rows),
-  exportQueuePdf:   (rows, pages) => ipcRenderer.invoke('export-queue-pdf', { rows, pages }),
+  exportQueuePdf:   (rows, pages, date) => ipcRenderer.invoke('export-queue-pdf', { rows, pages, date }),
   analyzeSlowMachine: (machine) => ipcRenderer.invoke('analyze-slow-machine', machine),
 })
 
