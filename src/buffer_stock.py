@@ -156,6 +156,13 @@ def cmd_suggest(data_db, sales_detail_db, lead_days=1.0, sembreak_factor=0.5, mi
     already covered by the restock qty itself. While pick history is thinner
     than min_oos picks for a pid, the threshold drops to the pick count, so a
     pid that sold out on its only recorded pick still qualifies.
+
+    Theoretical sell-out fallback: pick history only goes back days, but
+    daily_sales carries two years of txn data, and lane_size is a physical
+    machine spec that doesn't drift. If avg_daily x lead_days >= the pid's
+    total shelf capacity (sum of lane_size over its lanes), the pid must run
+    dry before the next refill even when filled to the brim — so it gets a
+    suggestion even without recorded sell-outs.
     """
     if not Path(sales_detail_db).exists():
         print(json.dumps({'ok': False, 'error': 'vending.db not found'}))
@@ -207,6 +214,11 @@ def cmd_suggest(data_db, sales_detail_db, lead_days=1.0, sembreak_factor=0.5, mi
         "SELECT machine, product_id, COUNT(*) FROM picking_history "
         "WHERE pick_date >= ? GROUP BY machine, product_id"
     )
+    # total shelf capacity per (machine, pid) — physical spec, stable over time
+    lane_caps = read_grouped(
+        "SELECT machine, pid, SUM(lane_size) FROM current_state "
+        "WHERE pid IS NOT NULL AND updated_at >= ? GROUP BY machine, pid"
+    )
 
     cur.execute("""
         SELECT machine, pid, SUM(qty) AS total_qty
@@ -217,12 +229,14 @@ def cmd_suggest(data_db, sales_detail_db, lead_days=1.0, sembreak_factor=0.5, mi
     suggestions = []
     data = {}
     for fname, pid, total_qty in cur.fetchall():
+        avg_daily = (total_qty or 0) / WINDOW_DAYS
         picks = pick_counts.get((fname, pid), 0)
         eff_min = min(min_oos, picks) if picks else min_oos
-        if oos_counts.get((fname, pid), 0) < eff_min:
+        cap = lane_caps.get((fname, pid), 0)
+        cap_risk = cap > 0 and avg_daily * lead_days >= cap
+        if oos_counts.get((fname, pid), 0) < eff_min and not cap_risk:
             sug_normal = sug_sembreak = 0
         else:
-            avg_daily = (total_qty or 0) / WINDOW_DAYS
             lanes = lane_counts.get((fname, pid)) or 1
             # per-pid suggestion rounded half-up, then ceil-divided per lane
             sug_normal   = -(-int(avg_daily * lead_days + 0.5) // lanes)
