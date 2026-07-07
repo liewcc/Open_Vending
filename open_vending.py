@@ -30,7 +30,7 @@ LOGIN_URL  = os.environ.get('OV_LANDING_URL') or _DEFAULT_LOGIN_URL
 REPORT_URL = "https://vendingportal.azurewebsites.net/SuperAdmin/SPReplenishmentV2.aspx"
 
 
-SQLITE_DB = DB_DIR / "data.db"
+SQLITE_DB = DB_DIR / "vending.db"
 
 
 def status(msg):
@@ -45,22 +45,25 @@ def import_to_sqlite(xlsx_path):
     now = datetime.datetime.now().isoformat()
 
     conn = sqlite3.connect(str(SQLITE_DB))
-    SCHEMA_VERSION = 3
+    conn.execute("PRAGMA journal_mode=WAL")
+    SCHEMA_VERSION = 4
     if conn.execute("PRAGMA user_version").fetchone()[0] < SCHEMA_VERSION:
+        # Bootstrap for a fresh/empty vending.db only. The normal path is
+        # migrate_to_vending.py, which creates these tables and sets
+        # user_version=4; this block must never drop existing data.
         conn.executescript("""
-            DROP TABLE IF EXISTS diffs;
-            DROP TABLE IF EXISTS report_rows;
-            DROP TABLE IF EXISTS snapshots;
-            DROP TABLE IF EXISTS current_state;
-            DROP TABLE IF EXISTS change_log;
-            CREATE TABLE current_state (
-                machine TEXT NOT NULL,
-                lane    TEXT NOT NULL,
-                restock INTEGER,
-                updated_at TEXT,
+            CREATE TABLE IF NOT EXISTS current_state (
+                machine      TEXT NOT NULL,
+                lane         TEXT NOT NULL,
+                restock      INTEGER,
+                updated_at   TEXT,
+                pid          TEXT,
+                product_name TEXT,
+                bal          INTEGER,
+                lane_size    INTEGER,
                 PRIMARY KEY (machine, lane)
             );
-            CREATE TABLE change_log (
+            CREATE TABLE IF NOT EXISTS change_log (
                 id           INTEGER PRIMARY KEY AUTOINCREMENT,
                 detected_at  TEXT NOT NULL,
                 machine      TEXT NOT NULL,
@@ -68,9 +71,31 @@ def import_to_sqlite(xlsx_path):
                 old_restock  INTEGER,
                 new_restock  INTEGER
             );
+            CREATE TABLE IF NOT EXISTS lane_events (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                detected_at  TEXT NOT NULL,
+                machine      TEXT NOT NULL,
+                lane         TEXT NOT NULL,
+                pid          TEXT,
+                product_name TEXT,
+                old_bal      INTEGER,
+                new_bal      INTEGER,
+                old_restock  INTEGER,
+                new_restock  INTEGER,
+                lane_size    INTEGER
+            );
+            CREATE INDEX IF NOT EXISTS idx_lane_events_mpd ON lane_events (machine, pid, detected_at);
         """)
         conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
         conn.commit()
+
+    def to_int(v):
+        if v is None:
+            return None
+        try:
+            return int(v)
+        except (TypeError, ValueError):
+            return None
 
     changes = []
     for ws in wb.worksheets:
@@ -78,43 +103,93 @@ def import_to_sqlite(xlsx_path):
         rows = list(ws.iter_rows(values_only=True))
         if len(rows) < 2:
             continue
-        # locate Restock column from header row
-        header = rows[0]
-        try:
-            restock_idx = next(i for i, h in enumerate(header) if h and str(h).strip().lower() == 'restock')
-        except StopIteration:
+        # locate columns from header row (report: No. | Product ID |
+        # Product Name | Bal Qty | Lane Size | Restock)
+        header = [str(h).strip().lower() if h else '' for h in rows[0]]
+        def col(name):
+            try:
+                return header.index(name)
+            except ValueError:
+                return None
+        restock_idx = col('restock')
+        if restock_idx is None:
             continue
+        pid_idx  = col('product id')
+        name_idx = col('product name')
+        bal_idx  = col('bal qty')
+        size_idx = col('lane size')
+
+        def cell(row, idx):
+            return row[idx] if idx is not None and idx < len(row) else None
+
         for row in rows[1:]:
             if not row or row[0] is None:
                 continue
             lane = str(row[0])
-            restock = row[restock_idx] if restock_idx < len(row) else None
+            restock = to_int(cell(row, restock_idx))
             if restock is None:
                 continue
-            restock = int(restock) if isinstance(restock, float) else restock
+            pid       = cell(row, pid_idx)
+            pid       = str(int(pid)) if isinstance(pid, (int, float)) else (str(pid).strip() if pid else None)
+            pname     = str(cell(row, name_idx)).strip() if cell(row, name_idx) else None
+            bal       = to_int(cell(row, bal_idx))
+            lane_size = to_int(cell(row, size_idx))
 
             existing = conn.execute(
-                "SELECT restock FROM current_state WHERE machine=? AND lane=?",
+                "SELECT restock, pid, bal FROM current_state WHERE machine=? AND lane=?",
                 (machine, lane)
             ).fetchone()
 
             if existing is None:
                 conn.execute(
-                    "INSERT INTO current_state (machine, lane, restock, updated_at) VALUES (?,?,?,?)",
-                    (machine, lane, restock, now)
+                    "INSERT INTO current_state (machine, lane, restock, updated_at, pid, product_name, bal, lane_size) "
+                    "VALUES (?,?,?,?,?,?,?,?)",
+                    (machine, lane, restock, now, pid, pname, bal, lane_size)
                 )
-            elif existing[0] != restock:
+                continue
+
+            old_restock, old_pid, old_bal = existing
+            restock_changed = old_restock != restock
+            # pid/bal migrated rows start as NULL — filling them in is a
+            # backfill, not a real event
+            pid_changed = old_pid is not None and pid is not None and old_pid != pid
+            bal_changed = old_bal is not None and bal is not None and old_bal != bal
+
+            if restock_changed:
                 conn.execute(
                     "INSERT INTO change_log (detected_at, machine, lane, old_restock, new_restock) VALUES (?,?,?,?,?)",
-                    (now, machine, lane, existing[0], restock)
+                    (now, machine, lane, old_restock, restock)
+                )
+                changes.append({'machine': machine, 'lane': lane, 'old': old_restock, 'new': restock})
+
+            if restock_changed or pid_changed or bal_changed:
+                conn.execute(
+                    "INSERT INTO lane_events (detected_at, machine, lane, pid, product_name, "
+                    "old_bal, new_bal, old_restock, new_restock, lane_size) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                    (now, machine, lane, pid, pname, old_bal, bal, old_restock, restock, lane_size)
                 )
                 conn.execute(
-                    "UPDATE current_state SET restock=?, updated_at=? WHERE machine=? AND lane=?",
-                    (restock, now, machine, lane)
+                    "UPDATE current_state SET restock=?, updated_at=?, pid=?, product_name=?, bal=?, lane_size=? "
+                    "WHERE machine=? AND lane=?",
+                    (restock, now, pid, pname, bal, lane_size, machine, lane)
                 )
-                changes.append({'machine': machine, 'lane': lane, 'old': existing[0], 'new': restock})
+            elif old_pid is None or old_bal is None:
+                # silent backfill of newly captured columns (no updated_at bump)
+                conn.execute(
+                    "UPDATE current_state SET pid=?, product_name=?, bal=?, lane_size=? WHERE machine=? AND lane=?",
+                    (pid, pname, bal, lane_size, machine, lane)
+                )
 
     wb.close()
+
+    # refresh realtime estimates in the derived daily_sales layer
+    try:
+        sys.path.insert(0, str(Path(__file__).parent / "src"))
+        import daily_sales
+        daily_sales.refresh_est(conn)
+    except Exception as e:
+        status(f"daily_sales refresh failed: {e}")
+
     conn.commit()
     conn.close()
 
@@ -125,6 +200,17 @@ def import_to_sqlite(xlsx_path):
     for f in DB_DIR.glob("*.xlsx"):
         if f.name != "last_report.xlsx":
             shutil.move(str(f), str(tmp_dir / f.name))
+
+    # prune archived reports older than 7 days — their data already lives
+    # in change_log / lane_events / daily_sales
+    import time
+    cutoff = time.time() - 7 * 86400
+    for f in tmp_dir.glob("*.xlsx"):
+        try:
+            if f.stat().st_mtime < cutoff:
+                f.unlink()
+        except OSError:
+            pass
 
     status(f"DB: {len(changes)} restock change(s) detected")
     return changes

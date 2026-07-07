@@ -1,7 +1,7 @@
 import sqlite3, json, sys
 from pathlib import Path
 
-DB = Path(__file__).parent.parent / "db" / "data.db"
+DB = Path(__file__).parent.parent / "db" / "vending.db"
 
 if not DB.exists():
     print("[]"); sys.exit(0)

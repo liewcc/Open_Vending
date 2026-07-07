@@ -124,22 +124,23 @@ def analyze_db(db_path, top_n):
 
 
 def analyze_machine(sales_detail_db, machine):
-    """Per-machine slow/fast mover ranking, all-time (no window), from sales_detail.db.
+    """Per-machine slow/fast mover ranking, all-time (no window), from daily_sales.
 
     Unlike analyze_db() (global, uses the separate slow_movers.db built from
-    product.csv + a sales CSV), this reads sales_detail.db directly — same
-    source Q3's replacement suggestions use — since it already has
-    franchisename. The picking-list report supplies which products are
-    currently stocked on the machine; this only supplies sales counts.
+    product.csv + a sales CSV), this reads the unified daily_sales layer in
+    vending.db — same source Q3's replacement suggestions use. It includes
+    realtime estimates, so last_sale stays current between CSV imports. The
+    picking-list report supplies which products are currently stocked on the
+    machine; this only supplies sales counts.
     """
     from pathlib import Path
     if not Path(sales_detail_db).exists():
-        print(json.dumps({'ok': False, 'error': 'sales_detail.db not found — build it in Settings first'}))
+        print(json.dumps({'ok': False, 'error': 'vending.db not found — build it in Settings first'}))
         return
 
     conn = sqlite3.connect(sales_detail_db)
     db_rows = conn.execute(
-        "SELECT pid, COUNT(*), MAX(transdate) FROM sales WHERE franchisename=? GROUP BY pid",
+        "SELECT pid, SUM(qty), MAX(sale_date) FROM daily_sales WHERE machine=? GROUP BY pid",
         (machine,),
     ).fetchall()
     conn.close()

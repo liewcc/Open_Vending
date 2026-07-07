@@ -308,11 +308,14 @@ function buildPickingList(reportRows, machine, pendingByLane, oosByLane, forecas
     const pid = String(row[2]);
     const forecastQty = (semBreak || zeroRestock) ? 0 : Math.round((forecastByPid[pid] || 0));
 
-    // Step F: buffer qty
+    // Step F: buffer qty — covers lead-time sales (pick → refill), so it can
+    // never exceed what's left in the lane (bal), and the total load can
+    // never exceed the lane's capacity
     const laneSize = num(row[5]);
-    const bufferQty = zeroRestock ? 0 : (bufferByLane[laneNo] || 0);
+    const bufferQty = zeroRestock ? 0 : Math.min(bufferByLane[laneNo] || 0, bal);
     const cappedRestock = laneSize > 0 ? Math.min(actualRestock + forecastQty, laneSize) : actualRestock + forecastQty;
-    const finalRestock = Math.max(0, cappedRestock + bufferQty);
+    const withBuffer = cappedRestock + bufferQty;
+    const finalRestock = Math.max(0, laneSize > 0 ? Math.min(withBuffer, laneSize) : withBuffer);
 
     visibleRows.push({
       no: row[1],
@@ -450,6 +453,29 @@ if (require.main === module) {
   assert.strictEqual(plZero.rows[0].restock, 0);
   assert.strictEqual(plZero.rows[0].forecastQty, 0);
   assert.strictEqual(plZero.rows[0].bufferQty, 0);
+
+  // buffer is capped by bal (lead-time sales can't exceed what's in the machine)
+  const plBuf = buildPickingList(mockReportList, 'MachX', {}, {}, {}, false, { '3': 4, '4': 8 });
+  const rOut = plBuf.rows.find(r => r.productId === 'P3');   // bal 0 → buffer 0
+  assert.strictEqual(rOut.bufferQty, 0);
+  assert.strictEqual(rOut.restock, 4);
+  const rCap = plBuf.rows.find(r => r.productId === 'P4');   // bal 5 → buffer 8 capped to 5
+  assert.strictEqual(rCap.bufferQty, 5);
+  assert.strictEqual(rCap.restock, 8);                       // 3 + 5, within laneSize 10
+
+  // restock + buffer can never exceed lane size
+  const mockReportLaneCap = [
+    ['Machine','No.','Product ID','Product Name','Bal Qty','Lane Size','Restock'],
+    ['MachL', '1', 'P1', 'A', '5', '6', '3'],
+  ];
+  const plLaneCap = buildPickingList(mockReportLaneCap, 'MachL', {}, {}, {}, false, { '1': 5 });
+  assert.strictEqual(plLaneCap.rows[0].bufferQty, 5);        // bal 5 allows it
+  assert.strictEqual(plLaneCap.rows[0].restock, 6);          // 3 + 5 = 8 → capped to laneSize 6
+
+  // negative (sem-break) buffer still reduces restock, floor at 0
+  const plNeg = buildPickingList(mockReportLaneCap, 'MachL', {}, {}, {}, false, { '1': -5 });
+  assert.strictEqual(plNeg.rows[0].bufferQty, -5);
+  assert.strictEqual(plNeg.rows[0].restock, 0);              // 3 - 5 → floored
 
   // fully in-transit lane counts as zeroRestock too
   const plIT = buildPickingList(mockReportList, 'MachX', { '4': 3 }, {});

@@ -1,7 +1,7 @@
 import sqlite3, json, sys
 from pathlib import Path
 
-DB = Path(__file__).parent.parent / "db" / "data.db"
+DB = Path(__file__).parent.parent / "db" / "vending.db"
 
 def get_conn():
     conn = sqlite3.connect(str(DB))

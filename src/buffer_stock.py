@@ -4,12 +4,16 @@ Commands:
   init        <data_db>                   Create buffer_stock + buffer_suggestions tables
   get         <data_db>                   Return all buffer settings as JSON
   set         <data_db>                   stdin: [{machine, lane_no, pid, normal_qty, sembreak_qty}, ...]
-  suggest     <data_db> <sales_detail_db> Calculate suggestions, save to DB, return data
+  suggest     <data_db> <sales_detail_db> [lead_days] [sembreak_factor] [min_oos]
+                                          Calculate suggestions, save to DB, return data
   get_suggest <data_db>                   Return saved suggestions from DB
   get_lane_types <data_db>               Return {pid: lane_type} dict from product_lane_type table
 """
 import sys, json, sqlite3
+from datetime import datetime, timedelta
 from pathlib import Path
+
+WINDOW_DAYS = 30  # sales window for the daily average, anchored to newest sale_date
 
 
 def get_conn(db_path):
@@ -133,32 +137,96 @@ def cmd_set(db_path):
     print(json.dumps({'ok': True, 'saved': len(rows)}))
 
 
-def cmd_suggest(data_db, sales_detail_db):
-    """Calculate suggestions from sales history, save to buffer_suggestions, return data."""
+def cmd_suggest(data_db, sales_detail_db, lead_days=1.0, sembreak_factor=0.5, min_oos=2):
+    """Calculate suggestions from sales history, save to buffer_suggestions, return data.
+
+    The buffer covers units sold between picking (data export) and refill:
+      suggestion = true daily average x lead_days, rounded half-up,
+      then split across the lanes carrying that pid (ceil division —
+      buffer_suggestions has no lane dimension, so every lane of the pid
+      gets the same per-lane share).
+    True daily average = total qty in the last WINDOW_DAYS / WINDOW_DAYS, so
+    zero-sales days count toward the denominator. The window is anchored to
+    the newest sale_date in daily_sales (which includes realtime estimates
+    from restock scans, so it stays current between CSV imports), not today.
+    Sem-break demand is assumed to be sembreak_factor of normal demand.
+
+    A pid only gets a suggestion if it sold out (picking_history.out_of_stock)
+    at least min_oos times inside the window — lanes that never run dry are
+    already covered by the restock qty itself. While pick history is thinner
+    than min_oos picks for a pid, the threshold drops to the pick count, so a
+    pid that sold out on its only recorded pick still qualifies.
+    """
     if not Path(sales_detail_db).exists():
-        print(json.dumps({'ok': False, 'error': 'sales_detail.db not found'}))
+        print(json.dumps({'ok': False, 'error': 'vending.db not found'}))
         return
 
-    # Calculate suggestions from sales
+    # Calculate suggestions from the unified daily_sales layer
     sales_conn = sqlite3.connect(sales_detail_db)
     cur = sales_conn.cursor()
+    newest = cur.execute("SELECT MAX(sale_date) FROM daily_sales").fetchone()[0]
+    if not newest:
+        sales_conn.close()
+        print(json.dumps({'ok': False, 'error': 'no sales data — rebuild daily_sales first'}))
+        return
+    end = datetime.strptime(newest[:10], '%Y-%m-%d').date()
+    start = (end - timedelta(days=WINDOW_DAYS - 1)).isoformat()
+
+    # machine name canonicalization (Excel 31-char sheet truncation) —
+    # current_state/picking_history use sheet names, daily_sales uses canonical
+    def read_grouped(sql):
+        out = {}
+        try:
+            for m, pid, cnt in cur.execute(sql, (start,)):
+                key = (alias.get(m, m), pid)
+                out[key] = out.get(key, 0) + (cnt or 0)
+        except sqlite3.OperationalError:
+            pass  # table missing (fresh DB) — leave empty
+        return out
+
+    try:
+        alias = dict(cur.execute(
+            "SELECT sheet_alias, canonical FROM machines WHERE sheet_alias IS NOT NULL"
+        ).fetchall())
+    except sqlite3.OperationalError:
+        alias = {}
+
+    # lanes per (machine, pid) — current_state rows are never deleted, so only
+    # count lanes still updated inside the window (a lane with no bal/restock
+    # change all window had zero sales and doesn't need a buffer share anyway)
+    lane_counts = read_grouped(
+        "SELECT machine, pid, COUNT(*) FROM current_state "
+        "WHERE pid IS NOT NULL AND updated_at >= ? GROUP BY machine, pid"
+    )
+    # sell-out count and pick count per (machine, pid) inside the window
+    oos_counts = read_grouped(
+        "SELECT machine, product_id, SUM(out_of_stock) FROM picking_history "
+        "WHERE pick_date >= ? GROUP BY machine, product_id"
+    )
+    pick_counts = read_grouped(
+        "SELECT machine, product_id, COUNT(*) FROM picking_history "
+        "WHERE pick_date >= ? GROUP BY machine, product_id"
+    )
+
     cur.execute("""
-        SELECT franchisename, pid,
-               AVG(daily_cnt) AS avg_qty,
-               MAX(daily_cnt) AS max_qty,
-               MIN(daily_cnt) AS min_qty
-        FROM (
-            SELECT franchisename, pid, transdate, COUNT(*) AS daily_cnt
-            FROM sales
-            GROUP BY franchisename, pid, transdate
-        )
-        GROUP BY franchisename, pid
-    """)
+        SELECT machine, pid, SUM(qty) AS total_qty
+        FROM daily_sales
+        WHERE sale_date >= ?
+        GROUP BY machine, pid
+    """, (start,))
     suggestions = []
     data = {}
-    for fname, pid, avg_qty, max_qty, min_qty in cur.fetchall():
-        sug_normal   = max(0, round((max_qty or 0) - (avg_qty or 0)))
-        sug_sembreak = min(0, round((min_qty or 0) - (avg_qty or 0)))
+    for fname, pid, total_qty in cur.fetchall():
+        picks = pick_counts.get((fname, pid), 0)
+        eff_min = min(min_oos, picks) if picks else min_oos
+        if oos_counts.get((fname, pid), 0) < eff_min:
+            sug_normal = sug_sembreak = 0
+        else:
+            avg_daily = (total_qty or 0) / WINDOW_DAYS
+            lanes = lane_counts.get((fname, pid)) or 1
+            # per-pid suggestion rounded half-up, then ceil-divided per lane
+            sug_normal   = -(-int(avg_daily * lead_days + 0.5) // lanes)
+            sug_sembreak = -(-int(avg_daily * lead_days * sembreak_factor + 0.5) // lanes)
         data.setdefault(fname, {})[pid] = {
             'normal': sug_normal,
             'sembreak': sug_sembreak
@@ -170,9 +238,11 @@ def cmd_suggest(data_db, sales_detail_db):
         })
     sales_conn.close()
 
-    # Save to buffer_suggestions in data_db
+    # Save to buffer_suggestions in data_db (full refresh — stale rows for
+    # products with no sales in the window must not survive a recalc)
     conn = get_conn(data_db)
     _migrate_suggestions_table(conn)
+    conn.execute("DELETE FROM buffer_suggestions")
     conn.executemany(
         """INSERT INTO buffer_suggestions (machine, pid, suggestion_normal_qty, suggestion_sembreak_qty)
            VALUES (:machine, :pid, :suggestion_normal_qty, :suggestion_sembreak_qty)
@@ -221,7 +291,10 @@ if __name__ == '__main__':
         elif cmd == 'set':
             cmd_set(sys.argv[2])
         elif cmd == 'suggest':
-            cmd_suggest(sys.argv[2], sys.argv[3])
+            lead = float(sys.argv[4]) if len(sys.argv) > 4 else 1.0
+            factor = float(sys.argv[5]) if len(sys.argv) > 5 else 0.5
+            min_oos = int(sys.argv[6]) if len(sys.argv) > 6 else 2
+            cmd_suggest(sys.argv[2], sys.argv[3], lead, factor, min_oos)
         elif cmd == 'get_suggest':
             cmd_get_suggest(sys.argv[2])
         elif cmd == 'get_lane_types':

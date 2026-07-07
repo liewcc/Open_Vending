@@ -308,6 +308,7 @@ app.whenReady().then(() => {
   createWindow()
   spawnPy([PICKING_HISTORY, 'init'], null)
   spawnPy([BUFFER_STOCK, 'init', DATA_DB], null)
+  spawnPy([DB_BACKUP], null)  // daily rotating backup (skips if done today)
 
   tray = new Tray(ICON_PNG)
   tray.setToolTip(`Open Vending v${LOCAL_VERSION}`)
@@ -412,9 +413,13 @@ const BUILD_SALES_DETAIL   = path.join(__dirname, 'build_sales_detail.py')
 const BUILD_SALES_FORECAST = path.join(__dirname, 'build_sales_forecast.py')
 const BUFFER_STOCK         = path.join(__dirname, 'buffer_stock.py')
 const REPL_SUGGEST         = path.join(__dirname, 'replacement_suggest.py')
-const SALES_DETAIL_DB      = path.join(ROOT, 'db', 'sales_detail.db')
-const SALES_FORECAST_DB    = path.join(ROOT, 'db', 'sales_forecast.db')
-const DATA_DB              = path.join(ROOT, 'db', 'data.db')
+// All data lives in the unified vending.db (see src/migrate_to_vending.py);
+// the three constants are kept so each handler still says which layer it uses.
+const VENDING_DB           = path.join(ROOT, 'db', 'vending.db')
+const SALES_DETAIL_DB      = VENDING_DB
+const SALES_FORECAST_DB    = VENDING_DB
+const DATA_DB              = VENDING_DB
+const DB_BACKUP            = path.join(__dirname, 'db_backup.py')
 const ROUTE_PLAN_PATH      = path.join(ROOT, 'db', 'route_plan.json')
 ipcMain.handle('save-route-plan', (_, data) => {
   try {
@@ -731,7 +736,7 @@ ipcMain.handle('get-forecast-by-weekday', (_, { weekday }) =>
 ipcMain.handle('init-buffer-db',        ()       => spawnPy([BUFFER_STOCK, 'init',    DATA_DB], null))
 ipcMain.handle('get-buffer-settings',   ()       => spawnPy([BUFFER_STOCK, 'get',     DATA_DB], null))
 ipcMain.handle('set-buffer-qty',        (_, rows) => spawnPy([BUFFER_STOCK, 'set',    DATA_DB], rows))
-ipcMain.handle('calc-buffer-suggestions',()      => spawnPy([BUFFER_STOCK, 'suggest',     DATA_DB, SALES_DETAIL_DB], null))
+ipcMain.handle('calc-buffer-suggestions',()      => spawnPy([BUFFER_STOCK, 'suggest',     DATA_DB, SALES_DETAIL_DB, String(settings.bufLeadDays || 1), String(settings.bufSembreakFactor || 0.5), String(settings.bufMinOos ?? 2)], null))
 ipcMain.handle('load-buffer-suggestions',()      => spawnPy([BUFFER_STOCK, 'get_suggest',    DATA_DB], null))
 ipcMain.handle('get-lane-types',         ()      => spawnPy([BUFFER_STOCK, 'get_lane_types', DATA_DB], null))
 ipcMain.handle('get-replacement-data',   (_, machine) => spawnPy([REPL_SUGGEST, SALES_DETAIL_DB, settings.smProductPath || '', machine], null))

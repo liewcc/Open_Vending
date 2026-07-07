@@ -11,8 +11,8 @@ Prints one JSON object to stdout:
       "machineSales": {pid: count},   # this machine, last 30 days of data
       "globalSales":  {pid: count} }  # all machines, same window
 
-The 30-day window is anchored to the newest transdate in the DB
-(meta.max_date), not to today — the DB is rebuilt manually and may lag.
+The 30-day window is anchored to the newest sale_date in daily_sales
+(which includes realtime estimates from restock scans), not to today.
 Suggestion/slow-mover logic itself lives in picking.js (pure, testable);
 this script only supplies data.
 """
@@ -59,22 +59,20 @@ def main():
         fail("product.csv has no usable rows (need PID + TRAY columns)")
 
     conn = sqlite3.connect(db_path)
-    max_date = conn.execute(
-        "SELECT value FROM meta WHERE key='max_date'"
-    ).fetchone()
+    max_date = conn.execute("SELECT MAX(sale_date) FROM daily_sales").fetchone()
     if not max_date or not max_date[0]:
         conn.close()
-        fail("sales_detail.db has no max_date meta — rebuild it")
+        fail("daily_sales is empty — rebuild it (import sales CSV)")
     to_date = max_date[0][:10]
     from_date = (datetime.strptime(to_date, "%Y-%m-%d") - timedelta(days=30)).strftime("%Y-%m-%d")
 
     machine_sales = dict(conn.execute(
-        "SELECT pid, COUNT(*) FROM sales "
-        "WHERE franchisename=? AND transdate>=? GROUP BY pid",
+        "SELECT pid, SUM(qty) FROM daily_sales "
+        "WHERE machine=? AND sale_date>=? GROUP BY pid",
         (machine, from_date),
     ).fetchall())
     global_sales = dict(conn.execute(
-        "SELECT pid, COUNT(*) FROM sales WHERE transdate>=? GROUP BY pid",
+        "SELECT pid, SUM(qty) FROM daily_sales WHERE sale_date>=? GROUP BY pid",
         (from_date,),
     ).fetchall())
     conn.close()
