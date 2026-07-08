@@ -694,11 +694,11 @@
           <div class="toggle-label">UI Font Size</div>
           <div class="toggle-desc">Scale the whole interface — takes effect immediately</div>
         </div>
-        <div style="display:flex;align-items:center;gap:10px;">
-          <input type="range" id="rng-fontsize" min="80" max="150" step="5" value="100"
-            oninput="applyUiZoom(parseInt(this.value,10), false)"
+        <div style="display:flex;align-items:center;gap:6px;">
+          <input type="number" id="rng-fontsize" min="100" max="150" step="5" value="100"
+            style="width:56px;padding:4px 6px;border:1px solid #d1d5db;border-radius:6px;font-size:12px;color:#374151;text-align:right;"
             onchange="applyUiZoom(parseInt(this.value,10), true)">
-          <span id="fontsize-label" style="font-size:12px;color:#6b7280;min-width:38px;text-align:right;">100%</span>
+          <span style="font-size:12px;color:#6b7280;">%</span>
         </div>
       </div>
       <div class="toggle-row">
@@ -1123,10 +1123,9 @@
   let configVisible = false
 
   function applyUiZoom(pct, persist) {
-    pct = Math.min(150, Math.max(80, pct || 100))
+    pct = Math.min(150, Math.max(100, pct || 100))
     document.body.style.zoom = pct / 100
     document.getElementById('rng-fontsize').value = pct
-    document.getElementById('fontsize-label').textContent = pct + '%'
     if (persist) window.api.setSetting('uiZoom', pct)
   }
 
