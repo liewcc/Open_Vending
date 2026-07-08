@@ -1760,7 +1760,7 @@
             clearTimeout(editSaveTimer)
             editSaveTimer = setTimeout(async () => {
               const r = collectEditRows(); const d = dateStr.replace(/-/g, '')
-              if (r) await window.api.savePickEdit(machine, d, r)
+              if (r) { await window.api.savePickEdit(machine, d, r); await syncQueueWithEdit(machine) }
             }, 1000)
           })
         }
@@ -1804,12 +1804,32 @@
       pickDetailSet('', `<div class="pick-empty" style="color:#e05c5c">Error loading detail: ${err.message || err}</div>`)
     }
   }
-  async function confirmAndQueuePrint(machine) {
-    const pendingByLane = (currentPending[machine]) || {}
-    const oosByLane     = (currentOos[machine])     || {}
-    const pl = window.api.getPickList(lastFilePath, machine, pendingByLane, oosByLane, currentForecast[machine] || {}, restockMode !== 'normal', getBufferByLane(machine))
+  // The saved pick_edit file (if any, for the selected date) is the source of
+  // truth for what goes in the queue: edited restock quantities apply, lanes
+  // edited up from restock 0 enter the queue, and a filled Replacement rides
+  // along in the product name so exports show what the picker must load.
+  async function buildQueuePicks(machine) {
     const today = document.getElementById('pick-date').value
-    const picks = pl.rows.filter(r => !r.zeroRestock).map(r => ({
+    const saved = await window.api.loadPickEdit(machine, today.replace(/-/g, ''))
+    if (saved?.rows?.length) {
+      return saved.rows
+        .filter(r => (Number(r.restock) || 0) > 0)
+        .map(r => ({
+          machine,
+          lane_no:      String(r.no),
+          product_id:   r.productId || '',
+          product_name: r.replacement ? `${r.product} → ${r.replacement}` : r.product,
+          picked_qty:   Number(r.restock) || 0,
+          out_of_stock: r.outOfStock ? 1 : 0,
+          pick_date:    today
+        }))
+    }
+    if (!lastFilePath) return []
+    const oosByLane = (currentOos[machine]) || {}
+    // pendingByLane = {} on purpose: queueing replaces the machine's pending
+    // set wholesale, so quantities must not be reduced by its own old entry
+    const pl = window.api.getPickList(lastFilePath, machine, {}, oosByLane, currentForecast[machine] || {}, restockMode !== 'normal', getBufferByLane(machine))
+    return pl.rows.filter(r => !r.zeroRestock).map(r => ({
       machine,
       lane_no:      String(r.laneNo),
       product_id:   r.productId,
@@ -1818,12 +1838,25 @@
       out_of_stock: r.outOfStock ? 1 : 0,
       pick_date:    today
     }))
+  }
+  async function confirmAndQueuePrint(machine) {
+    const picks = await buildQueuePicks(machine)
     if (!picks.length) return
-    await window.api.savePicks(picks)
+    await window.api.savePicks({ replace_machines: [machine], picks })
     const pendingRaw = await window.api.getPendingInTransit()
     currentPending = pendingRaw || {}
     const qBtn = document.querySelector('#pick-detail .pick-hd .pick-icon-btn:last-child')
     if (qBtn) { qBtn.classList.add('in-queue'); qBtn.title = 'Already in queue' }
+  }
+  // Keeps an already-queued machine in step with its latest saved edit: the
+  // pending rows are replaced from the edit file, so the queue (and any
+  // export from it) always matches what was last saved.
+  async function syncQueueWithEdit(machine) {
+    if (!currentPending[machine]) return
+    const picks = await buildQueuePicks(machine)
+    await window.api.savePicks({ replace_machines: [machine], picks })
+    const pendingRaw = await window.api.getPendingInTransit()
+    currentPending = pendingRaw || {}
   }
   async function confirmAndQueuePrintCurrent() {
     if (!currentDetailMachine) return
@@ -1864,28 +1897,32 @@
     await renderPicks()
     showQueueView()
   }
-  function collectQueueRows() {
+  // Queue exports read the pending rows straight from the DB (product names
+  // as saved at queue/edit-sync time), so they always show the queue's actual
+  // content; the report file is only a fallback for rows queued before
+  // product names were stored.
+  async function collectQueueRows() {
+    const detail = await window.api.getPendingDetail() || {}
     const rows = []
-    Object.keys(currentPending).forEach(mach => {
-      const lanes = currentPending[mach]
+    Object.keys(detail).forEach(mach => {
       let productByLane = {}
       if (lastFilePath) {
         window.api.getMachineLanes(lastFilePath, mach).forEach(l => { productByLane[l.laneNo] = l.product })
       }
-      Object.keys(lanes).forEach(laneNo => {
-        rows.push({ machine: mach, lane: laneNo, product: productByLane[laneNo] || '', qty: Number(lanes[laneNo]) || 0 })
+      detail[mach].forEach(p => {
+        rows.push({ machine: mach, lane: p.lane_no, product: p.product_name || productByLane[p.lane_no] || '', qty: Number(p.picked_qty) || 0 })
       })
     })
     return rows
   }
   async function exportQueueExcel() {
-    const rows = collectQueueRows()
+    const rows = await collectQueueRows()
     if (!rows.length) return
     const r = await window.api.exportQueueExcel(rows)
     if (r && r.ok) addLog('Queue exported: ' + r.filePath)
   }
-  function exportQueuePdf() {
-    if (!collectQueueRows().length) return
+  async function exportQueuePdf() {
+    if (!(await collectQueueRows()).length) return
     openPdfPagesModal('queue')
   }
   function openPdfPagesModal(target) {
@@ -1908,7 +1945,7 @@
     } else {
       queuePdfPages = n
       window.api.setSetting('queuePdfPages', n)
-      const rows = collectQueueRows()
+      const rows = await collectQueueRows()
       if (!rows.length) return
       const dateStr = document.getElementById('pick-date').value
       const [y, mo, d] = dateStr.split('-')
@@ -1936,7 +1973,7 @@
     if (machine) {
       const date = document.getElementById('pick-date').value.replace(/-/g, '')
       const r = collectEditRows()
-      if (r) await window.api.savePickEdit(machine, date, r)
+      if (r) { await window.api.savePickEdit(machine, date, r); await syncQueueWithEdit(machine) }
     }
     isEditMode = false
     editMachine = null
@@ -2595,15 +2632,20 @@ function bufRenderMachineList(filter) {
     const dateFormatted = `${d}/${mo}/${y}`
     const dateKey = dateStr.replace(/-/g, '')
     const team = window.api.teamOf(machine) || '—'
-    const pendingByLane = (currentPending[machine]) || {}
-    const oosByLane = (currentOos[machine]) || {}
-    const pl = window.api.getPickList(lastFilePath, machine, pendingByLane, oosByLane, currentForecast[machine] || {}, restockMode !== 'normal', getBufferByLane(machine))
-    if (!pl.rows.length) return
+    // The saved edit (if any) is the source of truth for this machine's
+    // printout, same as the queue. The raw-report fallback must NOT deduct
+    // the machine's own pending queue entry — that zeroed every lane once
+    // the machine was queued, so the button silently printed nothing.
     const saved = await window.api.loadPickEdit(machine, dateKey)
-    const replMap = {}
-    if (saved?.rows) saved.rows.forEach(r => { if (r.replacement) replMap[String(r.no)] = r.replacement })
-    const rows = pl.rows.filter(r => !r.zeroRestock).map(r => ({ ...r, replacement: replMap[String(r.no)] || '' }))
-    if (!rows.length) return
+    let rows
+    if (saved?.rows?.length) {
+      rows = saved.rows.filter(r => (Number(r.restock) || 0) > 0)
+    } else {
+      const oosByLane = (currentOos[machine]) || {}
+      const pl = window.api.getPickList(lastFilePath, machine, {}, oosByLane, currentForecast[machine] || {}, restockMode !== 'normal', getBufferByLane(machine))
+      rows = pl.rows.filter(r => !r.zeroRestock).map(r => ({ ...r, replacement: '' }))
+    }
+    if (!rows.length) { alert('Nothing to print — every lane has restock 0.'); return }
     const result = await window.api.printAll([{ machine, team, date: dateFormatted, rows }], pages)
     if (result && result.ok) alert('PDF saved: ' + result.filePath)
   }

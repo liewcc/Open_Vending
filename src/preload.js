@@ -41,6 +41,7 @@ contextBridge.exposeInMainWorld('api', {
   initPickingDb:        ()               => ipcRenderer.invoke('init-picking-db'),
   autoClearPicks:       ()               => ipcRenderer.invoke('auto-clear-picks'),
   getPendingInTransit:  ()               => ipcRenderer.invoke('get-pending-in-transit'),
+  getPendingDetail:     ()               => ipcRenderer.invoke('get-pending-detail'),
   getOosCounts:         ()               => ipcRenderer.invoke('get-oos-counts'),
   savePicks:            (picks)          => ipcRenderer.invoke('save-picks', picks),
   markDone:             (machines)       => ipcRenderer.invoke('mark-done', machines),
@@ -60,7 +61,8 @@ contextBridge.exposeInMainWorld('api', {
     return picking.buildPickingList(rows, machine, pendingByLane || {}, oosByLane || {}, splitForecast, semBreak || false, bufferByLane || {})
   },
   teamOf(machine) {
-    return (routePlan.machines[machine] && routePlan.machines[machine].team) || null
+    const key = picking.planKeyFor(routePlan.machines, machine)
+    return (key && routePlan.machines[key].team) || null
   },
   getRoutePlan() {
     return routePlan
@@ -86,17 +88,23 @@ contextBridge.exposeInMainWorld('api', {
     const results = []
     for (const machineName in machinesInPlan) {
       const machinePlan = machinesInPlan[machineName]
-      const machRows = groups[machineName] || []
+      // Excel truncates sheet names to 31 chars; fall back to the prefix so
+      // long plan names still find their report rows. Report-side name is the
+      // machine identity everywhere else (detail view, pending, history).
+      const reportName = groups[machineName]
+        ? machineName
+        : (machineName.length > 31 && groups[machineName.slice(0, 31)] ? machineName.slice(0, 31) : machineName)
+      const machRows = groups[reportName] || []
       let laneSum = 0, restockSum = 0
       for (const r of machRows) {
         laneSum += picking.num(r[5])
         restockSum += picking.num(r[6])
       }
-      const lanePending = pendingByMachine[machineName] || {}
+      const lanePending = pendingByMachine[reportName] || {}
       const inTransitSum = Object.values(lanePending).reduce((a, v) => a + v, 0)
       const adjustedRestockSum = Math.max(0, restockSum - inTransitSum)
       const pct = laneSum > 0 ? Math.round(adjustedRestockSum / laneSum * 100) / 100 : 0
-      results.push({ machine: machineName, team: machinePlan.team || 'UNASSIGNED', pct, restockSum, adjustedRestockSum, laneSum })
+      results.push({ machine: reportName, team: machinePlan.team || 'UNASSIGNED', pct, restockSum, adjustedRestockSum, laneSum })
     }
 
     results.sort((a, b) => {

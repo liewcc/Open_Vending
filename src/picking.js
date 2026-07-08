@@ -28,6 +28,30 @@ function weekdayName(date) {
 }
 
 /**
+ * Excel caps sheet names at 31 chars, so a machine whose real name is longer
+ * appears truncated in the report while the route plan holds the full name.
+ * Resolves a report-side machine name to its route-plan key: exact match
+ * first, then 31-char-prefix match for long plan names.
+ * @param {object} machinesInPlan - routePlan.machines
+ * @param {string} machineName - machine name as it appears in the report
+ * @returns {string|null} the route-plan key, or null if no match
+ */
+function planKeyFor(machinesInPlan, machineName) {
+  if (Object.prototype.hasOwnProperty.call(machinesInPlan, machineName)) {
+    return machineName;
+  }
+  const name = String(machineName);
+  if (name.length === 31) {
+    for (const key in machinesInPlan) {
+      if (key.length > 31 && key.slice(0, 31) === name) {
+        return key;
+      }
+    }
+  }
+  return null;
+}
+
+/**
  * Determines which machines qualify for picking today.
  * @param {any[][]} reportRows
  * @param {object} routePlan
@@ -59,10 +83,11 @@ function machinesToPickToday(reportRows, routePlan, date, pendingByMachine) {
   for (const machineName in groups) {
     if (Object.prototype.hasOwnProperty.call(groups, machineName)) {
       // Consider only machines that exist in BOTH reportRows and routePlan.machines
-      if (!machinesInPlan[machineName]) {
+      const planKey = planKeyFor(machinesInPlan, machineName);
+      if (!planKey) {
         continue;
       }
-      const machinePlan = machinesInPlan[machineName];
+      const machinePlan = machinesInPlan[planKey];
       const rows = groups[machineName];
 
       let laneSum = 0;
@@ -343,6 +368,7 @@ function buildPickingList(reportRows, machine, pendingByLane, oosByLane, forecas
 module.exports = {
   num,
   weekdayName,
+  planKeyFor,
   machinesToPickToday,
   buildPickingList,
   splitForecastAcrossLanes,
@@ -417,6 +443,24 @@ if (require.main === module) {
   assert.strictEqual(results[3].team, 'CustomTeamB');
   assert.strictEqual(results[3].reason, 'scheduled');
   assert.strictEqual(results[3].pct, 0.1);
+
+  // Verify planKeyFor: Excel truncates sheet names to 31 chars, so a long
+  // plan name must still match its truncated report-side name
+  const longName = 'UKB Bahasa Dan Linguistik M3 Twin';      // 33 chars
+  const truncName = longName.slice(0, 31);                   // as it appears in the report
+  const planWithLongName = { [longName]: { team: '1126', scheduleDays: [] }, 'MachA': { team: '1126', scheduleDays: [] } };
+  assert.strictEqual(planKeyFor(planWithLongName, 'MachA'), 'MachA');
+  assert.strictEqual(planKeyFor(planWithLongName, truncName), longName);
+  assert.strictEqual(planKeyFor(planWithLongName, 'Unknown Machine'), null);
+
+  const mockReportTrunc = [
+    ['Machine','No.','Product ID','Product Name','Bal Qty','Lane Size','Restock'],
+    [truncName, '1', 'P1', 'Soda', '5', '10', '3'],          // pct 0.3 → qualifies via 25% rule
+  ];
+  const truncResults = machinesToPickToday(mockReportTrunc, { machines: planWithLongName }, dateSat, {});
+  assert.strictEqual(truncResults.length, 1);
+  assert.strictEqual(truncResults[0].machine, truncName);    // report-side name is the identity
+  assert.strictEqual(truncResults[0].team, '1126');
 
   // Verify buildPickingList
   const mockReportList = [

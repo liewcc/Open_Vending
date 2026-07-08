@@ -358,7 +358,10 @@ function spawnPy(args, stdinData) {
     const pythonExe = path.join(ROOT, 'python', 'python.exe')
     const proc = spawn(pythonExe, args, {
       windowsHide: true,
-      env: { ...process.env, PYTHONNOUSERSITE: '1', PYTHONPATH: '' }
+      // UTF-8 stdio: Node writes UTF-8, but Python on Windows defaults to
+      // the locale codepage (cp1252) and mangles non-ASCII (e.g. the "→"
+      // in replacement product names) on the way into the DB
+      env: { ...process.env, PYTHONNOUSERSITE: '1', PYTHONPATH: '', PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8' }
     })
     let out = ''
     if (stdinData !== null && stdinData !== undefined) {
@@ -434,7 +437,10 @@ ipcMain.handle('get-restock-history', (_, { machine, lane }) =>
     const pythonExe = path.join(ROOT, 'python', 'python.exe')
     const proc = spawn(pythonExe, [QUERY_HISTORY, machine, String(lane)], {
       windowsHide: true,
-      env: { ...process.env, PYTHONNOUSERSITE: '1', PYTHONPATH: '' }
+      // UTF-8 stdio: Node writes UTF-8, but Python on Windows defaults to
+      // the locale codepage (cp1252) and mangles non-ASCII (e.g. the "→"
+      // in replacement product names) on the way into the DB
+      env: { ...process.env, PYTHONNOUSERSITE: '1', PYTHONPATH: '', PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8' }
     })
     let out = ''
     proc.stdout.on('data', d => out += d)
@@ -446,6 +452,7 @@ ipcMain.handle('get-restock-history', (_, { machine, lane }) =>
 ipcMain.handle('init-picking-db',        ()         => spawnPy([PICKING_HISTORY, 'init'],         null))
 ipcMain.handle('auto-clear-picks',       ()         => spawnPy([PICKING_HISTORY, 'auto-clear'],   null))
 ipcMain.handle('get-pending-in-transit', ()         => spawnPy([PICKING_HISTORY, 'get-pending'],  null))
+ipcMain.handle('get-pending-detail',     ()         => spawnPy([PICKING_HISTORY, 'get-pending-detail'], null))
 ipcMain.handle('get-oos-counts',         ()         => spawnPy([PICKING_HISTORY, 'get-oos-counts'], null))
 ipcMain.handle('save-picks',             (_, picks) => spawnPy([PICKING_HISTORY, 'save-picks'],   picks))
 ipcMain.handle('mark-done',              (_, machines) => spawnPy([PICKING_HISTORY, 'mark-done'], machines))
@@ -632,8 +639,17 @@ ipcMain.handle('export-queue-pdf', async (_, { rows, pages, date }) => {
   })
   // Each machine gets its own .page section so it starts on a fresh sheet;
   // the pages limit is a per-machine budget, not a whole-document one.
+  // Replacement rows arrive as "orig → repl" (assembled at queue time from
+  // the edit file): print the original struck through, then the arrow and
+  // the replacement — same convention as the per-machine picking-list PDF.
+  function prodCell(s) {
+    const str = String(s ?? '')
+    const i = str.indexOf(' → ')
+    if (i < 0) return esc(str)
+    return `<span class="orig">${esc(str.slice(0, i))}</span> → <span class="repl">${esc(str.slice(i + 3))}</span>`
+  }
   const tables = machines.map(mach => {
-    const tableRows = byMachine[mach].map(r => `<tr><td>${esc(r.lane)}</td><td>${esc(r.product)}</td><td>${esc(r.qty)}</td></tr>`).join('')
+    const tableRows = byMachine[mach].map(r => `<tr><td>${esc(r.lane)}</td><td>${prodCell(r.product)}</td><td>${esc(r.qty)}</td></tr>`).join('')
     return `<div class="page"><table><thead><tr class="mhd"><th colspan="3"><div class="mh"><span>${esc(mach)}</span><span>${esc(date)}</span></div></th></tr><tr><th>Lane</th><th>Product Name</th><th>Qty</th></tr></thead><tbody>${tableRows}</tbody></table></div>`
   }).join('')
   // Font sizes/padding in em relative to --fs so the fit loop below can scale
@@ -653,6 +669,8 @@ ipcMain.handle('export-queue-pdf', async (_, { rows, pages, date }) => {
     .mh{display:flex;justify-content:space-between}
     th:nth-child(3),td:nth-child(3){width:15%;text-align:center}
     tr{page-break-inside:avoid}
+    .orig{text-decoration:line-through;color:#777}
+    .repl{font-weight:600}
   </style></head><body>
     ${tables}
   </body></html>`

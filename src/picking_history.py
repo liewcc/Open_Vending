@@ -51,6 +51,28 @@ elif cmd == 'get-pending':
         result.setdefault(r['machine'], {})[r['lane_no']] = r['picked_qty']
     print(json.dumps(result))
 
+elif cmd == 'get-pending-detail':
+    # Full pending rows (incl. product names as saved at queue/edit time) so
+    # queue exports render exactly what is in the queue, not the raw report.
+    if not DB.exists():
+        print(json.dumps({})); sys.exit(0)
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT machine, lane_no, product_id, product_name, picked_qty "
+        "FROM picking_history WHERE status='pending' "
+        "ORDER BY machine, CAST(lane_no AS INTEGER)"
+    ).fetchall()
+    conn.close()
+    result = {}
+    for r in rows:
+        result.setdefault(r['machine'], []).append({
+            'lane_no': r['lane_no'],
+            'product_id': r['product_id'],
+            'product_name': r['product_name'],
+            'picked_qty': r['picked_qty'],
+        })
+    print(json.dumps(result))
+
 elif cmd == 'get-oos-counts':
     if not DB.exists():
         print(json.dumps({})); sys.exit(0)
@@ -67,10 +89,26 @@ elif cmd == 'get-oos-counts':
     print(json.dumps(result))
 
 elif cmd == 'save-picks':
-    picks = json.loads(sys.stdin.read())
-    if not picks:
+    # Payload is either a plain list of picks (legacy) or a dict
+    # {picks: [...], replace_machines: [...]}: replace_machines' pending rows
+    # are wiped first so the queue mirrors the caller's row set exactly
+    # (lanes edited down to restock 0 leave the queue).
+    data = json.loads(sys.stdin.read())
+    if isinstance(data, dict):
+        picks = data.get('picks') or []
+        replace_machines = data.get('replace_machines') or []
+    else:
+        picks = data or []
+        replace_machines = []
+    if not picks and not replace_machines:
         print(json.dumps({"saved": 0})); sys.exit(0)
     conn = get_conn()
+    if replace_machines:
+        placeholders = ','.join('?' * len(replace_machines))
+        conn.execute(
+            f"DELETE FROM picking_history WHERE machine IN ({placeholders}) AND status='pending'",
+            replace_machines
+        )
     saved = 0
     for p in picks:
         # Clear stale pending if product changed in this lane
