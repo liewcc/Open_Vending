@@ -576,6 +576,11 @@
   .buf-no-data { color:#0891b2; font-size:11px; font-style:italic; }
   .buf-tbl td.buf-suggest { color:#059669; font-size:11px; }
   .pick-hidden-note { padding:8px 14px; color:#9ca3af; font-size:10.5px; }
+  tr.pick-highbal td { color:#9ca3af; background:#fafbfc; }
+  .pick-tbl.hide-highbal tr.pick-highbal { display:none; }
+  .pick-tbl.hide-zero tr.pick-zero { display:none; }
+  .pick-flt-btn { width:auto; height:24px; padding:0 10px; border:1px solid #d1d5db; border-radius:999px; font-size:11px; font-weight:600; background:#fff; }
+  .pick-flt-btn.in-queue { color:#16a34a; background:#dcfce7; border-color:#22c55e; }
   .pick-search-bar { display:flex; align-items:center; gap:6px; padding:7px 14px; border-bottom:0.5px solid #eee; background:#fafbfc; }
   .pick-search-bar input { flex:1; padding:4px 8px; border:1px solid #d1d5db; border-radius:6px; font-size:11.5px; color:#374151; background:#fff; }
   .pick-search-bar input:focus { outline:none; border-color:#185fa5; }
@@ -1692,6 +1697,19 @@
     if (inp) { inp.value = ''; filterPickTable('') }
   }
 
+  let showHighBal = false   // A: unhide rows with Bal > 10 (hidden by default)
+  let hideZeroRows = false  // B: hide rows with Restock = 0 (shown by default)
+  function toggleHighBal() {
+    showHighBal = !showHighBal
+    document.getElementById('btn-toggle-highbal')?.classList.toggle('in-queue', showHighBal)
+    document.querySelector('#pick-detail-body table.pick-tbl')?.classList.toggle('hide-highbal', !showHighBal)
+  }
+  function toggleZeroRows() {
+    hideZeroRows = !hideZeroRows
+    document.getElementById('btn-toggle-zero')?.classList.toggle('in-queue', hideZeroRows)
+    document.querySelector('#pick-detail-body table.pick-tbl')?.classList.toggle('hide-zero', hideZeroRows)
+  }
+
   function toggleShowAll() {
     showAllMachines = !showAllMachines
     const btn = document.getElementById('btn-show-all')
@@ -1775,16 +1793,16 @@
         const replMap = {}
         if (savedView?.rows) savedView.rows.forEach(r => { if (r.replacement) replMap[String(r.no)] = r.replacement })
         const hasEdit = savedView?.rows?.some(r => r.replacement)
-        let hdHtml = `<div class="pick-hd"><button class="pick-icon-btn" onclick="clearPickDetail()" title="Back to list"><span class="icon">home</span></button><div style="flex:1"><div class="nm">${machine}</div><div class="sub">Picking date ${dateStr} &nbsp;·&nbsp; Restock team ${team}</div></div><button class="pick-icon-btn${hasEdit?' has-edit':''}" onclick="enterEditMode('${machine.replace(/'/g,"\\'")}')" title="Edit replacements"><span class="icon">edit</span></button><button class="pick-icon-btn" onclick="printCurrentMachine()" title="Print this machine"><span class="icon">picture_as_pdf</span></button><button class="pick-icon-btn${inQueue?' in-queue':''}" onclick="confirmAndQueuePrintCurrent()" title="${inQueue?'Already in queue':'Add to Queue'}"><span class="icon">check_box</span></button></div>`
+        let hdHtml = `<div class="pick-hd"><button class="pick-icon-btn" onclick="clearPickDetail()" title="Back to list"><span class="icon">home</span></button><div style="flex:1"><div class="nm">${machine}</div><div class="sub">Picking date ${dateStr} &nbsp;·&nbsp; Restock team ${team}</div></div><button id="btn-toggle-highbal" class="pick-icon-btn pick-flt-btn${showHighBal?' in-queue':''}" onclick="toggleHighBal()" title="Show / hide lanes with Bal &gt; 10">Bal&gt;10</button><button id="btn-toggle-zero" class="pick-icon-btn pick-flt-btn${hideZeroRows?' in-queue':''}" onclick="toggleZeroRows()" title="Hide / show lanes with Restock = 0">R=0</button><button class="pick-icon-btn${hasEdit?' has-edit':''}" onclick="enterEditMode('${machine.replace(/'/g,"\\'")}')" title="Edit replacements"><span class="icon">edit</span></button><button class="pick-icon-btn" onclick="printCurrentMachine()" title="Print this machine"><span class="icon">picture_as_pdf</span></button><button class="pick-icon-btn${inQueue?' in-queue':''}" onclick="confirmAndQueuePrintCurrent()" title="${inQueue?'Already in queue':'Add to Queue'}"><span class="icon">check_box</span></button></div>`
         hdHtml += `<div class="pick-search-bar"><input type="text" id="pick-search-input" placeholder="Search product…" oninput="filterPickTable(this.value)"><button onclick="clearPickSearch()">Clear</button></div>`
         let bodyHtml
-        if (!pl.rows.length) { bodyHtml = '<div class="pick-empty">All lanes sufficiently stocked.</div>' }
+        if (!pl.rows.length && !(pl.hiddenRows || []).length) { bodyHtml = '<div class="pick-empty">All lanes sufficiently stocked.</div>' }
         else {
-          bodyHtml = `<table class="lv-tbl pick-tbl"><thead><tr><th data-col="no">No</th><th data-col="product">Product</th><th data-col="bal">Bal</th><th data-col="lane">Lane</th><th data-col="forecast">Forecast</th><th data-col="buffer">Buffer</th><th data-col="restock">Restock</th></tr></thead><tbody>`
-          pl.rows.forEach(r => {
+          bodyHtml = `<table class="lv-tbl pick-tbl${showHighBal?'':' hide-highbal'}${hideZeroRows?' hide-zero':''}"><thead><tr><th data-col="no">No</th><th data-col="product">Product</th><th data-col="bal">Bal</th><th data-col="lane">Lane</th><th data-col="forecast">Forecast</th><th data-col="buffer">Buffer</th><th data-col="restock">Restock</th></tr></thead><tbody>`
+          pl.rows.concat(pl.hiddenRows || []).forEach(r => {
             const tag = r.outOfStock ? '<span class="pick-out-tag">OUT</span>' : ''
             const ftag = r.fastMover ? '<span class="pick-fast-tag">FAST</span>' : ''
-            const cls = [r.outOfStock?'pick-out':'', r.fastMover?'pick-fast':'', r.zeroRestock?'pick-zero':''].filter(Boolean).join(' ')
+            const cls = [r.outOfStock?'pick-out':'', r.fastMover?'pick-fast':'', r.zeroRestock?'pick-zero':'', r.highBal?'pick-highbal':''].filter(Boolean).join(' ')
             const bufCol = r.bufferQty ? `<span style="color:#0891b2">${r.bufferQty > 0 ? '+' : ''}${r.bufferQty}</span>` : '—'
             const replNote = replMap[String(r.no)] ? `<div class="pick-repl">→ ${replMap[String(r.no)]}</div>` : ''
             bodyHtml += `<tr class="${cls}" data-lane="${r.no}"><td>${r.no}</td><td>${r.product}${tag}${ftag}${replNote}${laneTypeBadge(r.productId)}</td><td class="${r.outOfStock?'bal-out':''}">${r.bal}</td><td>${r.lane}</td><td style="color:#6b7280">${r.forecastQty > 0 ? '+' + r.forecastQty : '—'}</td><td>${bufCol}</td><td>${r.restock}</td></tr>`

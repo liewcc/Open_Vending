@@ -303,6 +303,7 @@ function buildPickingList(reportRows, machine, pendingByLane, oosByLane, forecas
   }
 
   const visibleRows = [];
+  const hiddenRows = [];
   let hiddenCount = 0;
 
   for (const row of machineRows) {
@@ -312,9 +313,26 @@ function buildPickingList(reportRows, machine, pendingByLane, oosByLane, forecas
     const actualRestock = Math.max(0, restock - laneInTransit);
 
     const bal = num(row[4]); // Bal Qty is col 4
-    // Step C: drop rows where num(balQty) > 10
+    // Step C: rows where num(balQty) > 10 go to hiddenRows — display-only
+    // (renderer can unhide them); they never join rows, so queue/print totals
+    // are unaffected
     if (bal > 10) {
       hiddenCount++;
+      hiddenRows.push({
+        no: row[1],
+        productId: String(row[2]),
+        product: row[3] !== undefined && row[3] !== null ? String(row[3]) : '',
+        bal,
+        lane: num(row[5]),
+        restock: actualRestock,
+        forecastQty: 0,
+        bufferQty: 0,
+        outOfStock: false,
+        fastMover: false,
+        zeroRestock: actualRestock === 0,
+        highBal: true,
+        laneNo
+      });
       continue;
     }
 
@@ -361,6 +379,7 @@ function buildPickingList(reportRows, machine, pendingByLane, oosByLane, forecas
   return {
     machine,
     rows: visibleRows,
+    hiddenRows,
     hiddenCount
   };
 }
@@ -475,6 +494,9 @@ if (require.main === module) {
   assert.strictEqual(pickList.machine, 'MachX');
   assert.strictEqual(pickList.hiddenCount, 1);
   assert.strictEqual(pickList.rows.length, 3);
+  assert.strictEqual(pickList.hiddenRows.length, 1);
+  assert.strictEqual(pickList.hiddenRows[0].productId, 'P2');
+  assert.strictEqual(pickList.hiddenRows[0].highBal, true);
 
   assert.strictEqual(pickList.rows[0].productId, 'P1');
   assert.strictEqual(pickList.rows[0].zeroRestock, true);
