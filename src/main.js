@@ -9,7 +9,7 @@ const CRED_FILE     = path.join(app.getPath('userData'), 'credentials.enc')
 const SETTINGS_FILE = path.join(app.getPath('userData'), 'settings.json')
 const LAST_REPORT   = path.join(ROOT, 'db', 'last_report.xlsx')
 const LAST_DIFFS    = path.join(ROOT, 'db', 'last_diffs.json')
-const DEFAULT_SETTINGS = { menuBar: false, showConsole: false, closeTray: false, notifyChanges: false, autoDownload: false, autoDownloadInterval: 30, headedBrowser: false, landingUrl: 'https://vendingportal.azurewebsites.net/SuperAdmin/SPLogin.aspx', restockMode: 'normal', q3ThresholdPct: 50, uiZoom: 100 }
+const DEFAULT_SETTINGS = { menuBar: false, showConsole: false, closeTray: false, notifyChanges: false, autoDownload: false, autoDownloadInterval: 30, headedBrowser: false, landingUrl: 'https://vendingportal.azurewebsites.net/SuperAdmin/SPLogin.aspx', restockMode: 'normal', q3ThresholdPct: 50, uiZoom: 100, pdfPaperSize: 'A4', pdfFontPct: 100, pdfMarginTop: 12, pdfMarginBottom: 12, pdfMarginLeft: 12, pdfMarginRight: 12, pdfPages: 1 }
 const F9_TRIGGER    = path.join(ROOT, 'db', '.f9_trigger')
 const BROWSER_STOP  = path.join(ROOT, 'db', '.browser_stop')
 const ICON_PNG = path.join(ROOT, 'asset', 'image', 'icon_nobg.png')
@@ -459,6 +459,22 @@ ipcMain.handle('mark-done',              (_, machines) => spawnPy([PICKING_HISTO
 ipcMain.handle('get-history-dates',      ()         => spawnPy([PICKING_HISTORY, 'get-history-dates'], null))
 ipcMain.handle('get-history-by-date',    (_, date)  => spawnPy([PICKING_HISTORY, 'get-history-by-date', date], null))
 
+// Layout derived from the PDF Export settings — shared by every printToPDF export.
+const PAPER_MM = { A4: [210, 297], A5: [148, 210], Letter: [215.9, 279.4], Legal: [215.9, 355.6] }
+function pdfLayout() {
+  const paper = PAPER_MM[settings.pdfPaperSize] ? settings.pdfPaperSize : 'A4'
+  const [w, h] = PAPER_MM[paper]
+  const mm = k => Math.min(50, Math.max(0, Number(settings[k]) || 0))
+  const m = { top: mm('pdfMarginTop'), bottom: mm('pdfMarginBottom'), left: mm('pdfMarginLeft'), right: mm('pdfMarginRight') }
+  return {
+    baseFs: 11 * Math.max(100, Number(settings.pdfFontPct) || 100) / 100,
+    bodyW: w - m.left - m.right,                 // printable width in mm
+    pageH: (h - m.top - m.bottom) / 25.4 * 96,   // printable height in CSS px
+    pageCss: `@page{size:${paper} portrait;margin:${m.top}mm ${m.right}mm ${m.bottom}mm ${m.left}mm}`,
+    printOpts: { printBackground: false, pageSize: paper, margins: { top: m.top / 25.4, bottom: m.bottom / 25.4, left: m.left / 25.4, right: m.right / 25.4 } }
+  }
+}
+
 ipcMain.handle('print-all-picking-lists', async (_, { data, pages }) => {
   function esc(s) {
     return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
@@ -474,7 +490,8 @@ ipcMain.handle('print-all-picking-lists', async (_, { data, pages }) => {
     return `<div class="page"><table><thead><tr class="mhd"><th colspan="6"><div class="hdr"><span>${esc(m.date)}</span><span>${esc(m.machine)} ${esc(m.team)}</span></div></th></tr><tr><th>No.</th><th>Product Name</th><th>Replacement</th><th>Bal Qty</th><th>Lane Size</th><th>Restock</th></tr></thead><tbody>${rows}</tbody></table></div>`
   }).join('')
 
-  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{box-sizing:border-box;margin:0;padding:0}:root{--fs:11px}body{font-family:'Calibri Light',Calibri,Arial,sans-serif;font-size:var(--fs);width:186mm}@page{size:A4 portrait;margin:12mm}.page{page-break-after:always;break-after:page}.page:last-child{page-break-after:avoid;break-after:avoid}tr.mhd th{border:none;padding:0 0 0.36em}.hdr{display:flex;justify-content:space-between;font-size:13px;font-weight:bold;padding-bottom:0.36em;border-bottom:1.5px solid #000}table{width:100%;border-collapse:collapse;font-size:1em}th,td{border:1px dashed #aaa;padding:0.36em 0.55em;text-align:left}th{font-weight:600}th:nth-child(1){width:5%}th:nth-child(2){width:38%}th:nth-child(3){width:22%}th:nth-child(4),th:nth-child(5),th:nth-child(6){width:10%;text-align:center}td:nth-child(4),td:nth-child(5),td:nth-child(6){text-align:center}tr{page-break-inside:avoid}tr.rep td.orig{text-decoration:line-through;color:#777}tr.rep td.col1{background-color:#ffffa0!important;font-weight:500}</style></head><body>${pageHtml}</body></html>`
+  const L = pdfLayout()
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{box-sizing:border-box;margin:0;padding:0}:root{--fs:${L.baseFs}px}body{font-family:'Calibri Light',Calibri,Arial,sans-serif;font-size:var(--fs);width:${L.bodyW}mm}${L.pageCss}.page{page-break-after:always;break-after:page}.page:last-child{page-break-after:avoid;break-after:avoid}tr.mhd th{border:none;padding:0 0 0.36em}.hdr{display:flex;justify-content:space-between;font-size:13px;font-weight:bold;padding-bottom:0.36em;border-bottom:1.5px solid #000}table{width:100%;border-collapse:collapse;font-size:1em}th,td{border:1px dashed #aaa;padding:0.36em 0.55em;text-align:left}th{font-weight:600}th:nth-child(1){width:5%}th:nth-child(2){width:38%}th:nth-child(3){width:22%}th:nth-child(4),th:nth-child(5),th:nth-child(6){width:10%;text-align:center}td:nth-child(4),td:nth-child(5),td:nth-child(6){text-align:center}tr{page-break-inside:avoid}tr.rep td.orig{text-decoration:line-through;color:#777}tr.rep td.col1{background-color:#ffffa0!important;font-weight:500}</style></head><body>${pageHtml}</body></html>`
 
   const defaultPath = settings.lastPdfPath || path.join(os.homedir(), 'Desktop', 'picking-list.pdf')
   const { canceled, filePath } = await dialog.showSaveDialog({ defaultPath, filters: [{ name: 'PDF', extensions: ['pdf'] }] })
@@ -489,7 +506,7 @@ ipcMain.handle('print-all-picking-lists', async (_, { data, pages }) => {
   // scrollHeight underestimates print pages: Chromium repeats <thead> on every
   // page and pushes unbreakable rows down, so simulate that pagination instead.
   if (pages >= 1) {
-    const PAGE_H = (297 - 24) / 25.4 * 96  // A4 printable height in CSS px (12mm margins)
+    const PAGE_H = L.pageH
     const simScript = `(() => {
       const pageH = ${PAGE_H.toFixed(2)};
       let maxPages = 0;
@@ -509,7 +526,7 @@ ipcMain.handle('print-all-picking-lists', async (_, { data, pages }) => {
       });
       return maxPages;
     })()`
-    let fs2 = 11
+    let fs2 = L.baseFs
     for (let i = 0; i < 10; i++) {
       const maxP = await printWin.webContents.executeJavaScript(simScript)
       if (maxP <= pages || fs2 <= 5) break
@@ -520,7 +537,7 @@ ipcMain.handle('print-all-picking-lists', async (_, { data, pages }) => {
     }
   }
 
-  const pdfBuffer = await printWin.webContents.printToPDF({ printBackground: false })
+  const pdfBuffer = await printWin.webContents.printToPDF(L.printOpts)
   printWin.destroy()
 
   fs.writeFileSync(filePath, pdfBuffer)
@@ -576,18 +593,19 @@ ipcMain.handle('print-slow-movers', async (_, { rows, dateRange }) => {
   const tableRows = rows.map((r, i) =>
     `<tr><td>${i+1}</td><td>${esc(r.name)}</td><td>${r.total}</td><td>${esc(r.last_sale) || '—'}</td><td>${r.days != null ? r.days + 'd' : 'Never'}</td></tr>`
   ).join('')
+  const L = pdfLayout()
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
     *{box-sizing:border-box;margin:0;padding:0}
-    body{font-family:'Calibri Light',Calibri,Arial,sans-serif;font-size:11px}
-    @page{size:A4 portrait;margin:15mm}
-    h2{font-size:14px;margin-bottom:3px}
-    .sub{font-size:10px;color:#555;margin-bottom:12px}
+    body{font-family:'Calibri Light',Calibri,Arial,sans-serif;font-size:${L.baseFs}px}
+    ${L.pageCss}
+    h2{font-size:1.27em;margin-bottom:3px}
+    .sub{font-size:0.91em;color:#555;margin-bottom:12px}
     table{width:100%;border-collapse:collapse}
     th,td{border:1px dashed #aaa;padding:4px 6px;text-align:left}
-    th{font-weight:600;font-size:10px;text-transform:uppercase}
+    th{font-weight:600;font-size:0.91em;text-transform:uppercase}
     th:nth-child(1),td:nth-child(1){width:5%;text-align:center}
     th:nth-child(3),td:nth-child(3),th:nth-child(4),td:nth-child(4),th:nth-child(5),td:nth-child(5){width:13%;text-align:center}
-    .note{margin-top:14px;font-size:10px;color:#444;border-top:1px dashed #aaa;padding-top:8px}
+    .note{margin-top:14px;font-size:0.91em;color:#444;border-top:1px dashed #aaa;padding-top:8px}
   </style></head><body>
     <h2>Slow-Moving Products</h2>
     <div class="sub">${esc(dateRange)}</div>
@@ -605,7 +623,7 @@ ipcMain.handle('print-slow-movers', async (_, { rows, dateRange }) => {
   const printWin = new BrowserWindow({ show: false, webPreferences: { contextIsolation: true } })
   printWin.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html))
   await new Promise(resolve => printWin.webContents.once('did-finish-load', resolve))
-  const pdfBuffer = await printWin.webContents.printToPDF({ printBackground: false })
+  const pdfBuffer = await printWin.webContents.printToPDF(L.printOpts)
   printWin.destroy()
   fs.writeFileSync(filePath, pdfBuffer)
   return { ok: true, filePath }
@@ -655,11 +673,12 @@ ipcMain.handle('export-queue-pdf', async (_, { rows, pages, date }) => {
   // Font sizes/padding in em relative to --fs so the fit loop below can scale
   // the whole document by changing one variable. body width = A4 printable
   // width (210mm - 2x15mm margins) so on-screen wrap matches print wrap.
+  const L = pdfLayout()
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
     *{box-sizing:border-box;margin:0;padding:0}
-    :root{--fs:11px}
-    body{font-family:'Calibri Light',Calibri,Arial,sans-serif;font-size:var(--fs);width:180mm}
-    @page{size:A4 portrait;margin:15mm}
+    :root{--fs:${L.baseFs}px}
+    body{font-family:'Calibri Light',Calibri,Arial,sans-serif;font-size:var(--fs);width:${L.bodyW}mm}
+    ${L.pageCss}
     .page{page-break-after:always;break-after:page}
     .page:last-child{page-break-after:avoid;break-after:avoid}
     table{width:100%;border-collapse:collapse}
@@ -688,7 +707,7 @@ ipcMain.handle('export-queue-pdf', async (_, { rows, pages, date }) => {
   // Simulate real print pagination: <thead> repeats on every page and rows
   // never split across pages, so continuous scrollHeight underestimates.
   const targetPages = Math.max(1, Number(pages) || 1)
-  const PAGE_H = (297 - 30) / 25.4 * 96  // A4 printable height in CSS px (15mm margins)
+  const PAGE_H = L.pageH
   const simScript = `(() => {
     const pageH = ${PAGE_H.toFixed(2)};
     let maxPages = 1;
@@ -708,7 +727,7 @@ ipcMain.handle('export-queue-pdf', async (_, { rows, pages, date }) => {
     });
     return maxPages;
   })()`
-  let fs2 = 11
+  let fs2 = L.baseFs
   for (let i = 0; i < 10; i++) {
     const maxP = await printWin.webContents.executeJavaScript(simScript)
     if (maxP <= targetPages || fs2 <= 5) break
@@ -717,7 +736,7 @@ ipcMain.handle('export-queue-pdf', async (_, { rows, pages, date }) => {
     await printWin.webContents.executeJavaScript(`document.documentElement.style.setProperty('--fs','${fs2.toFixed(2)}px')`)
   }
 
-  const pdfBuffer = await printWin.webContents.printToPDF({ printBackground: false })
+  const pdfBuffer = await printWin.webContents.printToPDF(L.printOpts)
   printWin.destroy()
   fs.writeFileSync(filePath, pdfBuffer)
   return { ok: true, filePath }
