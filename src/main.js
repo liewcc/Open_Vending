@@ -467,7 +467,7 @@ function pdfLayout() {
   const mm = k => Math.min(50, Math.max(0, Number(settings[k]) || 0))
   const m = { top: mm('pdfMarginTop'), bottom: mm('pdfMarginBottom'), left: mm('pdfMarginLeft'), right: mm('pdfMarginRight') }
   return {
-    baseFs: 11 * Math.max(100, Number(settings.pdfFontPct) || 100) / 100,
+    baseFs: 12 * Math.max(100, Number(settings.pdfFontPct) || 100) / 100,
     bodyW: w - m.left - m.right,                 // printable width in mm
     pageH: (h - m.top - m.bottom) / 25.4 * 96,   // printable height in CSS px
     pageCss: `@page{size:${paper} portrait;margin:${m.top}mm ${m.right}mm ${m.bottom}mm ${m.left}mm}`,
@@ -491,7 +491,7 @@ ipcMain.handle('print-all-picking-lists', async (_, { data, pages }) => {
   }).join('')
 
   const L = pdfLayout()
-  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{box-sizing:border-box;margin:0;padding:0}:root{--fs:${L.baseFs}px}body{font-family:'Calibri Light',Calibri,Arial,sans-serif;font-size:var(--fs);width:${L.bodyW}mm}${L.pageCss}.page{page-break-after:always;break-after:page}.page:last-child{page-break-after:avoid;break-after:avoid}tr.mhd th{border:none;padding:0 0 0.36em}.hdr{display:flex;justify-content:space-between;font-size:13px;font-weight:bold;padding-bottom:0.36em;border-bottom:1.5px solid #000}table{width:100%;border-collapse:collapse;font-size:1em}th,td{border:1px dashed #aaa;padding:0.36em 0.55em;text-align:left}th{font-weight:600}th:nth-child(1){width:5%}th:nth-child(2){width:38%}th:nth-child(3){width:22%}th:nth-child(4),th:nth-child(5),th:nth-child(6){width:10%;text-align:center}td:nth-child(4),td:nth-child(5),td:nth-child(6){text-align:center}tr{page-break-inside:avoid}tr.rep td.orig{text-decoration:line-through;color:#777}tr.rep td.col1{background-color:#ffffa0!important;font-weight:500}</style></head><body>${pageHtml}</body></html>`
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{box-sizing:border-box;margin:0;padding:0}:root{--fs:${L.baseFs}px}body{font-family:'Calibri Light',Calibri,Arial,sans-serif;font-size:var(--fs);line-height:1.15;width:${L.bodyW}mm}${L.pageCss}.page{page-break-after:always;break-after:page}.page:last-child{page-break-after:avoid;break-after:avoid}tr.mhd th{border:none;padding:0 0 0.36em}.hdr{display:flex;justify-content:space-between;font-size:13px;font-weight:bold;padding-bottom:0.36em;border-bottom:1.5px solid #000}table{width:100%;border-collapse:collapse;font-size:1em}th,td{border:1px dashed #aaa;padding:0.22em 0.55em;text-align:left}th{font-weight:600}th:nth-child(1){width:5%}th:nth-child(2){width:38%}th:nth-child(3){width:22%}th:nth-child(4),th:nth-child(5),th:nth-child(6){width:10%;text-align:center}td:nth-child(4),td:nth-child(5),td:nth-child(6){text-align:center}tr{page-break-inside:avoid}tr.rep td.orig{text-decoration:line-through;color:#777}tr.rep td.col1{background-color:#ffffa0!important;font-weight:500}</style></head><body>${pageHtml}</body></html>`
 
   const defaultPath = settings.lastPdfPath || path.join(os.homedir(), 'Desktop', 'picking-list.pdf')
   const { canceled, filePath } = await dialog.showSaveDialog({ defaultPath, filters: [{ name: 'PDF', extensions: ['pdf'] }] })
@@ -677,12 +677,12 @@ ipcMain.handle('export-queue-pdf', async (_, { rows, pages, date }) => {
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
     *{box-sizing:border-box;margin:0;padding:0}
     :root{--fs:${L.baseFs}px}
-    body{font-family:'Calibri Light',Calibri,Arial,sans-serif;font-size:var(--fs);width:${L.bodyW}mm}
+    body{font-family:'Calibri Light',Calibri,Arial,sans-serif;font-size:var(--fs);line-height:1.15;width:${L.bodyW}mm}
     ${L.pageCss}
     .page{page-break-after:always;break-after:page}
     .page:last-child{page-break-after:avoid;break-after:avoid}
     table{width:100%;border-collapse:collapse}
-    th,td{border:1px dashed #aaa;padding:0.36em 0.55em;text-align:left}
+    th,td{border:1px dashed #aaa;padding:0.22em 0.55em;text-align:left}
     th{font-weight:600;font-size:0.9em;text-transform:uppercase}
     tr.mhd th{border:none;font-size:1.1em;text-transform:none;padding:0.3em 0.1em}
     .mh{display:flex;justify-content:space-between}
