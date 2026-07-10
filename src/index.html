@@ -1162,7 +1162,12 @@
     lastFilePath = filePath
     const rows = window.api.parseExcel(filePath)
     renderTable(rows)
-    const name = filePath.replace(/\\/g, '/').split('/').pop()
+    // refresh pick panel if it's on screen; in edit mode only bump the
+    // timestamp so a background download can't clobber in-progress edits
+    if (document.getElementById('pick-panel').style.display !== 'none') {
+      if (isEditMode && editMachine) updateReportMtime()
+      else renderPicks()
+    }
   })
 
   // ── Config ──────────────────────────────────────────────────────────────────
@@ -1562,23 +1567,23 @@
       renderPicks()
     }
   }
+  async function updateReportMtime() {
+    if (!window.api.getReportMtime) return
+    const mtime = await window.api.getReportMtime()
+    const mtimeEl = document.getElementById('report-mtime')
+    if (!mtimeEl) return
+    if (mtime) {
+      const d = new Date(mtime)
+      const fmt = d.toLocaleDateString('en-GB') + ' ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+      mtimeEl.textContent = 'Last updated: ' + fmt
+    } else {
+      mtimeEl.textContent = ''
+    }
+  }
   async function renderPicks() {
     const listEl = document.getElementById('pick-machine-list')
     const itPanel = document.getElementById('in-transit-panel')
-    // Update report mtime display
-    if (window.api.getReportMtime) {
-      const mtime = await window.api.getReportMtime()
-      const mtimeEl = document.getElementById('report-mtime')
-      if (mtimeEl) {
-        if (mtime) {
-          const d = new Date(mtime)
-          const fmt = d.toLocaleDateString('en-GB') + ' ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
-          mtimeEl.textContent = 'Last updated: ' + fmt
-        } else {
-          mtimeEl.textContent = ''
-        }
-      }
-    }
+    await updateReportMtime()
     if (!lastFilePath) {
       listEl.innerHTML = '<div class="pick-empty">No report loaded yet.</div>'
       pickDetailSet('', '')
