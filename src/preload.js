@@ -47,6 +47,7 @@ contextBridge.exposeInMainWorld('api', {
   markDone:             (machines)       => ipcRenderer.invoke('mark-done', machines),
   getHistoryDates:      ()               => ipcRenderer.invoke('get-history-dates'),
   getHistoryByDate:     (date)           => ipcRenderer.invoke('get-history-by-date', date),
+  getWeekSummary:       (from, to)       => ipcRenderer.invoke('get-week-summary', { from, to }),
 
   parseExcel(filePath) {
     return parseRows(filePath)

@@ -540,6 +540,7 @@
   .pick-mach:hover { background:#eef1f5; }
   .pick-mach.active { background:#fff; border:0.5px solid #185fa5; }
   .pick-badge { margin-left:auto; border-radius:8px; padding:1px 7px; font-size:9.5px; white-space:nowrap; }
+  .pick-week-badge{font-size:9.5px;color:#0e7490;background:#e0f2fe;border-radius:4px;padding:1px 5px;margin-right:5px;white-space:nowrap;flex-shrink:0}
   .pick-badge.daily { background:#e1f0e1; color:#000; }
   .pick-badge.amber { background:#fae8d4; color:#000; }
   .pick-hd { padding:10px 14px; border-bottom:0.5px solid #eee; display:flex; align-items:center; justify-content:space-between; background:#fff; }
@@ -869,6 +870,7 @@
       <button id="btn-mode-short" class="pick-icon-btn restock-mode-btn" onclick="setRestockMode('short')" title="Short break — follow portal qty exactly">0</button>
       <button id="btn-mode-sembreak" class="pick-icon-btn restock-mode-btn" onclick="setRestockMode('sembreak')" title="Sem Break — negative buffer to draw down stock">−</button>
     </div>
+    <button id="btn-toggle-week" class="pick-icon-btn pick-flt-btn in-queue" onclick="toggleWeekBadges()" title="Show / hide day badges for machines with a list made this week (Mon–Sat)">Wk</button>
     <button id="btn-show-all" class="pick-icon-btn" onclick="toggleShowAll()" title="Show all machines"><span class="icon">view_list</span></button>
     <button id="btn-queue-view" class="pick-icon-btn" onclick="showQueueView()" title="View Queue"><span class="icon">pending_actions</span></button>
   </div>
@@ -1203,6 +1205,8 @@
     if (s.restockMode) restockMode = s.restockMode
     else if (s.semBreakMode) restockMode = 'sembreak'  // migrate old boolean setting
     updateRestockModeButtons()
+    if (s.showWeekBadges === false) showWeekBadges = false
+    document.getElementById('btn-toggle-week')?.classList.toggle('in-queue', showWeekBadges)
     if (s.q3ThresholdPct) q3ThresholdPct = s.q3ThresholdPct
     pdfPages = s.pdfPages || s.pickPdfPages || 1  // migrate old per-target page settings
     document.getElementById('pdf-pages').value   = pdfPages
@@ -1636,6 +1640,19 @@
         itPanel.innerHTML = ''
       }
 
+      // Week badges: machines with any picking_history row in the week
+      // (Mon–Sat) containing the selected date. Purely derived — rolls over
+      // automatically on Monday, no storage, no cleanup.
+      let weekDone = {}
+      if (showWeekBadges) {
+        const wd = new Date(dateStr + 'T12:00:00')
+        const dowW = (wd.getDay() + 6) % 7            // 0 = Mon
+        const mon = new Date(wd); mon.setDate(wd.getDate() - dowW)
+        const sat = new Date(mon); sat.setDate(mon.getDate() + 5)
+        const fmtD = x => `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}`
+        weekDone = await window.api.getWeekSummary(fmtD(mon), fmtD(sat)) || {}
+      }
+
       const list = window.api.getTodayPicks(lastFilePath, dateISO, currentPending)
       document.getElementById('pick-count').textContent = `${list.length} machines to pick`
       currentPickList = list
@@ -1664,7 +1681,10 @@
           badgeText = m.reason==='25%' ? `${pctVal}%` : `${m.reason==='scheduled' ? 'Scheduled' : 'Daily'} (${pctVal}%)`
         }
         row.dataset.machine = m.machine
-        row.innerHTML = `<span>${m.machine}</span><span class="pick-badge ${badgeClass}">${badgeText}</span>`
+        const DAY_CH = ['一','二','三','四','五','六','日']
+        const wkDays = (weekDone[m.machine] || []).map(dt => DAY_CH[(new Date(dt + 'T12:00:00').getDay() + 6) % 7]).join(' ')
+        const wkHtml = wkDays ? `<span class="pick-week-badge">${wkDays}</span>` : ''
+        row.innerHTML = `<span>${m.machine}</span>${wkHtml}<span class="pick-badge ${badgeClass}">${badgeText}</span>`
         row.onclick = () => { document.querySelectorAll('.pick-mach.active').forEach(e=>e.classList.remove('active')); row.classList.add('active'); renderPickDetail(m.machine) }
         listEl.appendChild(row)
       })
@@ -1754,6 +1774,13 @@
     if (inp) { inp.value = ''; filterPickTable('') }
   }
 
+  let showWeekBadges = true   // sidebar: day badges for machines with a list made this week
+  function toggleWeekBadges() {
+    showWeekBadges = !showWeekBadges
+    document.getElementById('btn-toggle-week')?.classList.toggle('in-queue', showWeekBadges)
+    window.api.setSetting('showWeekBadges', showWeekBadges)
+    renderPicks()
+  }
   let showHighBal = false   // A: unhide rows with Bal > 10 (hidden by default)
   let hideZeroRows = false  // B: hide rows with Restock = 0 (shown by default)
   function toggleHighBal() {

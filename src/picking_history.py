@@ -161,6 +161,27 @@ elif cmd == 'get-history-by-date':
         })
     print(json.dumps(result))
 
+elif cmd == 'get-week-summary':
+    # {machine: [pick_date, ...]} within [from, to]. Any status counts:
+    # a row means "a list was made" (auto_cleared/done rows are UPDATEd,
+    # never deleted; wholesale re-queue within 36h can drop an earlier
+    # day's pending row — accepted, rare).
+    d_from = sys.argv[2] if len(sys.argv) > 2 else ''
+    d_to   = sys.argv[3] if len(sys.argv) > 3 else ''
+    if not DB.exists() or not d_from or not d_to:
+        print(json.dumps({})); sys.exit(0)
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT DISTINCT machine, pick_date FROM picking_history "
+        "WHERE pick_date BETWEEN ? AND ? ORDER BY machine, pick_date",
+        (d_from, d_to)
+    ).fetchall()
+    conn.close()
+    result = {}
+    for r in rows:
+        result.setdefault(r['machine'], []).append(r['pick_date'])
+    print(json.dumps(result))
+
 elif cmd == 'mark-done':
     machines = json.loads(sys.stdin.read())
     if not machines:

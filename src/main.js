@@ -9,7 +9,7 @@ const CRED_FILE     = path.join(app.getPath('userData'), 'credentials.enc')
 const SETTINGS_FILE = path.join(app.getPath('userData'), 'settings.json')
 const LAST_REPORT   = path.join(ROOT, 'db', 'last_report.xlsx')
 const LAST_DIFFS    = path.join(ROOT, 'db', 'last_diffs.json')
-const DEFAULT_SETTINGS = { menuBar: false, showConsole: false, closeTray: false, notifyChanges: false, autoDownload: false, autoDownloadInterval: 30, headedBrowser: false, landingUrl: 'https://vendingportal.azurewebsites.net/SuperAdmin/SPLogin.aspx', restockMode: 'normal', q3ThresholdPct: 50, uiZoom: 100, pdfPaperSize: 'A4', pdfFontPct: 100, pdfMarginTop: 12, pdfMarginBottom: 12, pdfMarginLeft: 12, pdfMarginRight: 12, pdfPages: 1 }
+const DEFAULT_SETTINGS = { menuBar: false, showConsole: false, closeTray: false, notifyChanges: false, autoDownload: false, autoDownloadInterval: 30, headedBrowser: false, landingUrl: 'https://vendingportal.azurewebsites.net/SuperAdmin/SPLogin.aspx', restockMode: 'normal', q3ThresholdPct: 50, uiZoom: 100, pdfPaperSize: 'A4', pdfFontPct: 100, pdfMarginTop: 12, pdfMarginBottom: 12, pdfMarginLeft: 12, pdfMarginRight: 12, pdfPages: 1, showWeekBadges: true }
 const F9_TRIGGER    = path.join(ROOT, 'db', '.f9_trigger')
 const BROWSER_STOP  = path.join(ROOT, 'db', '.browser_stop')
 const ICON_PNG = path.join(ROOT, 'asset', 'image', 'icon_nobg.png')
@@ -458,6 +458,7 @@ ipcMain.handle('save-picks',             (_, picks) => spawnPy([PICKING_HISTORY,
 ipcMain.handle('mark-done',              (_, machines) => spawnPy([PICKING_HISTORY, 'mark-done'], machines))
 ipcMain.handle('get-history-dates',      ()         => spawnPy([PICKING_HISTORY, 'get-history-dates'], null))
 ipcMain.handle('get-history-by-date',    (_, date)  => spawnPy([PICKING_HISTORY, 'get-history-by-date', date], null))
+ipcMain.handle('get-week-summary',       (_, r)    => spawnPy([PICKING_HISTORY, 'get-week-summary', r.from, r.to], null))
 
 // Layout derived from the PDF Export settings — shared by every printToPDF export.
 const PAPER_MM = { A4: [210, 297], A5: [148, 210], Letter: [215.9, 279.4], Legal: [215.9, 355.6] }
