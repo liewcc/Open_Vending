@@ -1796,9 +1796,14 @@
     const detailEl = document.getElementById('pick-detail')
     try {
       const oosByLane = (currentOos[machine]) || {}
-      const pl = window.api.getPickList(lastFilePath, machine, {}, oosByLane, currentForecast[machine] || {}, restockMode !== 'normal', getBufferByLane(machine))
-      const team = window.api.teamOf(machine) || '—'
       const dateStr = document.getElementById('pick-date').value
+      const todayStr = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` })()
+      // Future date = planning view: deduct in-transit qty so the office can
+      // prep tomorrow's list mid-route. Today = execution view: never deduct
+      // (a queued machine's own pending entry would zero every lane).
+      const planPending = dateStr > todayStr ? (currentPending[machine] || {}) : {}
+      const pl = window.api.getPickList(lastFilePath, machine, planPending, oosByLane, currentForecast[machine] || {}, restockMode !== 'normal', getBufferByLane(machine))
+      const team = window.api.teamOf(machine) || '—'
       let rows = pl.rows
       if (isEditMode && editMachine === machine) {
         const date = dateStr.replace(/-/g, '')
@@ -2689,13 +2694,16 @@ function bufRenderMachineList(filter) {
     // printout, same as the queue. The raw-report fallback must NOT deduct
     // the machine's own pending queue entry — that zeroed every lane once
     // the machine was queued, so the button silently printed nothing.
+    // Future dates deduct in-transit (planning view).
     const saved = await window.api.loadPickEdit(machine, dateKey)
     let rows
     if (saved?.rows?.length) {
       rows = saved.rows.filter(r => (Number(r.restock) || 0) > 0)
     } else {
       const oosByLane = (currentOos[machine]) || {}
-      const pl = window.api.getPickList(lastFilePath, machine, {}, oosByLane, currentForecast[machine] || {}, restockMode !== 'normal', getBufferByLane(machine))
+      const todayStr = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` })()
+      const planPending = dateStr > todayStr ? (currentPending[machine] || {}) : {}
+      const pl = window.api.getPickList(lastFilePath, machine, planPending, oosByLane, currentForecast[machine] || {}, restockMode !== 'normal', getBufferByLane(machine))
       rows = pl.rows.filter(r => !r.zeroRestock).map(r => ({ ...r, replacement: '' }))
     }
     if (!rows.length) { alert('Nothing to print — every lane has restock 0.'); return }
