@@ -1482,7 +1482,13 @@
     }
     table.querySelectorAll('tbody tr').forEach(tr => {
       const cells = cellIdxs ? cellIdxs.map(i => tr.cells[i]).filter(Boolean) : Array.from(tr.cells)
-      const text = cells.map(td => td.textContent).join(' ').toLowerCase()
+      // Cells rendered as <input>/<select> keep their content in .value, not
+      // .textContent (Route Plan's Machine/Team columns) — include it.
+      const text = cells.map(td => {
+        let s = td.textContent
+        td.querySelectorAll('input[type="text"], select').forEach(el => { s += ' ' + (el.value || '') })
+        return s
+      }).join(' ').toLowerCase()
       tr.style.display = (!q || text.includes(q)) ? '' : 'none'
     })
   }
