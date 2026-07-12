@@ -1956,7 +1956,7 @@
         const lanes = currentPending[mach]
         const units = Object.values(lanes).reduce((a, v) => a + (Number(v) || 0), 0)
         const laneCount = Object.keys(lanes).length
-        html += `<div class="q-item"><div style="flex:1"><span class="q-machine" onclick="enterEditMode('${em}')">${mach}</span><div class="q-sub">${units} units &middot; ${laneCount} lane${laneCount!==1?'s':''}</div></div><div class="q-item-acts"><button class="q-icon-btn" onclick="enterEditMode('${em}')" title="Edit"><span class="icon">edit</span></button><button class="q-icon-btn" onclick="deleteFromQueue('${em}')" title="Remove"><span class="icon">delete</span></button></div></div>`
+        html += `<div class="q-item"><input type="checkbox" class="q-chk" value="${mach}" checked style="margin-right:8px;flex-shrink:0;"><div style="flex:1"><span class="q-machine" onclick="enterEditMode('${em}')">${mach}</span><div class="q-sub">${units} units &middot; ${laneCount} lane${laneCount!==1?'s':''}</div></div><div class="q-item-acts"><button class="q-icon-btn" onclick="enterEditMode('${em}')" title="Edit"><span class="icon">edit</span></button><button class="q-icon-btn" onclick="deleteFromQueue('${em}')" title="Remove"><span class="icon">delete</span></button></div></div>`
       })
       html += `<div class="q-footer"><button class="q-icon-btn" onclick="exportQueueExcel()" title="Export as Excel"><span class="icon">table_view</span></button><button class="q-icon-btn" onclick="exportQueuePdf()" title="Export as PDF"><span class="icon">picture_as_pdf</span></button><button class="q-icon-btn" onclick="updateQueue()" title="Refresh"><span class="icon">refresh</span></button><button class="q-icon-btn" onclick="deleteAllQueue()" title="Delete All"><span class="icon">delete_forever</span></button></div>`
       body.innerHTML = html
@@ -1983,6 +1983,9 @@
   // as saved at queue/edit-sync time), so they always show the queue's actual
   // content; the report file is only a fallback for rows queued before
   // product names were stored.
+  function selectedQueueMachines() {
+    return new Set([...document.querySelectorAll('#queue-modal-body .q-chk:checked')].map(cb => cb.value))
+  }
   async function collectQueueRows() {
     const detail = await window.api.getPendingDetail() || {}
     const rows = []
@@ -1998,13 +2001,15 @@
     return rows
   }
   async function exportQueueExcel() {
-    const rows = await collectQueueRows()
+    const sel = selectedQueueMachines()
+    const rows = (await collectQueueRows()).filter(r => sel.has(r.machine))
     if (!rows.length) return
     const r = await window.api.exportQueueExcel(rows)
     if (r && r.ok) addLog('Queue exported: ' + r.filePath)
   }
   async function exportQueuePdf() {
-    const rows = await collectQueueRows()
+    const sel = selectedQueueMachines()
+    const rows = (await collectQueueRows()).filter(r => sel.has(r.machine))
     if (!rows.length) return
     const dateStr = document.getElementById('pick-date').value
     const [y, mo, d] = dateStr.split('-')
