@@ -541,6 +541,9 @@
   .pick-mach.active { background:#fff; border:0.5px solid #185fa5; }
   .pick-badge { margin-left:auto; border-radius:8px; padding:1px 7px; font-size:9.5px; white-space:nowrap; }
   .pick-week-badge{font-size:9.5px;color:#0e7490;background:#e0f2fe;border-radius:4px;padding:1px 5px;margin-right:5px;white-space:nowrap;flex-shrink:0}
+  .pick-mode-badge{font-size:10px;font-weight:700;border-radius:4px;padding:0 5px;margin-right:5px;flex-shrink:0}
+  .pick-mode-badge.short{color:#b45309;background:#fef3c7}
+  .pick-mode-badge.sembreak{color:#b91c1c;background:#fee2e2}
   .pick-badge.daily { background:#e1f0e1; color:#000; }
   .pick-badge.amber { background:#fae8d4; color:#000; }
   .pick-hd { padding:10px 14px; border-bottom:0.5px solid #eee; display:flex; align-items:center; justify-content:space-between; background:#fff; }
@@ -952,7 +955,9 @@
       <div id="rp-toolbar" style="display:flex;align-items:center;gap:12px;padding:9px 14px;background:#fff;border-bottom:0.5px solid #e2e4e9;font-size:12px;">
         <span style="font-weight:500;color:#1f2937;">Route Plan</span>
         <span id="rp-status" style="font-size:11px;color:#6b7280;"></span>
-        <button id="rp-btn-add" class="pick-icon-btn" style="margin-left:auto;" onclick="rpAddMachine()" title="Add machine"><span class="icon">add</span></button>
+        <select id="rp-bulk-mode" style="padding:2px 6px;border:1px solid #d1d5db;border-radius:6px;font-size:11px;color:#374151;background:#fff;margin-left:auto;"><option value="normal">+ Normal</option><option value="short">0 Short</option><option value="sembreak">− Sem Break</option></select>
+        <button class="pick-icon-btn" onclick="rpApplyModeToVisible()" title="Set mode on all visible (filtered) rows — then press Save"><span class="icon">done_all</span></button>
+        <button id="rp-btn-add" class="pick-icon-btn" onclick="rpAddMachine()" title="Add machine"><span class="icon">add</span></button>
         <button id="rp-btn-save" class="pick-icon-btn" onclick="rpSaveAll()" title="Save changes"><span class="icon">save</span></button>
       </div>
       <div class="pick-search-bar">
@@ -1216,8 +1221,9 @@
     if (s.smDbPath)      document.getElementById('sm-db-path').value = s.smDbPath
     if (s.smGenDbPath)   window._smGenDbPath = s.smGenDbPath
     if (s.sdCsvPath)     document.getElementById('sd-csv-path').value = s.sdCsvPath
-    if (s.restockMode) restockMode = s.restockMode
-    else if (s.semBreakMode) restockMode = 'sembreak'  // migrate old boolean setting
+    // restockMode is retired as a global setting — mode now lives per-machine
+    // in route_plan.json (see modeOf()/Task 7). Uniform-state highlight is
+    // derived straight from the route plan.
     updateRestockModeButtons()
     if (s.showWeekBadges === false) showWeekBadges = false
     document.getElementById('btn-toggle-week')?.classList.toggle('in-queue', showWeekBadges)
@@ -1543,7 +1549,6 @@
   let currentOos = {}
   let currentForecast = {}   // {machine: {pid: avg_qty}}
   let currentBuffer = {}     // {machine: {lane_no: {normal_qty, sembreak_qty, pid}}}
-  let restockMode = 'normal'  // 'normal' | 'short' | 'sembreak'
   let laneTypes = {}          // {pid: {type: 'cold'|'ambient'|'unknown', name: string}}
   let q3Cache = {}            // {machine: replacement-data IPC result} session cache
   let q3ThresholdPct = 50     // slow if machine 30d sales < pct% of tray avg
@@ -1551,18 +1556,22 @@
   let mvSales = {}    // {pid: qty} for the current window (edit mode)
 
   function getBufferByLane(machine) {
-    if (restockMode === 'short') return {}
+    const mode = window.api.modeOf(machine)
+    if (mode === 'short') return {}
     const machineBuf = currentBuffer[machine] || {}
     const result = {}
     for (const [laneNo, v] of Object.entries(machineBuf)) {
-      result[laneNo] = restockMode === 'sembreak' ? (v.sembreak_qty || 0) : (v.normal_qty || 0)
+      result[laneNo] = mode === 'sembreak' ? (v.sembreak_qty || 0) : (v.normal_qty || 0)
     }
     return result
   }
   function updateRestockModeButtons() {
+    const plan = window.api.getRoutePlan()
+    const modes = new Set(Object.values(plan.machines || {}).map(v => (v.mode === 'short' || v.mode === 'sembreak') ? v.mode : 'normal'))
+    const uniform = modes.size === 1 ? [...modes][0] : null
     ;['normal', 'short', 'sembreak'].forEach(m => {
       const b = document.getElementById('btn-mode-' + m)
-      if (b) b.classList.toggle('in-queue', m === restockMode)
+      if (b) b.classList.toggle('in-queue', m === uniform)
     })
   }
   let showAllMachines = false
@@ -1630,14 +1639,14 @@
       // Forecast only applies in Normal days mode, and only to cover Saturday's
       // picking list for Sunday (no one restocks on Sunday). No other weekday
       // forecast — that overlaps with buffer qty and double-counts.
+      // Per-machine mode gates application via the semBreak param passed to
+      // getPickList() at each call site, not here — fetch is global.
       currentForecast = {}
-      if (restockMode === 'normal') {
-        const selDate = new Date(document.getElementById('pick-date').value + 'T12:00:00')
-        const dow = (selDate.getDay() + 6) % 7  // JS 0=Sun → remap to 0=Mon…6=Sun
-        if (dow === 5) {  // Saturday → use Sunday's forecast
-          const forecastRaw = await window.api.getForecastByWeekday(6)
-          if (forecastRaw && forecastRaw.ok) currentForecast = forecastRaw.data
-        }
+      const selDate = new Date(document.getElementById('pick-date').value + 'T12:00:00')
+      const dow = (selDate.getDay() + 6) % 7  // JS 0=Sun → remap to 0=Mon…6=Sun
+      if (dow === 5) {  // Saturday → use Sunday's forecast
+        const forecastRaw = await window.api.getForecastByWeekday(6)
+        if (forecastRaw && forecastRaw.ok) currentForecast = forecastRaw.data
       }
 
       // Render in-transit panel
@@ -1701,7 +1710,9 @@
         const DAY_CH = ['一','二','三','四','五','六','日']
         const wkDays = (weekDone[m.machine] || []).map(dt => DAY_CH[(new Date(dt + 'T12:00:00').getDay() + 6) % 7]).join(' ')
         const wkHtml = wkDays ? `<span class="pick-week-badge">${wkDays}</span>` : ''
-        row.innerHTML = `<span>${m.machine}</span>${wkHtml}<span class="pick-badge ${badgeClass}">${badgeText}</span>`
+        const mmode = window.api.modeOf(m.machine)
+        const modeHtml = mmode === 'normal' ? '' : `<span class="pick-mode-badge ${mmode}" title="${mmode === 'short' ? 'Short break' : 'Sem Break'} mode">${mmode === 'short' ? '0' : '−'}</span>`
+        row.innerHTML = `<span>${m.machine}</span>${wkHtml}${modeHtml}<span class="pick-badge ${badgeClass}">${badgeText}</span>`
         row.onclick = () => { document.querySelectorAll('.pick-mach.active').forEach(e=>e.classList.remove('active')); row.classList.add('active'); renderPickDetail(m.machine) }
         listEl.appendChild(row)
       })
@@ -1820,9 +1831,15 @@
   }
 
   async function setRestockMode(mode) {
-    restockMode = mode
+    const plan = window.api.getRoutePlan()
+    const names = Object.keys(plan.machines || {})
+    if (!names.length) return
+    const label = { normal: 'Normal days (+)', short: 'Short break (0)', sembreak: 'Sem Break (−)' }[mode]
+    if (!confirm(`Set ALL ${names.length} machines to ${label}?`)) return
+    const machines = {}
+    names.forEach(n => { machines[n] = { ...plan.machines[n], mode } })
+    await window.api.saveRoutePlan(machines)
     updateRestockModeButtons()
-    window.api.setSetting('restockMode', mode)
     await renderPicks()
     if (currentDetailMachine && !isHistoryMode) renderPickDetail(currentDetailMachine)
   }
@@ -1846,7 +1863,7 @@
       // prep tomorrow's list mid-route. Today = execution view: never deduct
       // (a queued machine's own pending entry would zero every lane).
       const planPending = dateStr > todayStr ? (currentPending[machine] || {}) : {}
-      const pl = window.api.getPickList(lastFilePath, machine, planPending, oosByLane, currentForecast[machine] || {}, restockMode !== 'normal', getBufferByLane(machine))
+      const pl = window.api.getPickList(lastFilePath, machine, planPending, oosByLane, currentForecast[machine] || {}, window.api.modeOf(machine) !== 'normal', getBufferByLane(machine))
       const team = window.api.teamOf(machine) || '—'
       let rows = pl.rows
       if (isEditMode && editMachine === machine) {
@@ -1891,11 +1908,12 @@
             const soldTd = mvWindow > 0 ? `<td style="color:#6b7280">${soldQty}</td>` : `<td style="color:#c3c8d0">—</td>`
             const cls = [r.outOfStock?'pick-out':'', r.fastMover?'pick-fast':'', zr?'pick-zero':'', soldQty===0?'mv-zero':''].filter(Boolean).join(' ')
             const laneNoStr = String(r.no)
+            const machMode = window.api.modeOf(machine)
             const bufSetting = (currentBuffer[machine] || {})[laneNoStr] || {}
-            const bufStored = restockMode === 'sembreak' ? (bufSetting.sembreak_qty || 0) : (bufSetting.normal_qty || 0)
+            const bufStored = machMode === 'sembreak' ? (bufSetting.sembreak_qty || 0) : (bufSetting.normal_qty || 0)
             // Show the STORED setting, not the bal-capped applied value —
             // editing a capped number would drag the setting around with bal.
-            const bufTd = restockMode === 'short'
+            const bufTd = machMode === 'short'
               ? `<td style="color:#c3c8d0">—</td>`
               : `<td class="buf-cell" contenteditable="true" spellcheck="false" data-lane="${laneNoStr}" title="Stored buffer setting — writes back to Buffer Stock on blur (applied today: ${r.bufferQty || 0})" onblur="onBufferCellEdit(this)">${bufStored || ''}</td>`
             const repl = r.replacement || ''
@@ -1979,7 +1997,7 @@
     const oosByLane = (currentOos[machine]) || {}
     // pendingByLane = {} on purpose: queueing replaces the machine's pending
     // set wholesale, so quantities must not be reduced by its own old entry
-    const pl = window.api.getPickList(lastFilePath, machine, {}, oosByLane, currentForecast[machine] || {}, restockMode !== 'normal', getBufferByLane(machine))
+    const pl = window.api.getPickList(lastFilePath, machine, {}, oosByLane, currentForecast[machine] || {}, window.api.modeOf(machine) !== 'normal', getBufferByLane(machine))
     return pl.rows.filter(r => !r.zeroRestock).map(r => ({
       machine,
       lane_no:      String(r.laneNo),
@@ -2126,11 +2144,12 @@
     const pid = td.closest('tr')?.dataset.pid || ''
     const v = parseInt(td.textContent.trim(), 10) || 0
     const cur = (currentBuffer[editMachine] || {})[laneNo] || {}
-    if (v === (restockMode === 'sembreak' ? (cur.sembreak_qty || 0) : (cur.normal_qty || 0))) return  // unchanged
+    const mode = window.api.modeOf(editMachine)
+    if (v === (mode === 'sembreak' ? (cur.sembreak_qty || 0) : (cur.normal_qty || 0))) return  // unchanged
     const row = {
       machine: editMachine, lane_no: laneNo, pid: pid || cur.pid || '',
-      normal_qty:   restockMode === 'sembreak' ? (cur.normal_qty || 0) : v,
-      sembreak_qty: restockMode === 'sembreak' ? v : (cur.sembreak_qty || 0)
+      normal_qty:   mode === 'sembreak' ? (cur.normal_qty || 0) : v,
+      sembreak_qty: mode === 'sembreak' ? v : (cur.sembreak_qty || 0)
     }
     const r = await window.api.setBufferQty([row])
     if (r && r.ok) {
@@ -2387,7 +2406,9 @@
   function rpLoad() {
     const plan = window.api.getRoutePlan()
     rpRows = Object.entries(plan.machines || {}).map(([name, v]) => ({
-      origName: name, name, team: v.team || '', days: RP_DAYS.map(d => (v.scheduleDays || []).includes(d))
+      origName: name, name, team: v.team || '',
+      mode: (v.mode === 'short' || v.mode === 'sembreak') ? v.mode : 'normal',
+      days: RP_DAYS.map(d => (v.scheduleDays || []).includes(d))
     }))
     rpRows.sort((a, b) => a.name.localeCompare(b.name))
     document.getElementById('rp-status').textContent = ''
@@ -2398,6 +2419,7 @@
     { key: 'name', label: 'Machine', render: (r, i) => `<input type="text" value="${r.name}" data-i="${i}" data-f="name" onchange="rpEdit(this)" style="width:200px;">` },
     { key: 'team', label: 'Team', render: (r, i) => `<input type="text" value="${r.team}" data-i="${i}" data-f="team" onchange="rpEdit(this)" style="width:90px;">` },
     { key: 'days', label: 'Schedule Days (none = 25% rule)', sortable: false, render: (r, i) => RP_DAYS.map((d, di) => `<label style="margin-right:8px;font-size:11px;white-space:nowrap;"><input type="checkbox" data-i="${i}" data-d="${di}" ${r.days[di] ? 'checked' : ''} onchange="rpToggleDay(this)"> ${d}</label>`).join('') },
+    { key: 'mode', label: 'Mode', render: (r, i) => `<select data-i="${i}" data-f="mode" onchange="rpEdit(this)" style="padding:2px 4px;border:1px solid #d1d5db;border-radius:4px;font-size:11px;"><option value="normal"${r.mode==='normal'?' selected':''}>+ Normal</option><option value="short"${r.mode==='short'?' selected':''}>0 Short</option><option value="sembreak"${r.mode==='sembreak'?' selected':''}>− Sem Break</option></select>` },
     { key: 'del', label: '', sortable: false, render: (r, i) => `<button class="pick-icon-btn" onclick="rpDeleteRow(${i})" title="Delete"><span class="icon">delete</span></button>` },
   ]
 
@@ -2417,7 +2439,7 @@
   }
 
   function rpAddMachine() {
-    rpRows.push({ origName: null, name: '', team: '', days: RP_DAYS.map(() => false) })
+    rpRows.push({ origName: null, name: '', team: '', mode: 'normal', days: RP_DAYS.map(() => false) })
     rpRender()
     const wrap = document.getElementById('rp-wrap')
     const inputs = wrap.querySelectorAll('input[data-f="name"]')
@@ -2434,6 +2456,20 @@
     filterTable(document.querySelector('#rp-wrap table.rp-tbl'), val, { cols: ['name', 'team'] })
   }
 
+  function rpApplyModeToVisible() {
+    const mode = document.getElementById('rp-bulk-mode').value
+    const table = document.querySelector('#rp-wrap table.rp-tbl')
+    if (!table) return
+    let n = 0
+    table.querySelectorAll('tbody tr').forEach(tr => {
+      if (tr.style.display === 'none') return   // hidden by the filter box
+      const sel = tr.querySelector('select[data-f="mode"]')
+      if (sel) { sel.value = mode; rpEdit(sel); n++ }
+    })
+    const st = document.getElementById('rp-status')
+    st.textContent = `Mode set on ${n} machine${n !== 1 ? 's' : ''} — press Save to apply`
+    st.style.color = '#b45309'
+  }
   async function rpSaveAll() {
     const machines = {}
     const seen = new Set()
@@ -2443,7 +2479,7 @@
       if (!name) continue
       if (seen.has(name)) dupes = true
       seen.add(name)
-      machines[name] = { team: r.team.trim() || 'UNASSIGNED', scheduleDays: RP_DAYS.filter((d, di) => r.days[di]) }
+      machines[name] = { team: r.team.trim() || 'UNASSIGNED', scheduleDays: RP_DAYS.filter((d, di) => r.days[di]), mode: r.mode || 'normal' }
     }
     const statusEl = document.getElementById('rp-status')
     const res = await window.api.saveRoutePlan(machines)
@@ -2774,7 +2810,7 @@ function bufRenderMachineList(filter) {
     const data = (await Promise.all(currentPickList.map(async m => {
       const pendingByLane = (currentPending[m.machine]) || {}
       const oosByLane = (currentOos[m.machine]) || {}
-      const pl = window.api.getPickList(lastFilePath, m.machine, pendingByLane, oosByLane, currentForecast[m.machine] || {}, restockMode !== 'normal', getBufferByLane(m.machine))
+      const pl = window.api.getPickList(lastFilePath, m.machine, pendingByLane, oosByLane, currentForecast[m.machine] || {}, window.api.modeOf(m.machine) !== 'normal', getBufferByLane(m.machine))
       const saved = await window.api.loadPickEdit(m.machine, dateKey)
       const replMap = {}
       if (saved?.rows) saved.rows.forEach(r => { if (r.replacement) replMap[String(r.no)] = r.replacement })
@@ -2810,7 +2846,7 @@ function bufRenderMachineList(filter) {
       const oosByLane = (currentOos[machine]) || {}
       const todayStr = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` })()
       const planPending = dateStr > todayStr ? (currentPending[machine] || {}) : {}
-      const pl = window.api.getPickList(lastFilePath, machine, planPending, oosByLane, currentForecast[machine] || {}, restockMode !== 'normal', getBufferByLane(machine))
+      const pl = window.api.getPickList(lastFilePath, machine, planPending, oosByLane, currentForecast[machine] || {}, window.api.modeOf(machine) !== 'normal', getBufferByLane(machine))
       rows = pl.rows.filter(r => !r.zeroRestock).map(r => ({ ...r, replacement: '' }))
     }
     if (!rows.length) { alert('Nothing to print — every lane has restock 0.'); return }

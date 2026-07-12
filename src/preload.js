@@ -65,6 +65,11 @@ contextBridge.exposeInMainWorld('api', {
     const key = picking.planKeyFor(routePlan.machines, machine)
     return (key && routePlan.machines[key].team) || null
   },
+  modeOf(machine) {
+    const key = picking.planKeyFor(routePlan.machines, machine)
+    const m = key && routePlan.machines[key].mode
+    return (m === 'short' || m === 'sembreak') ? m : 'normal'
+  },
   getRoutePlan() {
     return routePlan
   },
