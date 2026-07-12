@@ -416,6 +416,7 @@ const BUILD_SALES_DETAIL   = path.join(__dirname, 'build_sales_detail.py')
 const BUILD_SALES_FORECAST = path.join(__dirname, 'build_sales_forecast.py')
 const BUFFER_STOCK         = path.join(__dirname, 'buffer_stock.py')
 const REPL_SUGGEST         = path.join(__dirname, 'replacement_suggest.py')
+const MACHINE_SALES        = path.join(__dirname, 'machine_sales.py')
 // All data lives in the unified vending.db (see src/migrate_to_vending.py);
 // the three constants are kept so each handler still says which layer it uses.
 const VENDING_DB           = path.join(ROOT, 'db', 'vending.db')
@@ -858,6 +859,7 @@ ipcMain.handle('calc-buffer-suggestions',()      => spawnPy([BUFFER_STOCK, 'sugg
 ipcMain.handle('load-buffer-suggestions',()      => spawnPy([BUFFER_STOCK, 'get_suggest',    DATA_DB], null))
 ipcMain.handle('get-lane-types',         ()      => spawnPy([BUFFER_STOCK, 'get_lane_types', DATA_DB], null))
 ipcMain.handle('get-replacement-data',   (_, machine) => spawnPy([REPL_SUGGEST, SALES_DETAIL_DB, settings.smProductPath || '', machine], null))
+ipcMain.handle('get-machine-sales', (_, { machine, days }) => spawnPy([MACHINE_SALES, SALES_DETAIL_DB, machine, String(days)], null))
 
 ipcMain.handle('get-report-mtime', () => {
   try { return fs.statSync(LAST_REPORT).mtime.toISOString() } catch { return null }

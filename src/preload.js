@@ -141,6 +141,7 @@ contextBridge.exposeInMainWorld('api', {
   loadBufferSuggestions:  ()     => ipcRenderer.invoke('load-buffer-suggestions'),
   getLaneTypes:           ()     => ipcRenderer.invoke('get-lane-types'),
   getReplacementData:     (machine) => ipcRenderer.invoke('get-replacement-data', machine),
+  getMachineSales:        (machine, days) => ipcRenderer.invoke('get-machine-sales', { machine, days }),
   getMachineLanes(filePath, machine) {
     return picking.listMachineLanes(parseRows(filePath), machine)
   },

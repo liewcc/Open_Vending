@@ -580,6 +580,7 @@
   tr.pick-highbal td { color:#9ca3af; background:#fafbfc; }
   .pick-tbl.hide-highbal tr.pick-highbal { display:none; }
   .pick-tbl.hide-zero tr.pick-zero { display:none; }
+  table.pick-tbl.hide-mvzero tbody tr.mv-zero{display:none}
   .pick-flt-btn { width:auto; height:24px; padding:0 10px; border:1px solid #d1d5db; border-radius:999px; font-size:11px; font-weight:600; background:#fff; }
   .pick-flt-btn.in-queue { color:#16a34a; background:#dcfce7; border-color:#22c55e; }
   .pick-search-bar { display:flex; align-items:center; gap:6px; padding:7px 14px; border-bottom:0.5px solid #eee; background:#fafbfc; }
@@ -1543,6 +1544,8 @@
   let laneTypes = {}          // {pid: {type: 'cold'|'ambient'|'unknown', name: string}}
   let q3Cache = {}            // {machine: replacement-data IPC result} session cache
   let q3ThresholdPct = 50     // slow if machine 30d sales < pct% of tray avg
+  let mvWindow = 0    // sales-movement window in days; 0 = off
+  let mvSales = {}    // {pid: qty} for the current window (edit mode)
 
   function getBufferByLane(machine) {
     if (restockMode === 'short') return {}
@@ -1848,16 +1851,22 @@
         const saved = await window.api.loadPickEdit(machine, date)
         if (saved && saved.rows) rows = saved.rows
         const q3 = await loadQ3Suggestions(machine, rows)
+        mvSales = {}
+        if (mvWindow > 0) {
+          const mv = await window.api.getMachineSales(machine, mvWindow)
+          if (mv && mv.ok) mvSales = mv.sales || {}
+        }
         let hdHtml = `<div class="pick-hd"><div><div class="nm">${machine}</div><div class="sub">Picking date ${dateStr} &nbsp;·&nbsp; Restock team ${team}</div></div><button class="pick-icon-btn" onclick="exitEditMode()" title="Save &amp; Exit Edit"><span class="icon">save</span></button></div>`
+        const mvCtl = `<span style="font-weight:400;margin-left:auto;">Sold <select onchange="onMvWindowChange(this.value)" style="padding:1px 4px;border:1px solid #d1d5db;border-radius:4px;font-size:11px;"><option value="0"${mvWindow===0?' selected':''}>off</option><option value="1"${mvWindow===1?' selected':''}>1d</option><option value="10"${mvWindow===10?' selected':''}>10d</option><option value="20"${mvWindow===20?' selected':''}>20d</option></select></span>`
         const q3Ctl = q3.ok
-          ? `<span style="margin-left:auto;font-weight:400;">Slow &lt; <input type="number" min="1" max="100" value="${q3ThresholdPct}" style="width:44px;padding:1px 4px;border:1px solid #d1d5db;border-radius:4px;font-size:11px;" onchange="onQ3ThresholdChange(this.value)"> % of tray avg</span>`
-          : `<span style="margin-left:auto;font-weight:400;color:#9ca3af;">Slow-mover suggestions off — ${q3.error || 'set product.csv in Slow Mover panel'}</span>`
-        hdHtml += `<div class="edit-banner" style="display:flex;align-items:center;gap:6px;">&#9998;&nbsp; Edit mode &mdash; changes auto-saved${q3Ctl}</div>`
+          ? `<span style="margin-left:10px;font-weight:400;">Slow &lt; <input type="number" min="1" max="100" value="${q3ThresholdPct}" style="width:44px;padding:1px 4px;border:1px solid #d1d5db;border-radius:4px;font-size:11px;" onchange="onQ3ThresholdChange(this.value)"> % of tray avg</span>`
+          : `<span style="margin-left:10px;font-weight:400;color:#9ca3af;">Slow-mover suggestions off — ${q3.error || 'set product.csv in Slow Mover panel'}</span>`
+        hdHtml += `<div class="edit-banner" style="display:flex;align-items:center;gap:6px;">&#9998;&nbsp; Edit mode &mdash; changes auto-saved${mvCtl}${q3Ctl}</div>`
         hdHtml += `<div class="pick-search-bar"><input type="text" id="pick-search-input" placeholder="Search product…" oninput="filterPickTable(this.value)"><button onclick="clearPickSearch()">Clear</button></div>`
         let bodyHtml
         if (!rows.length) { bodyHtml = '<div class="pick-empty">All lanes sufficiently stocked.</div>' }
         else {
-          bodyHtml = `<table class="lv-tbl pick-tbl"><thead><tr><th data-col="no">No</th><th data-col="product">Product</th><th data-col="bal">Bal</th><th data-col="lane">Lane</th><th data-col="forecast">Forecast</th><th data-col="buffer">Buffer</th><th data-col="restock">Restock</th><th data-col="replacement">Replacement</th><th></th></tr></thead><tbody>`
+          bodyHtml = `<table class="lv-tbl pick-tbl${mvWindow > 0 ? ' hide-mvzero' : ''}"><thead><tr><th data-col="no">No</th><th data-col="product">Product</th><th data-col="sold">Sold</th><th data-col="bal">Bal</th><th data-col="lane">Lane</th><th data-col="forecast">Forecast</th><th data-col="buffer">Buffer</th><th data-col="restock">Restock</th><th data-col="replacement">Replacement</th><th></th></tr></thead><tbody>`
           rows.forEach(r => {
             const tag = r.outOfStock ? '<span class="pick-out-tag">OUT</span>' : ''
             const ftag = r.fastMover ? '<span class="pick-fast-tag">FAST</span>' : ''
@@ -1865,15 +1874,17 @@
             const stag = sug ? '<span class="pick-slow-tag">SLOW</span>' : ''
             const sugBtn = sug ? `<button class="pick-sug-btn" onclick="openSugMenu(this, '${r.no}')" title="Suggest replacements (same tray &amp; size)">💡</button>` : ''
             const zr = r.zeroRestock ?? ((Number(r.restock) || 0) === 0)
-            const cls = [r.outOfStock?'pick-out':'', r.fastMover?'pick-fast':'', zr?'pick-zero':''].filter(Boolean).join(' ')
+            const soldQty = mvWindow > 0 ? (Number(mvSales[String(r.productId)]) || 0) : null
+            const soldTd = mvWindow > 0 ? `<td style="color:#6b7280">${soldQty}</td>` : `<td style="color:#c3c8d0">—</td>`
+            const cls = [r.outOfStock?'pick-out':'', r.fastMover?'pick-fast':'', zr?'pick-zero':'', soldQty===0?'mv-zero':''].filter(Boolean).join(' ')
             const bufCol = r.bufferQty ? `<span style="color:#0891b2">${r.bufferQty > 0 ? '+' : ''}${r.bufferQty}</span>` : '—'
             const repl = r.replacement || ''
-            bodyHtml += `<tr class="${cls}" data-pid="${r.productId || ''}"><td>${r.no}</td><td contenteditable="true" spellcheck="false">${r.product}${tag}${ftag}${stag}${laneTypeBadge(r.productId)}</td><td contenteditable="true" spellcheck="false">${r.bal}</td><td contenteditable="true" spellcheck="false">${r.lane}</td><td style="color:#6b7280">${r.forecastQty > 0 ? '+' + r.forecastQty : '—'}</td><td>${bufCol}</td><td contenteditable="true" spellcheck="false">${r.restock}</td><td contenteditable="true" spellcheck="false">${repl}</td><td style="white-space:nowrap">${sugBtn}<button class="pick-swap-btn" onclick="handleSwap(this)" title="Swap lane with another row">⇅</button></td></tr>`
+            bodyHtml += `<tr class="${cls}" data-pid="${r.productId || ''}"><td>${r.no}</td><td contenteditable="true" spellcheck="false">${r.product}${tag}${ftag}${stag}${laneTypeBadge(r.productId)}</td>${soldTd}<td contenteditable="true" spellcheck="false">${r.bal}</td><td contenteditable="true" spellcheck="false">${r.lane}</td><td style="color:#6b7280">${r.forecastQty > 0 ? '+' + r.forecastQty : '—'}</td><td>${bufCol}</td><td contenteditable="true" spellcheck="false">${r.restock}</td><td contenteditable="true" spellcheck="false">${repl}</td><td style="white-space:nowrap">${sugBtn}<button class="pick-swap-btn" onclick="handleSwap(this)" title="Swap lane with another row">⇅</button></td></tr>`
           })
           bodyHtml += '</tbody></table>'
         }
         pickDetailSet(hdHtml, bodyHtml)
-        makeSortable(detailEl.querySelector('table.pick-tbl'), { skipCols: [8] })
+        makeSortable(detailEl.querySelector('table.pick-tbl'), { skipCols: [9] })
         const tbl = detailEl.querySelector('table.pick-tbl')
         if (tbl) {
           tbl.addEventListener('input', () => {
@@ -2094,7 +2105,7 @@
     document.querySelectorAll('table.pick-tbl tbody tr').forEach(tr => {
       const tds = tr.querySelectorAll('td')
       if (tds.length < 5) return
-      rows.push({ no: tds[0].textContent.trim(), productId: tr.dataset.pid || '', product: cleanProductName(tds[1]), bal: tds[2].textContent.trim(), lane: tds[3].textContent.trim(), restock: tds[6].textContent.trim(), replacement: tds[7]?.textContent.trim() || '', outOfStock: tr.classList.contains('pick-out'), fastMover: tr.classList.contains('pick-fast') })
+      rows.push({ no: tds[0].textContent.trim(), productId: tr.dataset.pid || '', product: cleanProductName(tds[1]), bal: tds[3].textContent.trim(), lane: tds[4].textContent.trim(), restock: tds[7].textContent.trim(), replacement: tds[8]?.textContent.trim() || '', outOfStock: tr.classList.contains('pick-out'), fastMover: tr.classList.contains('pick-fast') })
     })
     return rows.length ? rows : null
   }
@@ -2114,8 +2125,8 @@
       const tdsB = tr.querySelectorAll('td')
       const prodA = cleanProductName(tdsA[1]), prodB = cleanProductName(tdsB[1])
       const noA = tdsA[0].textContent.trim(), noB = tdsB[0].textContent.trim()
-      tdsA[7].textContent = `⇄ L${noB} ${prodB}`
-      tdsB[7].textContent = `⇄ L${noA} ${prodA}`
+      tdsA[8].textContent = `⇄ L${noB} ${prodB}`
+      tdsB[8].textContent = `⇄ L${noA} ${prodA}`
       swapSelectedRow.classList.remove('swap-sel')
       swapSelectedRow = null
       tr.closest('table').dispatchEvent(new Event('input', { bubbles: true }))
@@ -2173,12 +2184,23 @@
     const trs = document.querySelectorAll('#pick-detail table.pick-tbl tbody tr')
     for (const tr of trs) {
       if (tr.cells[0].textContent.trim() === laneNo) {
-        tr.cells[7].textContent = name
+        tr.cells[8].textContent = name
         tr.closest('table').dispatchEvent(new Event('input', { bubbles: true }))
         break
       }
     }
     document.getElementById('sug-menu').style.display = 'none'
+  }
+
+  async function onMvWindowChange(v) {
+    mvWindow = Number(v) || 0
+    if (isEditMode && editMachine) {
+      // flush the pending autosave before re-rendering wipes the DOM
+      clearTimeout(editSaveTimer)
+      const r = collectEditRows(); const d = document.getElementById('pick-date').value.replace(/-/g, '')
+      if (r) { await window.api.savePickEdit(editMachine, d, r); await syncQueueWithEdit(editMachine) }
+      renderPickDetail(editMachine)
+    }
   }
 
   function onQ3ThresholdChange(v) {
