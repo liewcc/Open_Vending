@@ -9,7 +9,7 @@ const CRED_FILE     = path.join(app.getPath('userData'), 'credentials.enc')
 const SETTINGS_FILE = path.join(app.getPath('userData'), 'settings.json')
 const LAST_REPORT   = path.join(ROOT, 'db', 'last_report.xlsx')
 const LAST_DIFFS    = path.join(ROOT, 'db', 'last_diffs.json')
-const DEFAULT_SETTINGS = { menuBar: false, showConsole: false, closeTray: false, notifyChanges: false, autoDownload: false, autoDownloadInterval: 30, headedBrowser: false, landingUrl: 'https://vendingportal.azurewebsites.net/SuperAdmin/SPLogin.aspx', restockMode: 'normal', q3ThresholdPct: 50, uiZoom: 100, pdfPaperSize: 'A4', pdfFontPct: 100, pdfMarginTop: 12, pdfMarginBottom: 12, pdfMarginLeft: 12, pdfMarginRight: 12, pdfPages: 1, showWeekBadges: true }
+const DEFAULT_SETTINGS = { menuBar: false, showConsole: false, closeTray: false, notifyChanges: false, autoDownload: false, autoDownloadInterval: 30, headedBrowser: false, landingUrl: 'https://vendingportal.azurewebsites.net/SuperAdmin/SPLogin.aspx', restockMode: 'normal', q3ThresholdPct: 50, uiZoom: 100, pdfPaperSize: 'A4', pdfFontPct: 100, pdfMarginTop: 12, pdfMarginBottom: 12, pdfMarginLeft: 12, pdfMarginRight: 12, pdfPages: 1, showWeekBadges: true, pdfDuplex: true }
 const F9_TRIGGER    = path.join(ROOT, 'db', '.f9_trigger')
 const BROWSER_STOP  = path.join(ROOT, 'db', '.browser_stop')
 const ICON_PNG = path.join(ROOT, 'asset', 'image', 'icon_nobg.png')
@@ -538,6 +538,46 @@ ipcMain.handle('print-all-picking-lists', async (_, { data, pages }) => {
     }
   }
 
+  // Duplex padding: after the font is final, count each machine's real page
+  // usage with the same pagination simulation, then insert one true blank
+  // page after every odd-paged machine (except the last — nothing follows).
+  // CSS break-before:right is ignored by this Chromium's printToPDF, so the
+  // blank is a real DOM element (&nbsp; keeps it from collapsing).
+  if (settings.pdfDuplex !== false) {
+    const countScript = `(() => {
+      const pageH = ${L.pageH.toFixed(2)};
+      const counts = [];
+      document.querySelectorAll('.page').forEach(pg => {
+        const table = pg.querySelector('table');
+        const thead = pg.querySelector('thead');
+        if (!table || !thead) { counts.push(1); return; }
+        const headerH = table.getBoundingClientRect().top - pg.getBoundingClientRect().top;
+        const theadH = thead.getBoundingClientRect().height;
+        let used = headerH + theadH;
+        let n = 1;
+        pg.querySelectorAll('tbody tr').forEach(tr => {
+          const h = tr.getBoundingClientRect().height;
+          if (used + h > pageH) { n++; used = theadH + h; } else { used += h; }
+        });
+        counts.push(n);
+      });
+      return counts;
+    })()`
+    const counts = await printWin.webContents.executeJavaScript(countScript)
+    await printWin.webContents.executeJavaScript(`(() => {
+      const pages = document.querySelectorAll('.page');
+      const counts = ${JSON.stringify(counts)};
+      for (let i = 0; i < pages.length - 1; i++) {
+        if (counts[i] % 2 === 1) {
+          const blank = document.createElement('div');
+          blank.className = 'page';
+          blank.innerHTML = '&nbsp;';
+          pages[i].after(blank);
+        }
+      }
+    })()`)
+  }
+
   const pdfBuffer = await printWin.webContents.printToPDF(L.printOpts)
   printWin.destroy()
 
@@ -735,6 +775,46 @@ ipcMain.handle('export-queue-pdf', async (_, { rows, pages, date }) => {
     const factor = i === 0 ? Math.max(0.5, targetPages / maxP) : 0.95
     fs2 = Math.max(5, fs2 * factor)
     await printWin.webContents.executeJavaScript(`document.documentElement.style.setProperty('--fs','${fs2.toFixed(2)}px')`)
+  }
+
+  // Duplex padding: after the font is final, count each machine's real page
+  // usage with the same pagination simulation, then insert one true blank
+  // page after every odd-paged machine (except the last — nothing follows).
+  // CSS break-before:right is ignored by this Chromium's printToPDF, so the
+  // blank is a real DOM element (&nbsp; keeps it from collapsing).
+  if (settings.pdfDuplex !== false) {
+    const countScript = `(() => {
+      const pageH = ${L.pageH.toFixed(2)};
+      const counts = [];
+      document.querySelectorAll('.page').forEach(pg => {
+        const table = pg.querySelector('table');
+        const thead = pg.querySelector('thead');
+        if (!table || !thead) { counts.push(1); return; }
+        const headerH = table.getBoundingClientRect().top - pg.getBoundingClientRect().top;
+        const theadH = thead.getBoundingClientRect().height;
+        let used = headerH + theadH;
+        let n = 1;
+        pg.querySelectorAll('tbody tr').forEach(tr => {
+          const h = tr.getBoundingClientRect().height;
+          if (used + h > pageH) { n++; used = theadH + h; } else { used += h; }
+        });
+        counts.push(n);
+      });
+      return counts;
+    })()`
+    const counts = await printWin.webContents.executeJavaScript(countScript)
+    await printWin.webContents.executeJavaScript(`(() => {
+      const pages = document.querySelectorAll('.page');
+      const counts = ${JSON.stringify(counts)};
+      for (let i = 0; i < pages.length - 1; i++) {
+        if (counts[i] % 2 === 1) {
+          const blank = document.createElement('div');
+          blank.className = 'page';
+          blank.innerHTML = '&nbsp;';
+          pages[i].after(blank);
+        }
+      }
+    })()`)
   }
 
   const pdfBuffer = await printWin.webContents.printToPDF(L.printOpts)

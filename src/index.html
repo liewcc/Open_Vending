@@ -849,6 +849,16 @@
           style="width:56px;padding:4px 6px;border:1px solid #d1d5db;border-radius:6px;font-size:12px;color:#374151;text-align:right;"
           onchange="this.value=Math.min(50,Math.max(1,parseInt(this.value,10)||1));pdfPages=parseInt(this.value,10);applySetting('pdfPages',pdfPages)">
       </div>
+      <div class="toggle-row">
+        <div>
+          <div class="toggle-label">Duplex Padding</div>
+          <div class="toggle-desc">Pad each machine to an even page count so two-sided printing never puts two machines on one sheet</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="pdf-duplex" onchange="applySetting('pdfDuplex', this.checked)">
+          <span class="slider"></span>
+        </label>
+      </div>
     </div>
 
     <h3>Log</h3>
@@ -1216,6 +1226,7 @@
     document.getElementById('pdf-m-bottom').value = s.pdfMarginBottom ?? 12
     document.getElementById('pdf-m-left').value   = s.pdfMarginLeft ?? 12
     document.getElementById('pdf-m-right').value  = s.pdfMarginRight ?? 12
+    document.getElementById('pdf-duplex').checked = s.pdfDuplex !== false
     if (s.slowMoverMode) slowMoverMode = s.slowMoverMode
     updateSlowModeButtons()
   })
