@@ -581,6 +581,9 @@
   .pick-tbl.hide-highbal tr.pick-highbal { display:none; }
   .pick-tbl.hide-zero tr.pick-zero { display:none; }
   table.pick-tbl.hide-mvzero tbody tr.mv-zero{display:none}
+  td.buf-cell{color:#0891b2;background:#f0fdff;font-weight:600;transition:background .35s}
+  td.buf-cell.buf-saved{background:#bbf7d0}
+  td.buf-cell.buf-fail{background:#fecaca}
   .pick-flt-btn { width:auto; height:24px; padding:0 10px; border:1px solid #d1d5db; border-radius:999px; font-size:11px; font-weight:600; background:#fff; }
   .pick-flt-btn.in-queue { color:#16a34a; background:#dcfce7; border-color:#22c55e; }
   .pick-search-bar { display:flex; align-items:center; gap:6px; padding:7px 14px; border-bottom:0.5px solid #eee; background:#fafbfc; }
@@ -1849,7 +1852,17 @@
       if (isEditMode && editMachine === machine) {
         const date = dateStr.replace(/-/g, '')
         const saved = await window.api.loadPickEdit(machine, date)
-        if (saved && saved.rows) rows = saved.rows
+        if (saved && saved.rows) {
+          // Saved rows don't carry forecastQty/bufferQty (collectEditRows
+          // doesn't store them) — merge the live values back by lane no so
+          // both columns keep displaying after a save.
+          const liveByNo = {}
+          pl.rows.concat(pl.hiddenRows || []).forEach(x => { liveByNo[String(x.no)] = x })
+          rows = saved.rows.map(x => {
+            const live = liveByNo[String(x.no)]
+            return { ...x, forecastQty: live ? live.forecastQty : 0, bufferQty: live ? live.bufferQty : 0 }
+          })
+        }
         const q3 = await loadQ3Suggestions(machine, rows)
         mvSales = {}
         if (mvWindow > 0) {
@@ -1877,9 +1890,16 @@
             const soldQty = mvWindow > 0 ? (Number(mvSales[String(r.productId)]) || 0) : null
             const soldTd = mvWindow > 0 ? `<td style="color:#6b7280">${soldQty}</td>` : `<td style="color:#c3c8d0">—</td>`
             const cls = [r.outOfStock?'pick-out':'', r.fastMover?'pick-fast':'', zr?'pick-zero':'', soldQty===0?'mv-zero':''].filter(Boolean).join(' ')
-            const bufCol = r.bufferQty ? `<span style="color:#0891b2">${r.bufferQty > 0 ? '+' : ''}${r.bufferQty}</span>` : '—'
+            const laneNoStr = String(r.no)
+            const bufSetting = (currentBuffer[machine] || {})[laneNoStr] || {}
+            const bufStored = restockMode === 'sembreak' ? (bufSetting.sembreak_qty || 0) : (bufSetting.normal_qty || 0)
+            // Show the STORED setting, not the bal-capped applied value —
+            // editing a capped number would drag the setting around with bal.
+            const bufTd = restockMode === 'short'
+              ? `<td style="color:#c3c8d0">—</td>`
+              : `<td class="buf-cell" contenteditable="true" spellcheck="false" data-lane="${laneNoStr}" title="Stored buffer setting — writes back to Buffer Stock on blur (applied today: ${r.bufferQty || 0})" onblur="onBufferCellEdit(this)">${bufStored || ''}</td>`
             const repl = r.replacement || ''
-            bodyHtml += `<tr class="${cls}" data-pid="${r.productId || ''}"><td>${r.no}</td><td contenteditable="true" spellcheck="false">${r.product}${tag}${ftag}${stag}${laneTypeBadge(r.productId)}</td>${soldTd}<td contenteditable="true" spellcheck="false">${r.bal}</td><td contenteditable="true" spellcheck="false">${r.lane}</td><td style="color:#6b7280">${r.forecastQty > 0 ? '+' + r.forecastQty : '—'}</td><td>${bufCol}</td><td contenteditable="true" spellcheck="false">${r.restock}</td><td contenteditable="true" spellcheck="false">${repl}</td><td style="white-space:nowrap">${sugBtn}<button class="pick-swap-btn" onclick="handleSwap(this)" title="Swap lane with another row">⇅</button></td></tr>`
+            bodyHtml += `<tr class="${cls}" data-pid="${r.productId || ''}"><td>${r.no}</td><td contenteditable="true" spellcheck="false">${r.product}${tag}${ftag}${stag}${laneTypeBadge(r.productId)}</td>${soldTd}<td contenteditable="true" spellcheck="false">${r.bal}</td><td contenteditable="true" spellcheck="false">${r.lane}</td><td style="color:#6b7280">${r.forecastQty > 0 ? '+' + r.forecastQty : '—'}</td>${bufTd}<td contenteditable="true" spellcheck="false">${r.restock}</td><td contenteditable="true" spellcheck="false">${repl}</td><td style="white-space:nowrap">${sugBtn}<button class="pick-swap-btn" onclick="handleSwap(this)" title="Swap lane with another row">⇅</button></td></tr>`
           })
           bodyHtml += '</tbody></table>'
         }
@@ -2099,6 +2119,28 @@
     const clone = td.cloneNode(true)
     clone.querySelectorAll('span').forEach(s => s.remove())
     return clone.textContent.trim()
+  }
+  async function onBufferCellEdit(td) {
+    if (!editMachine) return
+    const laneNo = td.dataset.lane
+    const pid = td.closest('tr')?.dataset.pid || ''
+    const v = parseInt(td.textContent.trim(), 10) || 0
+    const cur = (currentBuffer[editMachine] || {})[laneNo] || {}
+    if (v === (restockMode === 'sembreak' ? (cur.sembreak_qty || 0) : (cur.normal_qty || 0))) return  // unchanged
+    const row = {
+      machine: editMachine, lane_no: laneNo, pid: pid || cur.pid || '',
+      normal_qty:   restockMode === 'sembreak' ? (cur.normal_qty || 0) : v,
+      sembreak_qty: restockMode === 'sembreak' ? v : (cur.sembreak_qty || 0)
+    }
+    const r = await window.api.setBufferQty([row])
+    if (r && r.ok) {
+      if (!currentBuffer[editMachine]) currentBuffer[editMachine] = {}
+      currentBuffer[editMachine][laneNo] = { pid: row.pid, normal_qty: row.normal_qty, sembreak_qty: row.sembreak_qty }
+      td.textContent = v || ''
+      td.classList.add('buf-saved'); setTimeout(() => td.classList.remove('buf-saved'), 900)
+    } else {
+      td.classList.add('buf-fail'); setTimeout(() => td.classList.remove('buf-fail'), 1400)
+    }
   }
   function collectEditRows() {
     const rows = []
