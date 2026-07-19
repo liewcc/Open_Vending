@@ -875,7 +875,7 @@ ipcMain.handle('load-pick-edit', (_, { machine, date }) => {
   const safe = machine.replace(/[^a-zA-Z0-9]/g, '_')
   const fpath = path.join(ROOT, 'db', `pick_edit_${safe}_${date}.json`)
   if (!fs.existsSync(fpath)) return null
-  try { return JSON.parse(fs.readFileSync(fpath, 'utf8')) } catch { return null }
+  try { return { ...JSON.parse(fs.readFileSync(fpath, 'utf8')), _mtime: fs.statSync(fpath).mtime.toISOString() } } catch { return null }
 })
 
 

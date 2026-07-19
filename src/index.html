@@ -1874,7 +1874,7 @@
       let rows = pl.rows
       if (isEditMode && editMachine === machine) {
         const date = dateStr.replace(/-/g, '')
-        const saved = await window.api.loadPickEdit(machine, date)
+        const saved = await loadPickEditFresh(machine, dateStr, pl.rows)
         if (saved && saved.rows) {
           // Saved rows don't carry forecastQty/bufferQty (collectEditRows
           // doesn't store them) — merge the live values back by lane no so
@@ -1985,7 +1985,7 @@
   // along in the product name so exports show what the picker must load.
   async function buildQueuePicks(machine) {
     const today = document.getElementById('pick-date').value
-    const saved = await window.api.loadPickEdit(machine, today.replace(/-/g, ''))
+    const saved = await loadPickEditFresh(machine, today)
     if (saved?.rows?.length) {
       return saved.rows
         .filter(r => (Number(r.restock) || 0) > 0)
@@ -2166,6 +2166,29 @@
     } else {
       td.classList.add('buf-fail'); setTimeout(() => td.classList.remove('buf-fail'), 1400)
     }
+  }
+  // Load the saved pick edit; if the report was re-downloaded after the edit
+  // was saved, the snapshot's product/bal/row-set is stale — rebase onto the
+  // fresh pick list (Replacement is the only user field that survives; restock
+  // recomputes from the new balances) and persist, so edit mode, queue and
+  // print all read the same refreshed file.
+  async function loadPickEditFresh(machine, dateStr, liveRows) {
+    const dateKey = dateStr.replace(/-/g, '')
+    const saved = await window.api.loadPickEdit(machine, dateKey)
+    if (!saved?.rows) return null
+    const reportMtime = await window.api.getReportMtime()
+    if (!reportMtime || !saved._mtime || saved._mtime >= reportMtime) return saved
+    if (!liveRows) {
+      const d = new Date()
+      const todayStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+      const planPending = dateStr > todayStr ? (currentPending[machine] || {}) : {}
+      liveRows = window.api.getPickList(lastFilePath, machine, planPending, currentOos[machine] || {}, currentForecast[machine] || {}, window.api.modeOf(machine) !== 'normal', getBufferByLane(machine)).rows
+    }
+    const replByNo = {}
+    saved.rows.forEach(r => { if (r.replacement) replByNo[String(r.no)] = r.replacement })
+    const rows = liveRows.map(r => ({ no: String(r.no), productId: String(r.productId || ''), product: r.product, bal: String(r.bal), lane: String(r.lane), restock: String(r.restock), replacement: replByNo[String(r.no)] || '', outOfStock: !!r.outOfStock, fastMover: !!r.fastMover }))
+    await window.api.savePickEdit(machine, dateKey, rows)
+    return { machine, date: dateKey, rows }
   }
   function collectEditRows() {
     const rows = []
@@ -2847,7 +2870,7 @@ function bufRenderMachineList(filter) {
     // the machine's own pending queue entry — that zeroed every lane once
     // the machine was queued, so the button silently printed nothing.
     // Future dates deduct in-transit (planning view).
-    const saved = await window.api.loadPickEdit(machine, dateKey)
+    const saved = await loadPickEditFresh(machine, dateStr)
     let rows
     if (saved?.rows?.length) {
       rows = saved.rows.filter(r => (Number(r.restock) || 0) > 0)
