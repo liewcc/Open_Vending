@@ -23,6 +23,9 @@ MEMORY.md
 HANDOFF.md
 CLAUDE.md
 
+# Python bytecode
+__pycache__/
+
 # OS
 Thumbs.db
 desktop.ini
