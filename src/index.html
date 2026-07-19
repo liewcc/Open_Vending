@@ -2242,9 +2242,12 @@
       menu.appendChild(item)
     })
     menu.style.display = 'block'
+    // body zoom re-scales the fixed menu's px values, while the rect is
+    // already in zoomed coords — divide by zoom or the menu lands off-screen
+    const z = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--ui-zoom')) || 1
     const r = btn.getBoundingClientRect()
-    menu.style.top = Math.min(r.bottom + 4, window.innerHeight - menu.offsetHeight - 8) + 'px'
-    menu.style.left = Math.max(8, r.right - menu.offsetWidth) + 'px'
+    menu.style.top = Math.min(r.bottom + 4, window.innerHeight - menu.offsetHeight * z - 8) / z + 'px'
+    menu.style.left = Math.max(8, r.right - menu.offsetWidth * z) / z + 'px'
   }
 
   function applySuggestion(laneNo, name) {
