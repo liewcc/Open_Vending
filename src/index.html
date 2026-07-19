@@ -892,13 +892,13 @@
     <button id="btn-queue-view" class="pick-icon-btn" onclick="showQueueView()" title="View Queue"><span class="icon">pending_actions</span></button>
   </div>
     <div id="in-transit-panel" style="display:none;"></div>
-  <div id="queue-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.35);z-index:1000;align-items:center;justify-content:center;">
-    <div style="background:#fff;border-radius:10px;padding:20px;min-width:320px;max-width:480px;max-height:80vh;overflow-y:auto;">
+  <div id="queue-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.35);z-index:1000;align-items:center;justify-content:center;" onclick="if(event.target===this)this.style.display='none'">
+    <div style="display:flex;flex-direction:column;background:#fff;border-radius:10px;padding:20px;min-width:320px;max-width:480px;max-height:calc(80vh / var(--ui-zoom));">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
         <span style="font-weight:500;font-size:13px;color:#1f2937;">In-Transit Queue</span>
         <button class="q-icon-btn" onclick="document.getElementById('queue-modal').style.display='none'" title="Close"><span class="icon">close</span></button>
       </div>
-      <div id="queue-modal-body"></div>
+      <div id="queue-modal-body" style="overflow-y:auto;min-height:0;"></div>
     </div>
   </div>
     <div id="pick-body">
