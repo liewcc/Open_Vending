@@ -2022,6 +2022,7 @@
     currentPending = pendingRaw || {}
     const qBtn = document.querySelector('#pick-detail .pick-hd .pick-icon-btn:last-child')
     if (qBtn) { qBtn.classList.add('in-queue'); qBtn.title = 'Already in queue' }
+    await renderPicks()   // sidebar % must reflect the newly queued in-transit qty
   }
   // Keeps an already-queued machine in step with its latest saved edit: the
   // pending rows are replaced from the edit file, so the queue (and any
@@ -2136,6 +2137,7 @@
     editScrollTop = 0
     currentDetailMachine = machine
     if (machine) await renderPickDetail(machine)
+    await renderPicks()   // edit may have changed a queued machine's pending qty → refresh sidebar %
   }
   function cleanProductName(td) {
     // Product cells carry OUT/FAST/Cold/Ambient tags as <span> children;
