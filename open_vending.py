@@ -19,6 +19,8 @@ PASSWORD = os.environ.get('OV_PASSWORD', '')
 DB_DIR  = Path(__file__).parent / "db"
 LOG_DIR = Path(__file__).parent / "log"
 DB_DIR.mkdir(exist_ok=True)
+LOG_DIR.mkdir(exist_ok=True)
+_log_file = open(LOG_DIR / "scan.log", "a", encoding="utf-8")
 
 HEADLESS   = "--headless" in sys.argv
 LOGIN_ONLY = "--login-only" in sys.argv
@@ -35,6 +37,7 @@ SQLITE_DB = DB_DIR / "vending.db"
 
 def status(msg):
     print(f"STATUS: {msg}", flush=True)
+    print(f"{datetime.datetime.now():%Y-%m-%d %H:%M:%S} {msg}", file=_log_file, flush=True)
 
 
 def import_to_sqlite(xlsx_path):
@@ -265,15 +268,37 @@ async def export_excel(page):
     await page.wait_for_load_state("networkidle")
 
     status("Exporting Excel...")
-    async with page.expect_download(timeout=30000) as dl:
-        for sel in [
-            "input[value='Export Excel']", "#Exporttoexcel",
-            "input[value*='Excel']",
-        ]:
-            loc = page.locator(sel).first
-            if await loc.count() > 0:
-                await loc.click()
-                break
+    btn = None
+    for sel in [
+        "input[value='Export Excel']", "#Exporttoexcel",
+        "input[value*='Excel']",
+    ]:
+        loc = page.locator(sel).first
+        if await loc.count() > 0:
+            btn = loc
+            status(f"Export button found: {sel}")
+            break
+    if btn is None:
+        (LOG_DIR / "export_fail.html").write_text(await page.content(), encoding="utf-8")
+        await page.screenshot(path=str(LOG_DIR / "export_fail.png"), full_page=True)
+        raise RuntimeError("Export button not found — page saved to log/export_fail.html/.png")
+
+    try:
+        async with page.expect_download(timeout=120000) as dl:
+            await btn.click()
+    except Exception:
+        try:
+            import re
+            html = await page.content()
+            (LOG_DIR / "export_fail.html").write_text(html, encoding="utf-8")
+            await page.screenshot(path=str(LOG_DIR / "export_fail.png"), full_page=True)
+            m = re.search(r"<title>(.*?)</title>", html, re.S)
+            if m and m.group(1).strip():
+                status(f"Portal server error: {m.group(1).strip()}")
+            status("Export failed — page saved to log/export_fail.html/.png")
+        except Exception:
+            pass
+        raise
 
     download = await dl.value
     filename = download.suggested_filename or "replenishment_report.xlsx"
@@ -323,4 +348,11 @@ async def main():
             print(f"DIFFS: {json.dumps(diffs, ensure_ascii=False)}", flush=True)
 
 
-asyncio.run(main())
+try:
+    asyncio.run(main())
+except Exception:
+    import traceback
+    tb = traceback.format_exc()
+    print(f"{datetime.datetime.now():%Y-%m-%d %H:%M:%S} CRASH:\n{tb}", file=_log_file, flush=True)
+    sys.stderr.write(tb)
+    sys.exit(1)
