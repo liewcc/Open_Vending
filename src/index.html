@@ -1717,7 +1717,7 @@
         const wkDays = (weekDone[m.machine] || []).map(dt => DAY_CH[(new Date(dt + 'T12:00:00').getDay() + 6) % 7]).join(' ')
         const wkHtml = wkDays ? `<span class="pick-week-badge">${wkDays}</span>` : ''
         const mmode = window.api.modeOf(m.machine)
-        const modeHtml = mmode === 'normal' ? '' : `<span class="pick-mode-badge ${mmode}" title="${mmode === 'short' ? 'Short break' : 'Sem Break'} mode">${mmode === 'short' ? '0' : '−'}</span>`
+        const modeHtml = mmode === 'normal' ? '' : `<span class="pick-mode-badge ${mmode}" title="${mmode === 'short' ? 'Short break' : 'Sem Break'} mode">${mmode === 'short' ? '0' : 's'}</span>`
         row.innerHTML = `<span>${m.machine}</span>${wkHtml}${modeHtml}<span class="pick-badge ${badgeClass}">${badgeText}</span>`
         row.onclick = () => { document.querySelectorAll('.pick-mach.active').forEach(e=>e.classList.remove('active')); row.classList.add('active'); renderPickDetail(m.machine) }
         listEl.appendChild(row)
