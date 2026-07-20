@@ -3,11 +3,13 @@
   "machines": {
     "Anjung Ilmu M3": {
       "team": "5530",
-      "scheduleDays": []
+      "scheduleDays": [],
+      "mode": "sembreak"
     },
     "Columbia Bukit Raja M3": {
       "team": "1126",
-      "scheduleDays": []
+      "scheduleDays": [],
+      "mode": "normal"
     },
     "Concord Hostel": {
       "team": "1126",
@@ -18,33 +20,40 @@
         "Thu",
         "Fri",
         "Sat"
-      ]
+      ],
+      "mode": "sembreak"
     },
     "Dataran Sains M3": {
       "team": "5530",
-      "scheduleDays": []
+      "scheduleDays": [],
+      "mode": "sembreak"
     },
     "Dewan Peperiksaan M2-5": {
       "team": "5530",
-      "scheduleDays": []
+      "scheduleDays": [],
+      "mode": "sembreak"
     },
     "ELKEN HQ GF M4 Single": {
       "team": "1126",
-      "scheduleDays": []
+      "scheduleDays": [],
+      "mode": "normal"
     },
     "KK 10 M5": {
       "team": "5530",
-      "scheduleDays": []
+      "scheduleDays": [],
+      "mode": "sembreak"
     },
     "KK 11C M5": {
       "team": "5530",
       "scheduleDays": [
         "Mon"
-      ]
+      ],
+      "mode": "normal"
     },
     "KK 2F M5": {
       "team": "5530",
-      "scheduleDays": []
+      "scheduleDays": [],
+      "mode": "normal"
     },
     "KK1 M3": {
       "team": "5530",
@@ -55,33 +64,35 @@
         "Thu",
         "Fri",
         "Sat"
-      ]
+      ],
+      "mode": "normal"
     },
     "KK11A New M3": {
       "team": "5530",
       "scheduleDays": [
         "Mon"
-      ]
+      ],
+      "mode": "normal"
     },
     "KK12A2 M3": {
       "team": "5530",
-      "scheduleDays": []
+      "scheduleDays": [],
+      "mode": "normal"
     },
     "KK12C M3": {
       "team": "5530",
-      "scheduleDays": []
+      "scheduleDays": [],
+      "mode": "normal"
     },
     "KK12D M3": {
       "team": "5530",
-      "scheduleDays": [
-        "Mon"
-      ]
+      "scheduleDays": [],
+      "mode": "normal"
     },
     "KK2E M3": {
       "team": "5530",
-      "scheduleDays": [
-        "Mon"
-      ]
+      "scheduleDays": [],
+      "mode": "normal"
     },
     "KK3 M3": {
       "team": "5530",
@@ -92,45 +103,53 @@
         "Thu",
         "Fri",
         "Sat"
-      ]
+      ],
+      "mode": "normal"
     },
     "KK4F M3": {
       "team": "5530",
-      "scheduleDays": []
+      "scheduleDays": [],
+      "mode": "sembreak"
     },
     "KK5 M3": {
       "team": "5530",
-      "scheduleDays": []
+      "scheduleDays": [],
+      "mode": "normal"
     },
     "KK6B M5": {
       "team": "5530",
-      "scheduleDays": []
+      "scheduleDays": [],
+      "mode": "normal"
     },
     "KK7 M3": {
       "team": "5530",
-      "scheduleDays": []
+      "scheduleDays": [],
+      "mode": "sembreak"
     },
     "KK8 M3": {
       "team": "5530",
-      "scheduleDays": []
+      "scheduleDays": [],
+      "mode": "normal"
     },
     "KK8B M3": {
       "team": "5530",
-      "scheduleDays": []
+      "scheduleDays": [],
+      "mode": "normal"
     },
     "KK9 M3": {
       "team": "5530",
-      "scheduleDays": [
-        "Mon"
-      ]
+      "scheduleDays": [],
+      "mode": "sembreak"
     },
     "KPZ Chilax M3": {
       "team": "1126",
-      "scheduleDays": []
+      "scheduleDays": [],
+      "mode": "normal"
     },
     "KPZ Gajah M3": {
       "team": "1126",
-      "scheduleDays": []
+      "scheduleDays": [],
+      "mode": "normal"
     },
     "MF LAW M3": {
       "team": "5530",
@@ -141,15 +160,18 @@
         "Thu",
         "Fri",
         "Sat"
-      ]
+      ],
+      "mode": "sembreak"
     },
     "MF TERMAJU M5": {
       "team": "5530",
-      "scheduleDays": []
+      "scheduleDays": [],
+      "mode": "normal"
     },
     "Perdana Siswa M4 Single": {
       "team": "5530",
-      "scheduleDays": []
+      "scheduleDays": [],
+      "mode": "sembreak"
     },
     "Sastera A M5": {
       "team": "5530",
@@ -160,69 +182,82 @@
         "Thu",
         "Fri",
         "Sat"
-      ]
+      ],
+      "mode": "sembreak"
     },
     "UK KTSN B M3": {
       "team": "1126",
       "scheduleDays": [
         "Mon"
-      ]
+      ],
+      "mode": "normal"
     },
     "UK KTSN DEWAN M3": {
       "team": "1126",
       "scheduleDays": [
         "Mon"
-      ]
+      ],
+      "mode": "normal"
     },
     "UK KTSN G M3": {
       "team": "1126",
       "scheduleDays": [
         "Mon"
-      ]
+      ],
+      "mode": "normal"
     },
     "UKB Bahasa Dan Linguistik M3 Twin": {
       "team": "1126",
-      "scheduleDays": []
+      "scheduleDays": [],
+      "mode": "normal"
     },
     "UKB Laluan Chow Kit M3 Twin": {
       "team": "1126",
-      "scheduleDays": []
+      "scheduleDays": [],
+      "mode": "normal"
     },
     "UKB Perpustakaan M4": {
       "team": "1126",
-      "scheduleDays": []
+      "scheduleDays": [],
+      "mode": "normal"
     },
     "UOW Hostel M5 Twin": {
       "team": "1126",
-      "scheduleDays": []
+      "scheduleDays": [],
+      "mode": "normal"
     },
     "UPM Perhutanan": {
       "team": "1126",
-      "scheduleDays": []
+      "scheduleDays": [],
+      "mode": "normal"
     },
     "UTARSL KA GF M3 Twin": {
       "team": "9058",
       "scheduleDays": [
         "Fri"
-      ]
+      ],
+      "mode": "normal"
     },
     "UTARSL KB L1 M3 Twin": {
       "team": "9058",
       "scheduleDays": [
         "Fri"
-      ]
+      ],
+      "mode": "normal"
     },
     "UTARSL KB L3A M4 Single": {
       "team": "9058",
       "scheduleDays": [
         "Fri"
-      ]
+      ],
+      "mode": "normal"
     },
     "UTARSL KB L8 M3 Twin": {
       "team": "9058",
       "scheduleDays": [
         "Fri"
-      ]
+      ],
+      "mode": "normal"
     },
     "XIAMEN 1 M3": {
       "team": "1126",
@@ -233,7 +268,8 @@
         "Thu",
         "Fri",
         "Sat"
-      ]
+      ],
+      "mode": "normal"
     },
     "XIAMEN 2 M3": {
       "team": "1126",
@@ -244,7 +280,8 @@
         "Thu",
         "Fri",
         "Sat"
-      ]
+      ],
+      "mode": "normal"
     },
     "Xiamen B1 M3": {
       "team": "1126",
@@ -255,7 +292,8 @@
         "Thu",
         "Fri",
         "Sat"
-      ]
+      ],
+      "mode": "normal"
     }
   }
 }
