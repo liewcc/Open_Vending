@@ -1921,7 +1921,7 @@
             const sug = q3CurrentSug[String(r.no)]
             const stag = sug ? '<span class="pick-slow-tag">SLOW</span>' : ''
             const sugBtn = sug ? `<button class="pick-sug-btn" onclick="openSugMenu(this, '${r.no}')" title="Suggest replacements (same tray &amp; size)">💡</button>` : ''
-            const zr = r.zeroRestock ?? ((Number(r.restock) || 0) === 0)
+            const zr = (Number(r.restock) || 0) === 0
             const soldQty = mvWindow > 0 ? (Number(mvSales[String(r.productId)]) || 0) : null
             const soldTd = mvWindow > 0 ? `<td style="color:#6b7280">${soldQty}</td>` : `<td style="color:#c3c8d0">—</td>`
             const cls = [r.outOfStock?'pick-out':'', r.fastMover?'pick-fast':'', zr?'pick-zero':'', soldQty===0?'mv-zero':'', r.highBal?'pick-highbal':''].filter(Boolean).join(' ')
@@ -1969,7 +1969,7 @@
           pl.rows.concat(pl.hiddenRows || []).forEach(r => {
             const tag = r.outOfStock ? '<span class="pick-out-tag">OUT</span>' : ''
             const ftag = r.fastMover ? '<span class="pick-fast-tag">FAST</span>' : ''
-            const cls = [r.outOfStock?'pick-out':'', r.fastMover?'pick-fast':'', r.zeroRestock?'pick-zero':'', r.highBal?'pick-highbal':''].filter(Boolean).join(' ')
+            const cls = [r.outOfStock?'pick-out':'', r.fastMover?'pick-fast':'', (Number(r.restock)||0)===0?'pick-zero':'', r.highBal?'pick-highbal':''].filter(Boolean).join(' ')
             const bufCol = r.bufferQty ? `<span style="color:#0891b2">${r.bufferQty > 0 ? '+' : ''}${r.bufferQty}</span>` : '—'
             const replNote = replMap[String(r.no)] ? `<div class="pick-repl">→ ${replMap[String(r.no)]}</div>` : ''
             bodyHtml += `<tr class="${cls}" data-lane="${r.no}"><td>${r.no}</td><td>${r.product}${tag}${ftag}${replNote}${laneTypeBadge(r.productId)}</td><td class="${r.outOfStock?'bal-out':''}">${r.bal}</td><td>${r.lane}</td><td style="color:#6b7280">${r.forecastQty > 0 ? '+' + r.forecastQty : '—'}</td><td>${bufCol}</td><td>${r.restock}</td></tr>`
@@ -2016,7 +2016,10 @@
     // pendingByLane = {} on purpose: queueing replaces the machine's pending
     // set wholesale, so quantities must not be reduced by its own old entry
     const pl = window.api.getPickList(lastFilePath, machine, {}, oosByLane, currentForecast[machine] || {}, window.api.modeOf(machine) !== 'normal', getBufferByLane(machine))
-    return pl.rows.filter(r => !r.zeroRestock).map(r => ({
+    // Filter on the FINAL restock, not zeroRestock: zeroRestock is fixed before
+    // forecast/buffer, and sem-break buffers are negative, so a lane can end at
+    // restock 0 with zeroRestock false — those must not enter the queue.
+    return pl.rows.filter(r => (Number(r.restock) || 0) > 0).map(r => ({
       machine,
       lane_no:      String(r.laneNo),
       product_id:   r.productId,
@@ -2860,7 +2863,7 @@ function bufRenderMachineList(filter) {
       const saved = await window.api.loadPickEdit(m.machine, dateKey)
       const replMap = {}
       if (saved?.rows) saved.rows.forEach(r => { if (r.replacement) replMap[String(r.no)] = r.replacement })
-      const rows = pl.rows.filter(r => !r.zeroRestock).map(r => ({ ...r, replacement: replMap[String(r.no)] || '' }))
+      const rows = pl.rows.filter(r => (Number(r.restock) || 0) > 0).map(r => ({ ...r, replacement: replMap[String(r.no)] || '' }))
       return { machine: m.machine, team: m.team, date: dateFormatted, rows }
     }))).filter(m => m.rows.length > 0)
     if (!data.length) return
@@ -2893,7 +2896,7 @@ function bufRenderMachineList(filter) {
       const todayStr = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` })()
       const planPending = dateStr > todayStr ? (currentPending[machine] || {}) : {}
       const pl = window.api.getPickList(lastFilePath, machine, planPending, oosByLane, currentForecast[machine] || {}, window.api.modeOf(machine) !== 'normal', getBufferByLane(machine))
-      rows = pl.rows.filter(r => !r.zeroRestock).map(r => ({ ...r, replacement: '' }))
+      rows = pl.rows.filter(r => (Number(r.restock) || 0) > 0).map(r => ({ ...r, replacement: '' }))
     }
     if (!rows.length) { alert('Nothing to print — every lane has restock 0.'); return }
     const result = await window.api.printAll([{ machine, team, date: dateFormatted, rows }], pages)
