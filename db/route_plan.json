@@ -104,7 +104,7 @@
         "Fri",
         "Sat"
       ],
-      "mode": "normal"
+      "mode": "sembreak"
     },
     "KK4F M3": {
       "team": "5530",
@@ -134,7 +134,7 @@
     "KK8B M3": {
       "team": "5530",
       "scheduleDays": [],
-      "mode": "normal"
+      "mode": "sembreak"
     },
     "KK9 M3": {
       "team": "5530",

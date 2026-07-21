@@ -1800,7 +1800,15 @@
   }
 
   function filterPickTable(query) {
-    filterTable(document.querySelector('table.pick-tbl'), query, { cols: ['product'] })
+    const t = document.querySelector('table.pick-tbl')
+    filterTable(t, query, { cols: ['product'] })
+    // A search must also look inside the Bal>10 rows, otherwise the product
+    // reads as absent from the machine and a duplicate lane gets added.
+    if (t && !isEditMode) {
+      t.classList.toggle('hide-highbal', !showHighBal && !query.trim())
+      const note = document.querySelector('.pick-hidden-note')
+      if (note) note.style.display = query.trim() ? 'none' : ''
+    }
   }
 
   function clearPickSearch() {
@@ -1871,20 +1879,24 @@
       const planPending = dateStr > todayStr ? (currentPending[machine] || {}) : {}
       const pl = window.api.getPickList(lastFilePath, machine, planPending, oosByLane, currentForecast[machine] || {}, window.api.modeOf(machine) !== 'normal', getBufferByLane(machine))
       const team = window.api.teamOf(machine) || '—'
-      let rows = pl.rows
+      // Edit mode carries the Bal>10 lanes too: they need a Replacement note
+      // (e.g. a duplicated product) even though they're never picked.
+      let rows = pl.rows.concat(pl.hiddenRows || [])
       if (isEditMode && editMachine === machine) {
         const date = dateStr.replace(/-/g, '')
-        const saved = await loadPickEditFresh(machine, dateStr, pl.rows)
+        const saved = await loadPickEditFresh(machine, dateStr, rows)
         if (saved && saved.rows) {
           // Saved rows don't carry forecastQty/bufferQty (collectEditRows
           // doesn't store them) — merge the live values back by lane no so
           // both columns keep displaying after a save.
           const liveByNo = {}
-          pl.rows.concat(pl.hiddenRows || []).forEach(x => { liveByNo[String(x.no)] = x })
+          rows.forEach(x => { liveByNo[String(x.no)] = x })
+          const savedNos = new Set(saved.rows.map(x => String(x.no)))
           rows = saved.rows.map(x => {
             const live = liveByNo[String(x.no)]
-            return { ...x, forecastQty: live ? live.forecastQty : 0, bufferQty: live ? live.bufferQty : 0 }
-          })
+            return { ...x, forecastQty: live ? live.forecastQty : 0, bufferQty: live ? live.bufferQty : 0, highBal: !!live?.highBal }
+          // pick_edit files saved before Bal>10 lanes became editable have none
+          }).concat(rows.filter(x => !savedNos.has(String(x.no))))
         }
         const q3 = await loadQ3Suggestions(machine, rows)
         mvSales = {}
@@ -1912,7 +1924,7 @@
             const zr = r.zeroRestock ?? ((Number(r.restock) || 0) === 0)
             const soldQty = mvWindow > 0 ? (Number(mvSales[String(r.productId)]) || 0) : null
             const soldTd = mvWindow > 0 ? `<td style="color:#6b7280">${soldQty}</td>` : `<td style="color:#c3c8d0">—</td>`
-            const cls = [r.outOfStock?'pick-out':'', r.fastMover?'pick-fast':'', zr?'pick-zero':'', soldQty===0?'mv-zero':''].filter(Boolean).join(' ')
+            const cls = [r.outOfStock?'pick-out':'', r.fastMover?'pick-fast':'', zr?'pick-zero':'', soldQty===0?'mv-zero':'', r.highBal?'pick-highbal':''].filter(Boolean).join(' ')
             const laneNoStr = String(r.no)
             const machMode = window.api.modeOf(machine)
             const bufSetting = (currentBuffer[machine] || {})[laneNoStr] || {}
