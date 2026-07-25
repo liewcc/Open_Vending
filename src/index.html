@@ -610,7 +610,8 @@
   .q-icon-btn { background:none; border:none; cursor:pointer; color:#6b7280; border-radius:4px; padding:3px; display:flex; align-items:center; }
   .q-icon-btn:hover { background:#f3f4f6; color:#1f2937; }
   .q-icon-btn .icon { font-size:18px; font-variation-settings:'FILL' 0,'wght' 300,'GRAD' 0,'opsz' 24; }
-  .q-footer { display:flex; gap:8px; margin-top:14px; padding-top:10px; border-top:0.5px solid #eee; justify-content:flex-end; }
+  .q-footer { display:flex; gap:8px; margin-top:14px; padding-top:10px; border-top:0.5px solid #eee; justify-content:flex-end; align-items:center; }
+  .q-chk-all-lbl { margin-right:auto; display:flex; align-items:center; gap:4px; font-size:12px; color:#6b7280; cursor:pointer; user-select:none; }
   .edit-banner { padding:7px 14px; background:#fffbeb; border-bottom:0.5px solid #fbbf24; font-size:11.5px; color:#92400e; font-weight:500; }
   table.pick-tbl td[contenteditable] { background:#fffdf0; cursor:text; }
   table.pick-tbl td[contenteditable]:focus { background:#fef9c3; outline:1.5px solid #fbbf24; outline-offset:-1px; }
@@ -971,7 +972,8 @@
   <div id="buffer-stock-panel" style="display:none;flex-direction:column;flex:1;min-width:0;background:#f0f2f5;">
     <div id="buf-toolbar" style="display:flex;align-items:center;gap:12px;padding:9px 14px;background:#fff;border-bottom:0.5px solid #e2e4e9;flex-shrink:0;font-size:12px;">
       <span id="buf-status" style="font-size:11px;color:#6b7280;"></span>
-      <button id="buf-btn-apply" class="pick-icon-btn" style="margin-left:auto;" onclick="bufApplyToNormal()" title="Apply selected suggestions to Normal qty"><span class="icon">check_box</span></button>
+      <button id="buf-btn-export" class="pick-icon-btn" style="margin-left:auto;" onclick="bufExportExcel()" title="Export current machine to Excel"><span class="icon">download</span></button>
+      <button id="buf-btn-apply" class="pick-icon-btn" onclick="bufApplyToNormal()" title="Apply selected suggestions to Normal qty"><span class="icon">check_box</span></button>
       <button id="buf-btn-suggest" class="pick-icon-btn" onclick="bufAutoSuggest()" title="Recalculate suggestions from sales history"><span class="icon">auto_fix_high</span></button>
       <button id="buf-btn-save"    class="pick-icon-btn" onclick="bufSaveAll()" title="Save all changes"><span class="icon">save</span></button>
     </div>
@@ -2065,9 +2067,9 @@
         const lanes = currentPending[mach]
         const units = Object.values(lanes).reduce((a, v) => a + (Number(v) || 0), 0)
         const laneCount = Object.keys(lanes).length
-        html += `<div class="q-item"><input type="checkbox" class="q-chk" value="${mach}" checked style="margin-right:8px;flex-shrink:0;"><div style="flex:1"><span class="q-machine" onclick="enterEditMode('${em}')">${mach}</span><div class="q-sub">${units} units &middot; ${laneCount} lane${laneCount!==1?'s':''}</div></div><div class="q-item-acts"><button class="q-icon-btn" onclick="enterEditMode('${em}')" title="Edit"><span class="icon">edit</span></button><button class="q-icon-btn" onclick="deleteFromQueue('${em}')" title="Remove"><span class="icon">delete</span></button></div></div>`
+        html += `<div class="q-item"><input type="checkbox" class="q-chk" value="${mach}" checked onchange="syncQueueAllChk()" style="margin-right:8px;flex-shrink:0;"><div style="flex:1"><span class="q-machine" onclick="enterEditMode('${em}')">${mach}</span><div class="q-sub">${units} units &middot; ${laneCount} lane${laneCount!==1?'s':''}</div></div><div class="q-item-acts"><button class="q-icon-btn" onclick="enterEditMode('${em}')" title="Edit"><span class="icon">edit</span></button><button class="q-icon-btn" onclick="deleteFromQueue('${em}')" title="Remove"><span class="icon">delete</span></button></div></div>`
       })
-      html += `<div class="q-footer"><button class="q-icon-btn" onclick="exportQueueExcel()" title="Export as Excel"><span class="icon">table_view</span></button><button class="q-icon-btn" onclick="exportQueuePdf()" title="Export as PDF"><span class="icon">picture_as_pdf</span></button><button class="q-icon-btn" onclick="updateQueue()" title="Refresh"><span class="icon">refresh</span></button><button class="q-icon-btn" onclick="deleteAllQueue()" title="Delete All"><span class="icon">delete_forever</span></button></div>`
+      html += `<div class="q-footer"><label class="q-chk-all-lbl" title="Select all"><input type="checkbox" id="q-chk-all" checked onchange="toggleAllQueue(this.checked)">All</label><button class="q-icon-btn" onclick="exportQueueExcel()" title="Export as Excel"><span class="icon">table_view</span></button><button class="q-icon-btn" onclick="exportQueuePdf()" title="Export as PDF"><span class="icon">picture_as_pdf</span></button><button class="q-icon-btn" onclick="updateQueue()" title="Refresh"><span class="icon">refresh</span></button><button class="q-icon-btn" onclick="deleteAllQueue()" title="Delete All"><span class="icon">delete_forever</span></button></div>`
       body.innerHTML = html
     }
     document.getElementById('queue-modal').style.display = 'flex'
@@ -2094,6 +2096,15 @@
   // product names were stored.
   function selectedQueueMachines() {
     return new Set([...document.querySelectorAll('#queue-modal-body .q-chk:checked')].map(cb => cb.value))
+  }
+  function toggleAllQueue(on) {
+    document.querySelectorAll('#queue-modal-body .q-chk').forEach(cb => { cb.checked = on })
+  }
+  function syncQueueAllChk() {
+    const all = document.getElementById('q-chk-all')
+    if (!all) return
+    const chks = [...document.querySelectorAll('#queue-modal-body .q-chk')]
+    all.checked = chks.length > 0 && chks.every(cb => cb.checked)
   }
   async function collectQueueRows() {
     const detail = await window.api.getPendingDetail() || {}
@@ -2680,6 +2691,21 @@ function bufRenderMachineList(filter) {
     }
     bufEdits[machine][laneNo][field] = val
     bufEdits[machine][laneNo].pid = pid
+  }
+
+  function bufExportExcel() {
+    const statusEl = document.getElementById('buf-status')
+    if (!bufCurrentMachine || !bufAllLaneRows.length) {
+      statusEl.textContent = 'Select a machine first.'
+      setTimeout(() => { statusEl.textContent = '' }, 2000)
+      return
+    }
+    // Column order mirrors bufColumns (checkbox control excluded).
+    const aoa = bufAllLaneRows.map(r => {
+      const d = bufRowData(bufCurrentMachine, r)
+      return [d.laneNo, d.laneSize, d.pid, d.prod, d.sugN, d.sugS, d.norm, d.sem]
+    })
+    window.api.exportBufferStock(aoa, bufCurrentMachine)
   }
 
   async function bufSaveAll() {
