@@ -1825,17 +1825,18 @@
     window.api.setSetting('showWeekBadges', showWeekBadges)
     renderPicks()
   }
-  let showHighBal = false   // A: unhide rows with Bal > 10 (hidden by default)
-  let hideZeroRows = false  // B: hide rows with Restock = 0 (shown by default)
+  // Both filter buttons share one meaning: lit (in-queue) = that category is SHOWN.
+  let showHighBal = false   // A: rows with Bal > 10 — hidden by default
+  let showZeroRows = true   // B: rows with Restock = 0 — shown by default
   function toggleHighBal() {
     showHighBal = !showHighBal
     document.getElementById('btn-toggle-highbal')?.classList.toggle('in-queue', showHighBal)
     document.querySelector('#pick-detail-body table.pick-tbl')?.classList.toggle('hide-highbal', !showHighBal)
   }
   function toggleZeroRows() {
-    hideZeroRows = !hideZeroRows
-    document.getElementById('btn-toggle-zero')?.classList.toggle('in-queue', hideZeroRows)
-    document.querySelector('#pick-detail-body table.pick-tbl')?.classList.toggle('hide-zero', hideZeroRows)
+    showZeroRows = !showZeroRows
+    document.getElementById('btn-toggle-zero')?.classList.toggle('in-queue', showZeroRows)
+    document.querySelector('#pick-detail-body table.pick-tbl')?.classList.toggle('hide-zero', !showZeroRows)
   }
 
   function toggleShowAll() {
@@ -1962,12 +1963,12 @@
         const replMap = {}
         if (savedView?.rows) savedView.rows.forEach(r => { if (r.replacement) replMap[String(r.no)] = r.replacement })
         const hasEdit = savedView?.rows?.some(r => r.replacement)
-        let hdHtml = `<div class="pick-hd"><button class="pick-icon-btn" onclick="clearPickDetail()" title="Back to list"><span class="icon">home</span></button><div style="flex:1"><div class="nm">${machine}</div><div class="sub">Picking date ${dateStr} &nbsp;·&nbsp; Restock team ${team}</div></div><button id="btn-toggle-highbal" class="pick-icon-btn pick-flt-btn${showHighBal?' in-queue':''}" onclick="toggleHighBal()" title="Show / hide lanes with Bal &gt; 10">Bal&gt;10</button><button id="btn-toggle-zero" class="pick-icon-btn pick-flt-btn${hideZeroRows?' in-queue':''}" onclick="toggleZeroRows()" title="Hide / show lanes with Restock = 0">R=0</button><button class="pick-icon-btn${hasEdit?' has-edit':''}" onclick="enterEditMode('${machine.replace(/'/g,"\\'")}')" title="Edit replacements"><span class="icon">edit</span></button><button class="pick-icon-btn" onclick="printCurrentMachine()" title="Print this machine"><span class="icon">picture_as_pdf</span></button><button class="pick-icon-btn${inQueue?' in-queue':''}" onclick="confirmAndQueuePrintCurrent()" title="${inQueue?'Already in queue':'Add to Queue'}"><span class="icon">check_box</span></button></div>`
+        let hdHtml = `<div class="pick-hd"><button class="pick-icon-btn" onclick="clearPickDetail()" title="Back to list"><span class="icon">home</span></button><div style="flex:1"><div class="nm">${machine}</div><div class="sub">Picking date ${dateStr} &nbsp;·&nbsp; Restock team ${team}</div></div><button id="btn-toggle-highbal" class="pick-icon-btn pick-flt-btn${showHighBal?' in-queue':''}" onclick="toggleHighBal()" title="Show / hide lanes with Bal &ge; 10">Bal&ge;10</button><button id="btn-toggle-zero" class="pick-icon-btn pick-flt-btn${showZeroRows?' in-queue':''}" onclick="toggleZeroRows()" title="Show / hide lanes with Restock = 0">R=0</button><button class="pick-icon-btn${hasEdit?' has-edit':''}" onclick="enterEditMode('${machine.replace(/'/g,"\\'")}')" title="Edit replacements"><span class="icon">edit</span></button><button class="pick-icon-btn" onclick="printCurrentMachine()" title="Print this machine"><span class="icon">picture_as_pdf</span></button><button class="pick-icon-btn${inQueue?' in-queue':''}" onclick="confirmAndQueuePrintCurrent()" title="${inQueue?'Already in queue':'Add to Queue'}"><span class="icon">check_box</span></button></div>`
         hdHtml += `<div class="pick-search-bar"><input type="text" id="pick-search-input" placeholder="Search product…" oninput="filterPickTable(this.value)"><button onclick="clearPickSearch()">Clear</button></div>`
         let bodyHtml
         if (!pl.rows.length && !(pl.hiddenRows || []).length) { bodyHtml = '<div class="pick-empty">All lanes sufficiently stocked.</div>' }
         else {
-          bodyHtml = `<table class="lv-tbl pick-tbl${showHighBal?'':' hide-highbal'}${hideZeroRows?' hide-zero':''}"><thead><tr><th data-col="no">No</th><th data-col="product">Product</th><th data-col="bal">Bal</th><th data-col="lane">Lane</th><th data-col="forecast">Forecast</th><th data-col="buffer">Buffer</th><th data-col="restock">Restock</th></tr></thead><tbody>`
+          bodyHtml = `<table class="lv-tbl pick-tbl${showHighBal?'':' hide-highbal'}${showZeroRows?'':' hide-zero'}"><thead><tr><th data-col="no">No</th><th data-col="product">Product</th><th data-col="bal">Bal</th><th data-col="lane">Lane</th><th data-col="forecast">Forecast</th><th data-col="buffer">Buffer</th><th data-col="restock">Restock</th></tr></thead><tbody>`
           pl.rows.concat(pl.hiddenRows || []).sort((a, b) => Number(a.no) - Number(b.no)).forEach(r => {
             const tag = r.outOfStock ? '<span class="pick-out-tag">OUT</span>' : ''
             const ftag = r.fastMover ? '<span class="pick-fast-tag">FAST</span>' : ''
@@ -1977,7 +1978,7 @@
             bodyHtml += `<tr class="${cls}" data-lane="${r.no}"><td>${r.no}</td><td>${r.product}${tag}${ftag}${replNote}${laneTypeBadge(r.productId)}</td><td class="${r.outOfStock?'bal-out':''}">${r.bal}</td><td>${r.lane}</td><td style="color:#6b7280">${r.forecastQty > 0 ? '+' + r.forecastQty : '—'}</td><td>${bufCol}</td><td>${r.restock}</td></tr>`
           })
           bodyHtml += '</tbody></table>'
-          bodyHtml += `<div class="pick-hidden-note">${pl.hiddenCount} rows hidden (Bal &gt; 10)</div>`
+          bodyHtml += `<div class="pick-hidden-note">${pl.hiddenCount} rows hidden (Bal &ge; 10)</div>`
         }
         pickDetailSet(hdHtml, bodyHtml)
         makeSortable(detailEl.querySelector('table.pick-tbl'))
@@ -2002,7 +2003,8 @@
     const saved = await loadPickEditFresh(machine, today)
     if (saved?.rows?.length) {
       return saved.rows
-        .filter(r => (Number(r.restock) || 0) > 0)
+        // exclude Bal >= 10 lanes (Step C) — collectEditRows saves them too
+        .filter(r => (Number(r.restock) || 0) > 0 && Number(r.bal) < 10)
         .map(r => ({
           machine,
           lane_no:      String(r.no),
@@ -2916,7 +2918,7 @@ function bufRenderMachineList(filter) {
     const saved = await loadPickEditFresh(machine, dateStr)
     let rows
     if (saved?.rows?.length) {
-      rows = saved.rows.filter(r => (Number(r.restock) || 0) > 0)
+      rows = saved.rows.filter(r => (Number(r.restock) || 0) > 0 && Number(r.bal) < 10)
     } else {
       const oosByLane = (currentOos[machine]) || {}
       const todayStr = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` })()

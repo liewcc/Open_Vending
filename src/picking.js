@@ -313,10 +313,10 @@ function buildPickingList(reportRows, machine, pendingByLane, oosByLane, forecas
     const actualRestock = Math.max(0, restock - laneInTransit);
 
     const bal = num(row[4]); // Bal Qty is col 4
-    // Step C: rows where num(balQty) > 10 go to hiddenRows — display-only
+    // Step C: rows where num(balQty) >= 10 go to hiddenRows — display-only
     // (renderer can unhide them); they never join rows, so queue/print totals
     // are unaffected
-    if (bal > 10) {
+    if (bal >= 10) {
       hiddenCount++;
       hiddenRows.push({
         no: row[1],
