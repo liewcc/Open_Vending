@@ -1883,7 +1883,7 @@
       const team = window.api.teamOf(machine) || '—'
       // Edit mode carries the Bal>10 lanes too: they need a Replacement note
       // (e.g. a duplicated product) even though they're never picked.
-      let rows = pl.rows.concat(pl.hiddenRows || [])
+      let rows = pl.rows.concat(pl.hiddenRows || []).sort((a, b) => Number(a.no) - Number(b.no))
       if (isEditMode && editMachine === machine) {
         const date = dateStr.replace(/-/g, '')
         const saved = await loadPickEditFresh(machine, dateStr, rows)
@@ -1968,7 +1968,7 @@
         if (!pl.rows.length && !(pl.hiddenRows || []).length) { bodyHtml = '<div class="pick-empty">All lanes sufficiently stocked.</div>' }
         else {
           bodyHtml = `<table class="lv-tbl pick-tbl${showHighBal?'':' hide-highbal'}${hideZeroRows?' hide-zero':''}"><thead><tr><th data-col="no">No</th><th data-col="product">Product</th><th data-col="bal">Bal</th><th data-col="lane">Lane</th><th data-col="forecast">Forecast</th><th data-col="buffer">Buffer</th><th data-col="restock">Restock</th></tr></thead><tbody>`
-          pl.rows.concat(pl.hiddenRows || []).forEach(r => {
+          pl.rows.concat(pl.hiddenRows || []).sort((a, b) => Number(a.no) - Number(b.no)).forEach(r => {
             const tag = r.outOfStock ? '<span class="pick-out-tag">OUT</span>' : ''
             const ftag = r.fastMover ? '<span class="pick-fast-tag">FAST</span>' : ''
             const cls = [r.outOfStock?'pick-out':'', r.fastMover?'pick-fast':'', (Number(r.restock)||0)===0?'pick-zero':'', r.highBal?'pick-highbal':''].filter(Boolean).join(' ')
