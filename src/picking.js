@@ -52,15 +52,50 @@ function planKeyFor(machinesInPlan, machineName) {
 }
 
 /**
+ * Sums a machine's FINAL restock across its lanes the same way
+ * buildPickingList Step F does — in-transit deducted per lane, buffer applied
+ * (negative sem-break buffer subtracts, floored at 0, capped at lane size) —
+ * so the sidebar % reflects the actual picking-list demand, not the raw report
+ * Restock column. Forecast is intentionally omitted (sidebar is a today view).
+ * @param {any[][]} rows - the machine's data rows (no header)
+ * @param {object} pendingByLane - {laneNo: qty, ...}
+ * @param {object} bufferByLane - {laneNo: qty, ...} (mode-resolved; negative for sem break)
+ * @returns {{laneSum:number, restockSum:number, pct:number}}
+ */
+function machineRestockPct(rows, pendingByLane, bufferByLane) {
+  pendingByLane = pendingByLane || {};
+  bufferByLane = bufferByLane || {};
+  let laneSum = 0;
+  let restockSum = 0;
+  for (const r of rows) {
+    const laneNo = String(r[1]);
+    const laneSize = num(r[5]);
+    const bal = num(r[4]);
+    const restock = num(r[6]);
+    const actualRestock = Math.max(0, restock - (pendingByLane[laneNo] || 0));
+    const bufferQty = actualRestock === 0 ? 0 : Math.min(bufferByLane[laneNo] || 0, bal);
+    const capped = laneSize > 0 ? Math.min(actualRestock, laneSize) : actualRestock;
+    const withBuffer = capped + bufferQty;
+    const finalRestock = Math.max(0, laneSize > 0 ? Math.min(withBuffer, laneSize) : withBuffer);
+    laneSum += laneSize;
+    restockSum += finalRestock;
+  }
+  const pct = laneSum > 0 ? Math.round(restockSum / laneSum * 100) / 100 : 0;
+  return { laneSum, restockSum, pct };
+}
+
+/**
  * Determines which machines qualify for picking today.
  * @param {any[][]} reportRows
  * @param {object} routePlan
  * @param {Date} date
  * @param {object} pendingByMachine - {machineName: {laneNo: qty, ...}, ...}
+ * @param {object} bufferByMachine - {machineName: {laneNo: qty, ...}, ...} (mode-resolved)
  * @returns {object[]}
  */
-function machinesToPickToday(reportRows, routePlan, date, pendingByMachine) {
+function machinesToPickToday(reportRows, routePlan, date, pendingByMachine, bufferByMachine) {
   if (!pendingByMachine) pendingByMachine = {};
+  if (!bufferByMachine) bufferByMachine = {};
   const machinesInPlan = (routePlan && routePlan.machines) ? routePlan.machines : {};
   const groups = {};
 
@@ -90,20 +125,10 @@ function machinesToPickToday(reportRows, routePlan, date, pendingByMachine) {
       const machinePlan = machinesInPlan[planKey];
       const rows = groups[machineName];
 
-      let laneSum = 0;
-      let restockSum = 0;
-      for (const r of rows) {
-        laneSum += num(r[5]);    // Lane Size is col 5
-        restockSum += num(r[6]); // Restock is col 6
-      }
-
-      // In-transit deduction: sum all pending picked_qty for this machine
-      const lanePending = pendingByMachine[machineName] || {};
-      const inTransitSum = Object.values(lanePending).reduce((a, v) => a + v, 0);
-      const adjustedRestockSum = Math.max(0, restockSum - inTransitSum);
-
-      const pctRaw = laneSum > 0 ? adjustedRestockSum / laneSum : 0;
-      const pct = Math.round(pctRaw * 100) / 100;
+      // Per-lane: in-transit deducted + buffer applied (Step F semantics),
+      // so the % matches the machine's actual picking-list demand.
+      const { laneSum, restockSum: adjustedRestockSum, pct } =
+        machineRestockPct(rows, pendingByMachine[machineName], bufferByMachine[machineName]);
 
       const scheduleDays = machinePlan.scheduleDays || [];
       const scheduled = scheduleDays.includes(wd);
@@ -125,7 +150,6 @@ function machinesToPickToday(reportRows, routePlan, date, pendingByMachine) {
           machine: machineName,
           team: machinePlan.team || 'UNASSIGNED',
           reason,
-          restockSum,
           adjustedRestockSum,
           laneSum,
           pct
@@ -388,6 +412,7 @@ module.exports = {
   num,
   weekdayName,
   planKeyFor,
+  machineRestockPct,
   machinesToPickToday,
   buildPickingList,
   splitForecastAcrossLanes,

@@ -1573,6 +1573,14 @@
     }
     return result
   }
+  // Mode-resolved buffer for every machine, so the sidebar % (getTodayPicks /
+  // getAllMachines) can apply the same negative sem-break deduction the pick
+  // list uses. Reuses getBufferByLane per machine to keep one resolution path.
+  function buildBufferByMachine() {
+    const out = {}
+    for (const mach of Object.keys(currentBuffer || {})) out[mach] = getBufferByLane(mach)
+    return out
+  }
   function updateRestockModeButtons() {
     const plan = window.api.getRoutePlan()
     const modes = new Set(Object.values(plan.machines || {}).map(v => (v.mode === 'short' || v.mode === 'sembreak') ? v.mode : 'normal'))
@@ -1687,7 +1695,8 @@
         weekDone = await window.api.getWeekSummary(fmtD(mon), fmtD(sat)) || {}
       }
 
-      const list = window.api.getTodayPicks(lastFilePath, dateISO, currentPending)
+      const bufferByMachine = buildBufferByMachine()
+      const list = window.api.getTodayPicks(lastFilePath, dateISO, currentPending, bufferByMachine)
       document.getElementById('pick-count').textContent = `${list.length} machines to pick`
       currentPickList = list
 
@@ -1696,7 +1705,7 @@
 
       // In show-all mode, display every machine in the route plan
       const displayList = showAllMachines
-        ? window.api.getAllMachines(lastFilePath, currentPending)
+        ? window.api.getAllMachines(lastFilePath, currentPending, bufferByMachine)
         : list
 
       listEl.innerHTML = ''

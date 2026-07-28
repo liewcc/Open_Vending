@@ -52,9 +52,9 @@ contextBridge.exposeInMainWorld('api', {
   parseExcel(filePath) {
     return parseRows(filePath)
   },
-  getTodayPicks(filePath, dateISO, pendingByMachine) {
+  getTodayPicks(filePath, dateISO, pendingByMachine, bufferByMachine) {
     const rows = parseRows(filePath)
-    return picking.machinesToPickToday(rows, routePlan, new Date(dateISO), pendingByMachine || {})
+    return picking.machinesToPickToday(rows, routePlan, new Date(dateISO), pendingByMachine || {}, bufferByMachine || {})
   },
   getPickList(filePath, machine, pendingByLane, oosByLane, forecastByPid, semBreak, bufferByLane) {
     const rows = parseRows(filePath)
@@ -77,9 +77,10 @@ contextBridge.exposeInMainWorld('api', {
     routePlan.machines = machines
     return ipcRenderer.invoke('save-route-plan', routePlan)
   },
-  getAllMachines(filePath, pendingByMachine) {
+  getAllMachines(filePath, pendingByMachine, bufferByMachine) {
     const rows = parseRows(filePath)
     if (!pendingByMachine) pendingByMachine = {}
+    if (!bufferByMachine) bufferByMachine = {}
     const machinesInPlan = (routePlan && routePlan.machines) ? routePlan.machines : {}
 
     // Group report rows by machine name
@@ -101,16 +102,11 @@ contextBridge.exposeInMainWorld('api', {
         ? machineName
         : (machineName.length > 31 && groups[machineName.slice(0, 31)] ? machineName.slice(0, 31) : machineName)
       const machRows = groups[reportName] || []
-      let laneSum = 0, restockSum = 0
-      for (const r of machRows) {
-        laneSum += picking.num(r[5])
-        restockSum += picking.num(r[6])
-      }
-      const lanePending = pendingByMachine[reportName] || {}
-      const inTransitSum = Object.values(lanePending).reduce((a, v) => a + v, 0)
-      const adjustedRestockSum = Math.max(0, restockSum - inTransitSum)
-      const pct = laneSum > 0 ? Math.round(adjustedRestockSum / laneSum * 100) / 100 : 0
-      results.push({ machine: reportName, team: machinePlan.team || 'UNASSIGNED', pct, restockSum, adjustedRestockSum, laneSum })
+      // Same Step-F per-lane semantics as the sidebar pick list (buffer applied,
+      // in-transit deducted) so both % views agree.
+      const { laneSum, restockSum: adjustedRestockSum, pct } =
+        picking.machineRestockPct(machRows, pendingByMachine[reportName], bufferByMachine[reportName])
+      results.push({ machine: reportName, team: machinePlan.team || 'UNASSIGNED', pct, adjustedRestockSum, laneSum })
     }
 
     results.sort((a, b) => {
@@ -154,6 +150,7 @@ contextBridge.exposeInMainWorld('api', {
     return picking.suggestReplacements(pickRows, machineLanes, catalog, machineSales, globalSales, thresholdPct, topN)
   },
   exportQueueExcel: (rows) => ipcRenderer.invoke('export-queue-excel', rows),
+  exportBufferStock: (rows, machine) => ipcRenderer.invoke('export-buffer-excel', { rows, machine }),
   exportQueuePdf:   (rows, pages, date) => ipcRenderer.invoke('export-queue-pdf', { rows, pages, date }),
   analyzeSlowMachine: (machine) => ipcRenderer.invoke('analyze-slow-machine', machine),
 })
