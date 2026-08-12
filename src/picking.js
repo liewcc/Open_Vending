@@ -74,10 +74,13 @@ function machineRestockPct(rows, pendingByLane, bufferByLane) {
     const restock = num(r[6]);
     const actualRestock = Math.max(0, restock - (pendingByLane[laneNo] || 0));
     const bufferQty = actualRestock === 0 ? 0 : Math.min(bufferByLane[laneNo] || 0, bal);
-    const space = Math.max(0, laneSize - bal); // bal + restock can't exceed lane
+    const space = Math.max(0, laneSize - bal); // free space at report time
     const capped = laneSize > 0 ? Math.min(actualRestock, space) : actualRestock;
     const withBuffer = capped + bufferQty;
-    const finalRestock = Math.max(0, laneSize > 0 ? Math.min(withBuffer, space) : withBuffer);
+    // buffer covers in-transit sales, which free extra space by refill time,
+    // so the ceiling is space + buffer (positive buffer only)
+    const ceiling = space + Math.max(0, bufferQty);
+    const finalRestock = Math.max(0, laneSize > 0 ? Math.min(withBuffer, ceiling) : withBuffer);
     laneSum += laneSize;
     restockSum += finalRestock;
   }
@@ -380,11 +383,14 @@ function buildPickingList(reportRows, machine, pendingByLane, oosByLane, forecas
     // never exceed what's left in the lane (bal), and the total load can
     // never exceed the lane's free space (laneSize - bal)
     const laneSize = num(row[5]);
-    const space = Math.max(0, laneSize - bal); // bal + restock can't exceed lane
+    const space = Math.max(0, laneSize - bal); // free space at report time
     const bufferQty = zeroRestock ? 0 : Math.min(bufferByLane[laneNo] || 0, bal);
     const cappedRestock = laneSize > 0 ? Math.min(actualRestock + forecastQty, space) : actualRestock + forecastQty;
     const withBuffer = cappedRestock + bufferQty;
-    const finalRestock = Math.max(0, laneSize > 0 ? Math.min(withBuffer, space) : withBuffer);
+    // buffer covers in-transit sales, which free extra space by refill time,
+    // so the ceiling is space + buffer (positive buffer only)
+    const ceiling = space + Math.max(0, bufferQty);
+    const finalRestock = Math.max(0, laneSize > 0 ? Math.min(withBuffer, ceiling) : withBuffer);
 
     visibleRows.push({
       no: row[1],
@@ -554,16 +560,16 @@ if (require.main === module) {
   assert.strictEqual(rOut.restock, 4);
   const rCap = plBuf.rows.find(r => r.productId === 'P4');   // bal 5 → buffer 8 capped to 5
   assert.strictEqual(rCap.bufferQty, 5);
-  assert.strictEqual(rCap.restock, 5);                       // capped to free space (lane 10 - bal 5)
+  assert.strictEqual(rCap.restock, 8);                       // free space 5 + buffer 5, capped by restock+forecast+buffer = 3+0+5
 
-  // bal + restock can never exceed lane size (cap on free space, not lane size)
+  // buffer rides ABOVE free space (covers in-transit sales that free room by refill)
   const mockReportLaneCap = [
     ['Machine','No.','Product ID','Product Name','Bal Qty','Lane Size','Restock'],
     ['MachL', '1', 'P1', 'A', '5', '6', '3'],
   ];
   const plLaneCap = buildPickingList(mockReportLaneCap, 'MachL', {}, {}, {}, false, { '1': 5 });
   assert.strictEqual(plLaneCap.rows[0].bufferQty, 5);        // bal 5 allows it
-  assert.strictEqual(plLaneCap.rows[0].restock, 1);          // free space = 6 - 5 = 1
+  assert.strictEqual(plLaneCap.rows[0].restock, 6);          // free space 1 + buffer 5
 
   // negative (sem-break) buffer still reduces restock, floor at 0
   const plNeg = buildPickingList(mockReportLaneCap, 'MachL', {}, {}, {}, false, { '1': -5 });

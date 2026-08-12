@@ -140,6 +140,8 @@ function saveCredentials(username, password) {
 
 // ── Window ────────────────────────────────────────────────────────────────────
 
+const overlayOpts = { color: '#1e2235', symbolColor: '#cdd6f4', height: 38 }
+
 function createWindow() {
   win = new BrowserWindow({
     width: 1280,
@@ -148,11 +150,7 @@ function createWindow() {
     minHeight: 600,
     icon: ICON_PNG,
     titleBarStyle: 'hidden',
-    titleBarOverlay: {
-      color: '#1e2235',
-      symbolColor: '#cdd6f4',
-      height: 38
-    },
+    titleBarOverlay: overlayOpts,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -162,6 +160,11 @@ function createWindow() {
     backgroundColor: '#f0f2f5'
   })
   win.loadFile(path.join(__dirname, 'index.html'))
+
+  // Chromium sometimes blanks the native window-controls overlay without repainting
+  // (after restore/show/focus/maximize). Re-apply it to force a redraw.
+  const repaintOverlay = () => { if (win && !win.isDestroyed()) win.setTitleBarOverlay(overlayOpts) }
+  ;['show', 'restore', 'focus', 'maximize', 'unmaximize'].forEach(ev => win.on(ev, repaintOverlay))
 
   win.on('close', e => {
     if (!quitting && settings.closeTray) {
@@ -680,6 +683,22 @@ ipcMain.handle('export-queue-excel', async (_, rows) => {
   const ws = xlsx.utils.aoa_to_sheet(aoa)
   const wb = xlsx.utils.book_new()
   xlsx.utils.book_append_sheet(wb, ws, 'Queue')
+  xlsx.writeFile(wb, filePath)
+  return { ok: true, filePath }
+})
+
+// Buffer Stock page export — columns mirror bufColumns in index.html.
+// If a column is added/removed there, update this header + the renderer's .map().
+ipcMain.handle('export-buffer-excel', async (_, { rows, machine }) => {
+  const safe = String(machine || 'buffer').replace(/[\\/:*?"<>|]/g, '_')
+  const defaultPath = path.join(os.homedir(), 'Desktop', `buffer-stock-${safe}.xlsx`)
+  const { canceled, filePath } = await dialog.showSaveDialog({ defaultPath, filters: [{ name: 'Excel', extensions: ['xlsx'] }] })
+  if (canceled || !filePath) return { ok: false }
+
+  const aoa = [['Lane', 'Lane Size', 'PID', 'Product', 'Sug Normal', 'Sug Sem Break', 'Normal', 'Sem Break'], ...rows]
+  const ws = xlsx.utils.aoa_to_sheet(aoa)
+  const wb = xlsx.utils.book_new()
+  xlsx.utils.book_append_sheet(wb, ws, safe.slice(0, 31))
   xlsx.writeFile(wb, filePath)
   return { ok: true, filePath }
 })
