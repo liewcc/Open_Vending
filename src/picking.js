@@ -385,12 +385,12 @@ function buildPickingList(reportRows, machine, pendingByLane, oosByLane, forecas
     const laneSize = num(row[5]);
     const space = Math.max(0, laneSize - bal); // free space at report time
     const bufferQty = zeroRestock ? 0 : Math.min(bufferByLane[laneNo] || 0, bal);
-    const cappedRestock = laneSize > 0 ? Math.min(actualRestock + forecastQty, space) : actualRestock + forecastQty;
-    const withBuffer = cappedRestock + bufferQty;
-    // buffer covers in-transit sales, which free extra space by refill time,
-    // so the ceiling is space + buffer (positive buffer only)
-    const ceiling = space + Math.max(0, bufferQty);
-    const finalRestock = Math.max(0, laneSize > 0 ? Math.min(withBuffer, ceiling) : withBuffer);
+    // forecast and positive buffer both cover lead-time sales, which free extra
+    // space by refill time, so both ride ABOVE free space: ceiling = space +
+    // forecast + positive buffer
+    const withExtras = actualRestock + forecastQty + bufferQty;
+    const ceiling = space + forecastQty + Math.max(0, bufferQty);
+    const finalRestock = Math.max(0, laneSize > 0 ? Math.min(withExtras, ceiling) : withExtras);
 
     visibleRows.push({
       no: row[1],
