@@ -2012,8 +2012,9 @@
     const saved = await loadPickEditFresh(machine, today)
     if (saved?.rows?.length) {
       return saved.rows
-        // exclude Bal >= 10 lanes (Step C) — collectEditRows saves them too
-        .filter(r => (Number(r.restock) || 0) > 0 && Number(r.bal) < 10)
+        // exclude Bal >= 10 lanes (Step C) — collectEditRows saves them too;
+        // a keyed-in replacement always survives (product swap, even at restock 0)
+        .filter(r => r.replacement || ((Number(r.restock) || 0) > 0 && Number(r.bal) < 10))
         .map(r => ({
           machine,
           lane_no:      String(r.no),
@@ -2221,7 +2222,8 @@
       const d = new Date()
       const todayStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
       const planPending = dateStr > todayStr ? (currentPending[machine] || {}) : {}
-      liveRows = window.api.getPickList(lastFilePath, machine, planPending, currentOos[machine] || {}, currentForecast[machine] || {}, window.api.modeOf(machine) !== 'normal', getBufferByLane(machine)).rows
+      const _pl = window.api.getPickList(lastFilePath, machine, planPending, currentOos[machine] || {}, currentForecast[machine] || {}, window.api.modeOf(machine) !== 'normal', getBufferByLane(machine))
+      liveRows = [..._pl.rows, ...(_pl.hiddenRows || [])]
     }
     const replByNo = {}
     saved.rows.forEach(r => { if (r.replacement) replByNo[String(r.no)] = r.replacement })
@@ -2900,7 +2902,7 @@ function bufRenderMachineList(filter) {
       const saved = await window.api.loadPickEdit(m.machine, dateKey)
       const replMap = {}
       if (saved?.rows) saved.rows.forEach(r => { if (r.replacement) replMap[String(r.no)] = r.replacement })
-      const rows = pl.rows.filter(r => (Number(r.restock) || 0) > 0).map(r => ({ ...r, replacement: replMap[String(r.no)] || '' }))
+      const rows = [...pl.rows, ...(pl.hiddenRows || [])].map(r => ({ ...r, replacement: replMap[String(r.no)] || '' })).filter(r => (Number(r.restock) || 0) > 0 || r.replacement)
       return { machine: m.machine, team: m.team, date: dateFormatted, rows }
     }))).filter(m => m.rows.length > 0)
     if (!data.length) return
@@ -2927,7 +2929,7 @@ function bufRenderMachineList(filter) {
     const saved = await loadPickEditFresh(machine, dateStr)
     let rows
     if (saved?.rows?.length) {
-      rows = saved.rows.filter(r => (Number(r.restock) || 0) > 0 && Number(r.bal) < 10)
+      rows = saved.rows.filter(r => r.replacement || ((Number(r.restock) || 0) > 0 && Number(r.bal) < 10))
     } else {
       const oosByLane = (currentOos[machine]) || {}
       const todayStr = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` })()
