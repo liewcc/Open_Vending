@@ -91,7 +91,7 @@
     "KK4F M3": {
       "team": "5530",
       "scheduleDays": [],
-      "mode": "sembreak"
+      "mode": "short"
     },
     "KK5 M3": {
       "team": "5530",
@@ -126,7 +126,7 @@
     "KPZ Chilax M3": {
       "team": "1126",
       "scheduleDays": [],
-      "mode": "sembreak"
+      "mode": "short"
     },
     "KPZ Gajah M3": {
       "team": "1126",
@@ -156,17 +156,17 @@
     "UK KTSN B M3": {
       "team": "1126",
       "scheduleDays": [],
-      "mode": "normal"
+      "mode": "short"
     },
     "UK KTSN DEWAN M3": {
       "team": "1126",
       "scheduleDays": [],
-      "mode": "normal"
+      "mode": "short"
     },
     "UK KTSN G M3": {
       "team": "1126",
       "scheduleDays": [],
-      "mode": "sembreak"
+      "mode": "short"
     },
     "UKB Bahasa Dan Linguistik M3 Twin": {
       "team": "1126",
