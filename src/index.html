@@ -551,9 +551,7 @@
   .pick-hd .sub { font-size:10.5px; color:#6b7280; margin-top:2px; }
   table.pick-tbl { width:100%; border-collapse:collapse; font-size:11.5px; }
   table.pick-tbl td { padding:5px 14px; border-bottom:0.5px solid #f3f3f3; }
-  tr.pick-out td { background:#fcebeb; }
-  tr.pick-fast td { background:#fff7e6; }
-  tr.pick-fast.pick-out td { background:#fce0d8; }
+  tr.pick-out td:first-child { box-shadow:inset 3px 0 0 #dc2626; }
   tr.pick-zero td { color:#9ca3af; }
   .pick-fast-tag { background:#fde68a; color:#92400e; border-radius:7px; padding:0 6px; font-size:9px; margin-left:6px; }
   .lt-badge { border-radius:5px; padding:0 5px; font-size:9px; font-weight:600; vertical-align:middle; margin-left:5px; }
@@ -583,10 +581,10 @@
   tr.pick-highbal td { color:#9ca3af; background:#fafbfc; }
   .pick-tbl.hide-highbal tr.pick-highbal { display:none; }
   .pick-tbl.hide-zero tr.pick-zero { display:none; }
-  table.pick-tbl.hide-mvzero tbody tr.mv-zero td{background:#fef2f2}
+  table.pick-tbl tbody tr:hover td { background:#fdeaea; }
   td.buf-cell{color:#0891b2;background:#f0fdff;font-weight:600;transition:background .35s}
-  td.buf-cell.buf-saved{background:#bbf7d0}
-  td.buf-cell.buf-fail{background:#fecaca}
+  td.buf-cell.buf-saved{background:#bbf7d0!important}
+  td.buf-cell.buf-fail{background:#fecaca!important}
   .pick-flt-btn { width:auto; height:24px; padding:0 10px; border:1px solid #d1d5db; border-radius:999px; font-size:11px; font-weight:600; background:#fff; }
   .pick-flt-btn.in-queue { color:#16a34a; background:#dcfce7; border-color:#22c55e; }
   .pick-search-bar { display:flex; align-items:center; gap:6px; padding:7px 14px; border-bottom:0.5px solid #eee; background:#fafbfc; }
@@ -1573,6 +1571,17 @@
     }
     return result
   }
+  // Live pick list for a machine at the currently selected date. Future date =
+  // planning view: deduct in-transit qty so the office can prep tomorrow's list
+  // mid-route. Today = execution view: never deduct (a queued machine's own
+  // pending entry would zero every lane).
+  function livePickList(machine) {
+    const dateStr = document.getElementById('pick-date').value
+    const d = new Date()
+    const todayStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+    const planPending = dateStr > todayStr ? (currentPending[machine] || {}) : {}
+    return window.api.getPickList(lastFilePath, machine, planPending, currentOos[machine] || {}, currentForecast[machine] || {}, window.api.modeOf(machine) !== 'normal', getBufferByLane(machine))
+  }
   // Mode-resolved buffer for every machine, so the sidebar % (getTodayPicks /
   // getAllMachines) can apply the same negative sem-break deduction the pick
   // list uses. Reuses getBufferByLane per machine to keep one resolution path.
@@ -1882,14 +1891,8 @@
   async function renderPickDetail(machine) {
     const detailEl = document.getElementById('pick-detail')
     try {
-      const oosByLane = (currentOos[machine]) || {}
       const dateStr = document.getElementById('pick-date').value
-      const todayStr = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` })()
-      // Future date = planning view: deduct in-transit qty so the office can
-      // prep tomorrow's list mid-route. Today = execution view: never deduct
-      // (a queued machine's own pending entry would zero every lane).
-      const planPending = dateStr > todayStr ? (currentPending[machine] || {}) : {}
-      const pl = window.api.getPickList(lastFilePath, machine, planPending, oosByLane, currentForecast[machine] || {}, window.api.modeOf(machine) !== 'normal', getBufferByLane(machine))
+      const pl = livePickList(machine)
       const team = window.api.teamOf(machine) || '—'
       // Edit mode carries the Bal>10 lanes too: they need a Replacement note
       // (e.g. a duplicated product) even though they're never picked.
@@ -1917,7 +1920,7 @@
           if (mv && mv.ok) mvSales = mv.sales || {}
         }
         let hdHtml = `<div class="pick-hd"><div><div class="nm">${machine}</div><div class="sub">Picking date ${dateStr} &nbsp;·&nbsp; Restock team ${team}</div></div><button class="pick-icon-btn" onclick="exitEditMode()" title="Save &amp; Exit Edit"><span class="icon">save</span></button></div>`
-        const mvCtl = `<span style="font-weight:400;margin-left:auto;">Sold <select onchange="onMvWindowChange(this.value)" style="padding:1px 4px;border:1px solid #d1d5db;border-radius:4px;font-size:11px;"><option value="0"${mvWindow===0?' selected':''}>off</option><option value="1"${mvWindow===1?' selected':''}>1d</option><option value="10"${mvWindow===10?' selected':''}>10d</option><option value="20"${mvWindow===20?' selected':''}>20d</option><option value="30"${mvWindow===30?' selected':''}>30d</option></select></span>`
+        const mvCtl = `<span style="font-weight:400;margin-left:auto;">Sold <select onchange="onMvWindowChange(this.value)" style="padding:1px 4px;border:1px solid #d1d5db;border-radius:4px;font-size:11px;">${[0,1,2,7,10,30,60].map(d=>`<option value="${d}"${mvWindow===d?' selected':''}>${d?d+'d':'off'}</option>`).join('')}</select></span>`
         const q3Ctl = q3.ok
           ? `<span style="margin-left:10px;font-weight:400;">Slow &lt; <input type="number" min="1" max="100" value="${q3ThresholdPct}" style="width:44px;padding:1px 4px;border:1px solid #d1d5db;border-radius:4px;font-size:11px;" onchange="onQ3ThresholdChange(this.value)"> % of tray avg</span>`
           : `<span style="margin-left:10px;font-weight:400;color:#9ca3af;">Slow-mover suggestions off — ${q3.error || 'set product.csv in Slow Mover panel'}</span>`
@@ -1926,7 +1929,7 @@
         let bodyHtml
         if (!rows.length) { bodyHtml = '<div class="pick-empty">All lanes sufficiently stocked.</div>' }
         else {
-          bodyHtml = `<table class="lv-tbl pick-tbl${mvWindow > 0 ? ' hide-mvzero' : ''}"><thead><tr><th data-col="no">No</th><th data-col="product">Product</th><th data-col="sold">Sold</th><th data-col="bal">Bal</th><th data-col="lane">Lane</th><th data-col="forecast">Forecast</th><th data-col="buffer">Buffer</th><th data-col="restock">Restock</th><th data-col="replacement">Replacement</th><th></th></tr></thead><tbody>`
+          bodyHtml = `<table class="lv-tbl pick-tbl"><thead><tr><th data-col="no">No</th><th data-col="product">Product</th><th data-col="sold">Sold</th><th data-col="bal">Bal</th><th data-col="lane">Lane</th><th data-col="forecast">Forecast</th><th data-col="buffer">Buffer</th><th data-col="restock">Restock</th><th data-col="replacement">Replacement</th><th></th></tr></thead><tbody>`
           rows.forEach(r => {
             const tag = r.outOfStock ? '<span class="pick-out-tag">OUT</span>' : ''
             const ftag = r.fastMover ? '<span class="pick-fast-tag">FAST</span>' : ''
@@ -1936,7 +1939,7 @@
             const zr = (Number(r.restock) || 0) === 0
             const soldQty = mvWindow > 0 ? (Number(mvSales[String(r.productId)]) || 0) : null
             const soldTd = mvWindow > 0 ? `<td style="color:#6b7280">${soldQty}</td>` : `<td style="color:#c3c8d0">—</td>`
-            const cls = [r.outOfStock?'pick-out':'', r.fastMover?'pick-fast':'', zr?'pick-zero':'', soldQty===0?'mv-zero':'', r.highBal?'pick-highbal':''].filter(Boolean).join(' ')
+            const cls = [r.outOfStock?'pick-out':'', r.fastMover?'pick-fast':'', zr?'pick-zero':'', r.highBal?'pick-highbal':''].filter(Boolean).join(' ')
             const laneNoStr = String(r.no)
             const machMode = window.api.modeOf(machine)
             const bufSetting = (currentBuffer[machine] || {})[laneNoStr] || {}
@@ -2191,7 +2194,6 @@
     const v = parseInt(td.textContent.trim(), 10) || 0
     const cur = (currentBuffer[editMachine] || {})[laneNo] || {}
     const mode = window.api.modeOf(editMachine)
-    if (v === (mode === 'sembreak' ? (cur.sembreak_qty || 0) : (cur.normal_qty || 0))) return  // unchanged
     const row = {
       machine: editMachine, lane_no: laneNo, pid: pid || cur.pid || '',
       normal_qty:   mode === 'sembreak' ? (cur.normal_qty || 0) : v,
@@ -2203,6 +2205,16 @@
       currentBuffer[editMachine][laneNo] = { pid: row.pid, normal_qty: row.normal_qty, sembreak_qty: row.sembreak_qty }
       td.textContent = v || ''
       td.classList.add('buf-saved'); setTimeout(() => td.classList.remove('buf-saved'), 900)
+      // Edit mode renders Restock from the saved snapshot, which a buffer change
+      // doesn't invalidate — push the recomputed value into the cell so the
+      // table's input handler saves it and syncs the queue.
+      const pl = livePickList(editMachine)
+      const live = [...pl.rows, ...(pl.hiddenRows || [])].find(x => String(x.no) === laneNo)
+      const tr = td.closest('tr')
+      if (live && tr) {
+        tr.querySelectorAll('td')[7].textContent = live.restock
+        tr.dispatchEvent(new Event('input', { bubbles: true }))
+      }
     } else {
       td.classList.add('buf-fail'); setTimeout(() => td.classList.remove('buf-fail'), 1400)
     }
