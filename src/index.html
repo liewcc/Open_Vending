@@ -1559,7 +1559,9 @@
   let q3Cache = {}            // {machine: replacement-data IPC result} session cache
   let q3ThresholdPct = 50     // slow if machine 30d sales < pct% of tray avg
   let mvWindow = 0    // sales-movement window in days; 0 = off
-  let mvSales = {}    // {pid: qty} for the current window (edit mode)
+  let mvSales = {}     // {pid: qty} product totals for the current window (edit mode)
+  let mvLanes = {}     // {"lane|pid": qty} the same window split per lane
+  let mvLaneOk = false // false when change_log doesn't cover the whole window
 
   function getBufferByLane(machine) {
     const mode = window.api.modeOf(machine)
@@ -1914,10 +1916,10 @@
           }).concat(rows.filter(x => !savedNos.has(String(x.no))))
         }
         const q3 = await loadQ3Suggestions(machine, rows)
-        mvSales = {}
+        mvSales = {}; mvLanes = {}; mvLaneOk = false
         if (mvWindow > 0) {
           const mv = await window.api.getMachineSales(machine, mvWindow)
-          if (mv && mv.ok) mvSales = mv.sales || {}
+          if (mv && mv.ok) { mvSales = mv.sales || {}; mvLanes = mv.lanes || {}; mvLaneOk = !!mv.lane_ok }
         }
         let hdHtml = `<div class="pick-hd"><div><div class="nm">${machine}</div><div class="sub">Picking date ${dateStr} &nbsp;·&nbsp; Restock team ${team}</div></div><button class="pick-icon-btn" onclick="exitEditMode()" title="Save &amp; Exit Edit"><span class="icon">save</span></button></div>`
         const mvCtl = `<span style="font-weight:400;margin-left:auto;">Sold <select onchange="onMvWindowChange(this.value)" style="padding:1px 4px;border:1px solid #d1d5db;border-radius:4px;font-size:11px;">${[0,1,2,7,10,30,60].map(d=>`<option value="${d}"${mvWindow===d?' selected':''}>${d?d+'d':'off'}</option>`).join('')}</select></span>`
@@ -1937,8 +1939,13 @@
             const stag = sug ? '<span class="pick-slow-tag">SLOW</span>' : ''
             const sugBtn = sug ? `<button class="pick-sug-btn" onclick="openSugMenu(this, '${r.no}')" title="Suggest replacements (same tray &amp; size)">💡</button>` : ''
             const zr = (Number(r.restock) || 0) === 0
-            const soldQty = mvWindow > 0 ? (Number(mvSales[String(r.productId)]) || 0) : null
-            const soldTd = mvWindow > 0 ? `<td style="color:#6b7280">${soldQty}</td>` : `<td style="color:#c3c8d0">—</td>`
+            // sold for THIS lane; the product total across all its lanes stays on hover
+            const soldLane = Number(mvLanes[`${r.no}|${r.productId}`]) || 0
+            const soldTd = mvWindow === 0
+              ? `<td style="color:#c3c8d0">—</td>`
+              : mvLaneOk
+                ? `<td style="color:#6b7280" title="Lane ${r.no} over ${mvWindow}d — all lanes of this product: ${Number(mvSales[String(r.productId)]) || 0}">${soldLane}</td>`
+                : `<td style="color:#c3c8d0" title="No lane-level history covering the last ${mvWindow} days">n/a</td>`
             const cls = [r.outOfStock?'pick-out':'', r.fastMover?'pick-fast':'', zr?'pick-zero':'', r.highBal?'pick-highbal':''].filter(Boolean).join(' ')
             const laneNoStr = String(r.no)
             const machMode = window.api.modeOf(machine)
