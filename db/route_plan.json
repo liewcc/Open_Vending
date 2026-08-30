@@ -56,7 +56,7 @@
     "KK1 M3": {
       "team": "5530",
       "scheduleDays": [],
-      "mode": "short"
+      "mode": "normal"
     },
     "KK11A New M3": {
       "team": "5530",
@@ -111,7 +111,7 @@
     "KK8 M3": {
       "team": "5530",
       "scheduleDays": [],
-      "mode": "sembreak"
+      "mode": "normal"
     },
     "KK8B M3": {
       "team": "5530",
@@ -121,12 +121,12 @@
     "KK9 M3": {
       "team": "5530",
       "scheduleDays": [],
-      "mode": "sembreak"
+      "mode": "short"
     },
     "KPZ Chilax M3": {
       "team": "1126",
       "scheduleDays": [],
-      "mode": "short"
+      "mode": "normal"
     },
     "KPZ Gajah M3": {
       "team": "1126",
