@@ -338,11 +338,14 @@
                min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .acct-row .pick-icon-btn, .acct-row .switch { flex-shrink:0; }
   .acct-pill { flex-shrink:0; }
-  .acct-name .sw { cursor:pointer; }
-  .acct-name .sw:hover { text-decoration:underline; }
   .acct-pill { font-size:9.5px; font-weight:600; letter-spacing:.4px; text-transform:uppercase;
                padding:1px 6px; border-radius:10px; background:#dcfce7; color:#166534; }
   .acct-pill.err { background:#fee2e2; color:#991b1b; }
+  .acct-pill.run { background:#fef3c7; color:#92400e; animation:pulse 1.2s infinite; }
+  .acct-pill.ok  { background:#f3f4f6; color:#6b7280; text-transform:none; letter-spacing:0; font-weight:500; }
+  .acct-switch { padding:4px 11px; border:1px solid #d1d5db; border-radius:6px; background:#f3f4f6;
+                 color:#374151; font-size:11px; font-weight:600; cursor:pointer; flex-shrink:0; }
+  .acct-switch:hover { background:#e5e7eb; }
   .acct-meta { font-size:11px; color:#9ca3af; margin-top:3px; display:flex; align-items:center; gap:6px; }
   .acct-meta code { font-family:'Consolas',monospace; color:#6b7280; }
   .acct-eye { background:none; border:none; padding:0; cursor:pointer; color:#9ca3af; display:flex; }
@@ -1345,17 +1348,29 @@
     acctRender()
   }
 
+  function acctAgo(iso) {
+    if (!iso) return ''
+    const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000)
+    if (s < 90) return 'just now'
+    const m = Math.round(s / 60); if (m < 60) return m + 'm ago'
+    const h = Math.round(m / 60); if (h < 48) return h + 'h ago'
+    return Math.round(h / 24) + 'd ago'
+  }
+
   function acctRender() {
     if (!acctData) return
     const single = acctData.accounts.length < 2
     document.getElementById('acct-list').innerHTML = acctData.accounts.map(a => {
       const isActive = a.id === acctData.active
-      const failed   = a.status && a.status.state === 'err'
-      const pill = isActive ? '<span class="acct-pill">active</span>'
-                 : failed   ? '<span class="acct-pill err">scan failed</span>' : ''
-      // The active account's name is plain text; others are click-to-switch
-      const name = isActive ? acctEsc(a.label)
-        : `<span class="sw" onclick="acctSwitch('${acctEsc(a.id)}')" title="Switch to this account">${acctEsc(a.label)}</span>`
+      const st = a.status && a.status.state
+      // "active" and the scan state are independent — a scan can fail on the
+      // account you are looking at, and that must still be visible.
+      const pill =
+        (isActive ? '<span class="acct-pill">active</span>' : '') +
+        (st === 'running' ? '<span class="acct-pill run">scanning…</span>'
+         : st === 'err'   ? `<span class="acct-pill err" title="${acctEsc((a.status && a.status.reason) || 'scan failed')}">scan failed</span>`
+         : st === 'ok'    ? `<span class="acct-pill ok">scanned ${acctAgo(a.status.at)}</span>` : '')
+      const name = acctEsc(a.label)
       return `
       <div class="acct-row">
         <div class="acct-main">
@@ -1367,6 +1382,8 @@
                  title="Show password"><span class="icon" id="acct-eye-${acctEsc(a.id)}">visibility</span></button>` : ''}
           </div>
         </div>
+        ${isActive ? '' : `<button class="acct-switch" onclick="acctSwitch('${acctEsc(a.id)}')"
+           title="Make this the active account">Switch</button>`}
         <label class="switch" title="Scan this account on startup and on the interval timer">
           <input type="checkbox" ${a.scan ? 'checked' : ''} onchange="acctSetScan('${acctEsc(a.id)}', this.checked)">
           <span class="slider"></span>
@@ -1472,6 +1489,8 @@
 
   window.api.onScanStatus(s => {
     if (!acctData) return
+    // Status for an account we don't know about yet (just added) — refetch
+    if (Object.keys(s).some(id => !acctData.accounts.some(a => a.id === id))) { acctRefresh(); return }
     acctData.accounts.forEach(a => { a.status = s[a.id] || a.status })
     if (!document.getElementById('acct-form').innerHTML) acctRender()
   })
