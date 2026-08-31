@@ -458,23 +458,32 @@ app.whenReady().then(() => {
   win.setMenuBarVisibility(settings.menuBar)
   win.setAutoHideMenuBar(!settings.menuBar)
   if (settings.headedBrowser) registerF9()
-  win.webContents.once('did-finish-load', () => {
+  // Runs on every load, not just the first: switching account reloads the
+  // window, and the new account's report and diffs have to be restored again.
+  let firstLoad = true
+  win.webContents.on('did-finish-load', () => {
     cachedCreds = loadCredentials()
 
     // Make the resolved account and folder visible every launch, so a wrong
     // path is obvious in the Log card instead of silently producing odd data.
     win.webContents.send('py-out', `Account: ${activeAccount().label} — data: ${dataDir()}`)
-    prunePdfExports()
 
     // restore last known state before new scan starts
     if (fs.existsSync(lastReport())) {
       win.webContents.send('file-ready', lastReport())
     }
+    lastDiffs = []
     if (fs.existsSync(lastDiffsFile())) {
       try {
         lastDiffs = JSON.parse(fs.readFileSync(lastDiffsFile(), 'utf8'))
       } catch { }
     }
+    pushScanStatus()
+
+    if (!firstLoad) return
+    firstLoad = false
+
+    prunePdfExports()
 
     if (cachedCreds) {
       runScanQueue(accountsToScan())
@@ -541,6 +550,132 @@ ipcMain.handle('get-settings', () => settings)
 ipcMain.on('get-data-dir', e => { e.returnValue = dataDir() })
 
 ipcMain.handle('get-scan-status', () => scanStatus)
+
+// ── Account management ────────────────────────────────────────────────────────
+
+function slugify(s) {
+  return String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 24)
+}
+
+// Never includes passwords — those only leave main via reveal-credential, one
+// account at a time, when the user asks for them.
+function publicAccounts() {
+  return {
+    active: activeAccount().id,
+    primary: PRIMARY_ID,
+    accounts: accounts.accounts.map(a => {
+      const c = loadCredentials(a.id)
+      return {
+        id: a.id,
+        label: a.label || a.id,
+        scan: !!a.scan,
+        landingUrl: a.landingUrl || '',
+        folder: dataDir(a),
+        username: c ? c.username : '',
+        hasPassword: !!c,
+        status: scanStatus[a.id] || null
+      }
+    })
+  }
+}
+
+ipcMain.handle('get-accounts', () => publicAccounts())
+
+ipcMain.handle('add-account', (_, { label, username, password, landingUrl }) => {
+  label    = String(label || '').trim()
+  username = String(username || '').trim()
+  if (!label || !username || !password) return { ok: false, error: 'Name, login ID and password are all required' }
+
+  let id = slugify(label) || 'account'
+  if (accounts.accounts.some(a => a.id === id)) {
+    let n = 2
+    while (accounts.accounts.some(a => a.id === `${id}-${n}`)) n++
+    id = `${id}-${n}`
+  }
+  const acct = {
+    id, label, dir: `accounts/${id}`, scan: true,
+    landingUrl: String(landingUrl || '').trim() || DEFAULT_SETTINGS.landingUrl
+  }
+  accounts.accounts.push(acct)
+  saveCredentials(username, password, id)   // also migrates a legacy cred file
+  saveAccounts()
+  initAccount(acct)                          // creates the folder + its tables
+  // Fetch its first report now, so the account is usable without a restart and
+  // any credential mistake surfaces immediately rather than at the next launch.
+  runScanQueue([acct])
+  return { ok: true, id, accounts: publicAccounts() }
+})
+
+ipcMain.handle('update-account', (_, { id, label, username, password, landingUrl, scan }) => {
+  const a = accounts.accounts.find(x => x.id === id)
+  if (!a) return { ok: false, error: 'account not found' }
+
+  if (label !== undefined && String(label).trim()) a.label = String(label).trim()
+  if (landingUrl !== undefined) a.landingUrl = String(landingUrl).trim()
+  if (scan !== undefined) a.scan = !!scan
+  saveAccounts()
+
+  // Credentials are only rewritten when something was actually supplied — a
+  // blank password field means "leave it alone", not "clear it".
+  if ((username !== undefined && String(username).trim()) || password) {
+    const cur = loadCredentials(id) || { username: '', password: '' }
+    const u = (username !== undefined && String(username).trim()) ? String(username).trim() : cur.username
+    const p = password || cur.password
+    if (u && p) saveCredentials(u, p, id)
+  }
+  if (scan !== undefined) setupAutoDownload()
+  return { ok: true, accounts: publicAccounts() }
+})
+
+// Removes the account from the list but deliberately leaves its data folder on
+// disk — it holds picking history, buffer stock and the route plan. Deleting
+// that is a separate, explicit action.
+ipcMain.handle('remove-account', (_, id) => {
+  if (id === PRIMARY_ID) return { ok: false, error: 'The primary account cannot be removed' }
+  const i = accounts.accounts.findIndex(a => a.id === id)
+  if (i < 0) return { ok: false, error: 'account not found' }
+
+  const folder = dataDir(accounts.accounts[i])
+  accounts.accounts.splice(i, 1)
+  if (accounts.active === id) accounts.active = PRIMARY_ID
+  saveAccounts()
+  try {
+    const raw = JSON.parse(fs.readFileSync(CRED_FILE, 'utf8'))
+    if (!(raw.u && raw.p)) { delete raw[id]; fs.writeFileSync(CRED_FILE, JSON.stringify(raw)) }
+  } catch { }
+  return { ok: true, folder, accounts: publicAccounts() }
+})
+
+ipcMain.handle('delete-account-data', async (_, id) => {
+  if (id === PRIMARY_ID) return { ok: false, error: 'Refusing to delete the primary account folder' }
+  if (accounts.accounts.some(a => a.id === id)) {
+    return { ok: false, error: 'Remove the account from the list first' }
+  }
+  const folder = path.join(ROOT, 'db', 'accounts', id)
+  if (!fs.existsSync(folder)) return { ok: false, error: 'No data folder for that account' }
+  try { await shell.trashItem(folder); return { ok: true, folder } }
+  catch (e) { return { ok: false, error: e.message } }
+})
+
+ipcMain.handle('reveal-credential', (_, id) => {
+  const c = loadCredentials(id)
+  return c ? { ok: true, username: c.username, password: c.password } : { ok: false }
+})
+
+ipcMain.handle('set-active-account', (_, id) => {
+  const a = accounts.accounts.find(x => x.id === id)
+  if (!a) return { ok: false, error: 'account not found' }
+  if (accounts.active === id) return { ok: true, unchanged: true }
+  if (isDownloading) return { ok: false, error: 'A scan is running — try again once it finishes' }
+
+  accounts.active = id
+  saveAccounts()
+  initAccount(a)
+  // Reload after replying, so the renderer gets this result before it is torn
+  // down. did-finish-load then restores the new account's report and diffs.
+  setTimeout(() => { if (win && !win.isDestroyed()) win.reload() }, 50)
+  return { ok: true }
+})
 
 ipcMain.on('set-setting', (_, { key, val }) => {
   settings[key] = val

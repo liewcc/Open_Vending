@@ -330,6 +330,31 @@
   .toggle-label { font-size: 13px; font-weight: 500; color: #374151; }
   .toggle-desc  { font-size: 11px; color: #9ca3af; margin-top: 3px; }
 
+  /* ── Accounts card ── */
+  .acct-row { display:flex; align-items:center; gap:10px; padding:14px 0; border-bottom:1px solid #f3f4f6; }
+  .acct-row:last-child { border-bottom:none; }
+  .acct-main { flex:1; min-width:0; }
+  .acct-name { font-size:13px; font-weight:500; color:#374151; display:flex; align-items:center; gap:6px;
+               min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .acct-row .pick-icon-btn, .acct-row .switch { flex-shrink:0; }
+  .acct-pill { flex-shrink:0; }
+  .acct-name .sw { cursor:pointer; }
+  .acct-name .sw:hover { text-decoration:underline; }
+  .acct-pill { font-size:9.5px; font-weight:600; letter-spacing:.4px; text-transform:uppercase;
+               padding:1px 6px; border-radius:10px; background:#dcfce7; color:#166534; }
+  .acct-pill.err { background:#fee2e2; color:#991b1b; }
+  .acct-meta { font-size:11px; color:#9ca3af; margin-top:3px; display:flex; align-items:center; gap:6px; }
+  .acct-meta code { font-family:'Consolas',monospace; color:#6b7280; }
+  .acct-eye { background:none; border:none; padding:0; cursor:pointer; color:#9ca3af; display:flex; }
+  .acct-eye:hover { color:#374151; }
+  .acct-eye .icon { font-size:15px; }
+  .acct-form-row { padding:14px 0; border-bottom:1px solid #f3f4f6; }
+  .acct-form-row label { display:block; font-size:11px; color:#6b7280; margin:8px 0 3px; }
+  .acct-form-row input { width:100%; padding:5px 8px; border:1px solid #d1d5db; border-radius:6px;
+                         font-size:12px; outline:none; color:#374151; }
+  .acct-form-row input:focus { border-color:#e05c5c; }
+  .acct-err { font-size:11px; color:#b91c1c; margin-top:8px; min-height:14px; }
+
   .switch { position: relative; width: 40px; height: 22px; flex-shrink: 0; }
   .switch input { opacity: 0; width: 0; height: 0; position: absolute; }
   .slider {
@@ -867,6 +892,15 @@
       </div>
     </div>
 
+    <h3>Accounts</h3>
+    <div class="config-card">
+      <div id="acct-list"></div>
+      <div id="acct-form" style="display:none"></div>
+      <div class="browser-btn-row">
+        <button id="acct-add-btn" class="browser-btn" onclick="acctShowForm(null)">+ Add Account</button>
+      </div>
+    </div>
+
     <h3>Log</h3>
     <div class="config-card" style="padding: 12px 16px;">
       <div id="log"></div>
@@ -1293,12 +1327,154 @@
   function toggleConfig() {
     const opening = !configVisible
     showPanel(opening ? 'config' : 'main')
-    if (opening) loadSalesDetailMeta()
+    if (opening) { loadSalesDetailMeta(); acctRefresh() }
   }
 
   function applySetting(key, val) {
     window.api.setSetting(key, val)
   }
+
+  // ── Accounts card ───────────────────────────────────────────────────────────
+  let acctData = null
+
+  const acctEsc = s => String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+
+  async function acctRefresh() {
+    acctData = await window.api.getAccounts()
+    acctRender()
+  }
+
+  function acctRender() {
+    if (!acctData) return
+    const single = acctData.accounts.length < 2
+    document.getElementById('acct-list').innerHTML = acctData.accounts.map(a => {
+      const isActive = a.id === acctData.active
+      const failed   = a.status && a.status.state === 'err'
+      const pill = isActive ? '<span class="acct-pill">active</span>'
+                 : failed   ? '<span class="acct-pill err">scan failed</span>' : ''
+      // The active account's name is plain text; others are click-to-switch
+      const name = isActive ? acctEsc(a.label)
+        : `<span class="sw" onclick="acctSwitch('${acctEsc(a.id)}')" title="Switch to this account">${acctEsc(a.label)}</span>`
+      return `
+      <div class="acct-row">
+        <div class="acct-main">
+          <div class="acct-name">${name}${pill}</div>
+          <div class="acct-meta">
+            <code>${acctEsc(a.username) || '(no login ID)'}</code> ·
+            <span id="acct-pw-${acctEsc(a.id)}">${a.hasPassword ? '••••••••' : '(no password)'}</span>
+            ${a.hasPassword ? `<button class="acct-eye" onclick="acctReveal('${acctEsc(a.id)}')"
+                 title="Show password"><span class="icon" id="acct-eye-${acctEsc(a.id)}">visibility</span></button>` : ''}
+          </div>
+        </div>
+        <label class="switch" title="Scan this account on startup and on the interval timer">
+          <input type="checkbox" ${a.scan ? 'checked' : ''} onchange="acctSetScan('${acctEsc(a.id)}', this.checked)">
+          <span class="slider"></span>
+        </label>
+        <button class="pick-icon-btn" onclick="acctShowForm('${acctEsc(a.id)}')" title="Edit"><span class="icon">edit</span></button>
+        <button class="pick-icon-btn" onclick="acctRemove('${acctEsc(a.id)}')" title="${
+          a.id === acctData.primary ? 'The primary account cannot be removed' : 'Remove'}"
+          ${a.id === acctData.primary ? 'disabled' : ''}><span class="icon">delete</span></button>
+      </div>`
+    }).join('')
+    // With one account the checkbox is meaningless — it always scans
+    if (single) document.querySelectorAll('#acct-list .switch input').forEach(i => { i.disabled = true })
+  }
+
+  async function acctReveal(id) {
+    const span = document.getElementById('acct-pw-' + id)
+    const eye  = document.getElementById('acct-eye-' + id)
+    if (!span) return
+    if (span.dataset.shown === '1') {
+      span.textContent = '••••••••'; span.dataset.shown = ''
+      if (eye) eye.textContent = 'visibility'
+      return
+    }
+    const r = await window.api.revealCredential(id)
+    if (!r || !r.ok) return
+    span.textContent = r.password; span.dataset.shown = '1'
+    if (eye) eye.textContent = 'visibility_off'
+  }
+
+  async function acctSetScan(id, checked) {
+    await window.api.updateAccount({ id, scan: checked })
+    await acctRefresh()
+  }
+
+  async function acctSwitch(id) {
+    const a = acctData.accounts.find(x => x.id === id)
+    if (!a) return
+    if (!confirm(`Switch to "${a.label}"?\n\nThe window reloads and everything — picking list, queue, history — moves to that account. Unsaved Route Plan edits will be lost.`)) return
+    const r = await window.api.setActiveAccount(id)
+    if (r && !r.ok) alert(r.error || 'Could not switch account')
+  }
+
+  async function acctRemove(id) {
+    const a = acctData.accounts.find(x => x.id === id)
+    if (!a) return
+    if (!confirm(`Remove "${a.label}" from the account list?\n\nIts data folder is kept on disk, so nothing is lost — re-adding the account picks it up again.`)) return
+    const r = await window.api.removeAccount(id)
+    if (r && !r.ok) { alert(r.error || 'Could not remove account'); return }
+    acctData = r.accounts; acctRender()
+    if (confirm(`"${a.label}" removed.\n\nAlso delete its data folder?\n${r.folder}\n\nThis holds its picking history, buffer stock and route plan. It goes to the Recycle Bin.`)) {
+      const d = await window.api.deleteAccountData(id)
+      alert(d && d.ok ? 'Data folder moved to the Recycle Bin.' : (d && d.error) || 'Could not delete the folder')
+    }
+  }
+
+  function acctShowForm(id) {
+    const a = id ? acctData.accounts.find(x => x.id === id) : null
+    const form = document.getElementById('acct-form')
+    form.style.display = ''
+    document.getElementById('acct-add-btn').style.display = 'none'
+    form.innerHTML = `
+      <div class="acct-form-row">
+        <div class="toggle-label">${a ? 'Edit ' + acctEsc(a.label) : 'New account'}</div>
+        <label>Display name</label>
+        <input id="acct-f-label" type="text" value="${a ? acctEsc(a.label) : ''}" placeholder="e.g. KMS">
+        <label>Login ID</label>
+        <input id="acct-f-user" type="text" value="${a ? acctEsc(a.username) : ''}" placeholder="portal username">
+        <label>Password${a ? ' <span style="color:#9ca3af">(leave blank to keep the current one)</span>' : ''}</label>
+        <input id="acct-f-pass" type="password" value="" placeholder="${a ? '••••••••' : 'portal password'}">
+        <label>Landing page URL</label>
+        <input id="acct-f-url" type="text" value="${a ? acctEsc(a.landingUrl) : ''}" placeholder="https://...">
+        <div class="acct-err" id="acct-f-err"></div>
+      </div>
+      <div class="browser-btn-row">
+        <button class="browser-btn" onclick="acctSave(${a ? `'${acctEsc(a.id)}'` : 'null'})"
+          style="background:#185fa5;color:#fff;border-color:#185fa5">${a ? 'Save' : 'Add account'}</button>
+        <button class="browser-btn" onclick="acctHideForm()">Cancel</button>
+      </div>`
+    if (!a) document.getElementById('acct-f-url').value = acctData.accounts[0] ? acctData.accounts[0].landingUrl : ''
+    document.getElementById('acct-f-label').focus()
+  }
+
+  function acctHideForm() {
+    document.getElementById('acct-form').style.display = 'none'
+    document.getElementById('acct-form').innerHTML = ''
+    document.getElementById('acct-add-btn').style.display = ''
+  }
+
+  async function acctSave(id) {
+    const label = document.getElementById('acct-f-label').value.trim()
+    const username = document.getElementById('acct-f-user').value.trim()
+    const password = document.getElementById('acct-f-pass').value
+    const landingUrl = document.getElementById('acct-f-url').value.trim()
+    const err = document.getElementById('acct-f-err')
+    const r = id
+      ? await window.api.updateAccount({ id, label, username, password, landingUrl })
+      : await window.api.addAccount({ label, username, password, landingUrl })
+    if (!r || !r.ok) { err.textContent = (r && r.error) || 'Could not save the account'; return }
+    acctData = r.accounts
+    acctHideForm()
+    acctRender()
+  }
+
+  window.api.onScanStatus(s => {
+    if (!acctData) return
+    acctData.accounts.forEach(a => { a.status = s[a.id] || a.status })
+    if (!document.getElementById('acct-form').innerHTML) acctRender()
+  })
 
   function applyPdfMargin(key, input) {
     input.value = Math.min(50, Math.max(0, parseInt(input.value, 10) || 0))
