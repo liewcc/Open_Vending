@@ -42,10 +42,25 @@ def ensure_table(conn):
     """)
 
 
+def _optional(conn, sql, default):
+    """Read a table that only exists once history has been imported.
+
+    A newly added account has scanned restock data but no sales snapshot and
+    no machines dimension yet — those tables are created by
+    build_sales_detail.py and migrate_to_vending.py. Absent means empty here,
+    not broken: without them every scanned change is simply attributed as an
+    estimate, which is exactly right for an account with no snapshot.
+    """
+    try:
+        return conn.execute(sql).fetchall()
+    except sqlite3.OperationalError:
+        return default
+
+
 def _txn_boundary(conn):
     """Newest date covered by authoritative snapshot data ('' if none)."""
-    row = conn.execute("SELECT value FROM sales_meta WHERE key='max_date'").fetchone()
-    return (row[0] or '')[:10] if row else ''
+    rows = _optional(conn, "SELECT value FROM sales_meta WHERE key='max_date'", [])
+    return (rows[0][0] or '')[:10] if rows and rows[0][0] else ''
 
 
 def refresh_est(conn):
@@ -55,9 +70,9 @@ def refresh_est(conn):
     conn.execute("DELETE FROM daily_sales WHERE source='est'")
 
     # machine name canonicalization (Excel 31-char sheet truncation)
-    alias = dict(conn.execute(
-        "SELECT sheet_alias, canonical FROM machines WHERE sheet_alias IS NOT NULL"
-    ).fetchall())
+    alias = dict(_optional(
+        conn, "SELECT sheet_alias, canonical FROM machines WHERE sheet_alias IS NOT NULL", []
+    ))
 
     # pid at event time (lane_events), fallback: lane's current product
     event_pid = {}
@@ -119,14 +134,16 @@ def rebuild(conn):
     """Full rebuild: txn rows from `sales`, then est rows for the tail."""
     ensure_table(conn)
     conn.execute("DELETE FROM daily_sales")
-    conn.execute("""
+    # No `sales` table means no CSV has been imported for this account yet —
+    # the rebuild is then just the estimate layer.
+    _optional(conn, """
         INSERT INTO daily_sales (machine, pid, sale_date, qty, source)
         SELECT franchisename, pid, transdate, COUNT(*), 'txn'
         FROM sales
         WHERE franchisename IS NOT NULL AND pid IS NOT NULL
           AND transdate IS NOT NULL AND transdate != ''
         GROUP BY franchisename, pid, transdate
-    """)
+    """, None)
     txn_rows = conn.execute("SELECT COUNT(*) FROM daily_sales WHERE source='txn'").fetchone()[0]
     stats = refresh_est(conn)
     stats['txn_rows'] = txn_rows
