@@ -117,6 +117,24 @@
 
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
 
+  /* ── Account capsules ──
+     Fill carries "which account am I in"; colour carries that account's scan
+     health. Red therefore means the same thing here as it does on the dot
+     immediately to the left — something failed — rather than "not selected". */
+  #acct-caps { display: flex; align-items: center; gap: 6px; }
+  .cap {
+    font-size: 11px; font-weight: 600; letter-spacing: .2px;
+    padding: 3px 10px; border-radius: 20px; white-space: nowrap; cursor: pointer;
+    background: transparent; border: 1px solid #45475a; color: #a6adc8;
+    transition: border-color .15s, color .15s;
+  }
+  .cap:hover { border-color: #6c7086; color: #cdd6f4; }
+  .cap.active   { background: #a6e3a1; border-color: #a6e3a1; color: #1e2030; cursor: default; }
+  .cap.err      { border-color: #f38ba8; color: #f38ba8; }
+  .cap.active.err { background: #f38ba8; border-color: #f38ba8; color: #1e2030; }
+  .cap.scanning { border-color: #f9e2af; color: #f9e2af; animation: pulse 1.2s infinite; }
+  .cap.active.scanning { background: #f9e2af; border-color: #f9e2af; color: #1e2030; }
+
   /* ── Credential Modal ── */
   #cred-overlay {
     display: none;
@@ -660,6 +678,7 @@
   <span style="color:#fff;font-size:13px;font-weight:600;letter-spacing:.3px;-webkit-app-region:no-drag">Open<span style="color:#e05c5c">Vending</span></span>
   <div id="titlebar-status">
     <div id="status-badge" class="running"><div class="dot"></div></div>
+    <div id="acct-caps"></div>
     <span id="timer-badge">—</span>
   </div>
 </div>
@@ -1396,6 +1415,7 @@
     }).join('')
     // With one account the checkbox is meaningless — it always scans
     if (single) document.querySelectorAll('#acct-list .switch input').forEach(i => { i.disabled = true })
+    renderCapsules()
   }
 
   async function acctReveal(id) {
@@ -1418,10 +1438,50 @@
     await acctRefresh()
   }
 
+  // Header capsules. Shown only with more than one account, so a single-account
+  // install keeps exactly the header it had before.
+  function renderCapsules() {
+    const el = document.getElementById('acct-caps')
+    if (!el) return
+    if (!acctData || acctData.accounts.length < 2) { el.innerHTML = ''; return }
+    el.innerHTML = acctData.accounts.map(a => {
+      const isActive = a.id === acctData.active
+      // An unchecked account is hidden unless it is the one you are looking at —
+      // never leave the visible account without a capsule.
+      if (!isActive && !a.scan) return ''
+      const st = a.status && a.status.state
+      const cls = ['cap']
+      if (isActive) cls.push('active')
+      if (st === 'running') cls.push('scanning')
+      else if (st === 'err') cls.push('err')
+      const when = st === 'running' ? 'scanning now'
+                 : st === 'err'     ? 'scan failed: ' + ((a.status && a.status.reason) || 'unknown')
+                 : st === 'ok'      ? 'scanned ' + acctAgo(a.status.at)
+                 : 'not scanned yet'
+      const tip = `${a.label} — ${when}${isActive ? '' : '\nClick to switch to this account'}`
+      return `<button class="${cls.join(' ')}" title="${acctEsc(tip)}"
+        ${isActive ? 'disabled style="cursor:default"' : `onclick="acctSwitch('${acctEsc(a.id)}')"`}
+      >${acctEsc(a.label)}</button>`
+    }).join('')
+  }
+
   async function acctSwitch(id) {
-    const a = acctData.accounts.find(x => x.id === id)
+    const a = acctData && acctData.accounts.find(x => x.id === id)
     if (!a) return
-    if (!confirm(`Switch to "${a.label}"?\n\nThe window reloads and everything — picking list, queue, history — moves to that account. Unsaved Route Plan edits will be lost.`)) return
+
+    // Flush the debounced pick-edit autosave — a reload would drop the last
+    // keystrokes otherwise (it saves 1s after you stop typing).
+    if (isEditMode && editMachine) {
+      clearTimeout(editSaveTimer)
+      const rows = collectEditRows()
+      const d = document.getElementById('pick-date').value.replace(/-/g, '')
+      if (rows) { await window.api.savePickEdit(editMachine, d, rows); await syncQueueWithEdit(editMachine) }
+    }
+
+    let msg = `Switch to "${a.label}"?\n\nThe window reloads and everything — picking list, queue, history — moves to that account.`
+    if (rpDirty) msg += '\n\nWARNING: the Route Plan editor has unsaved changes. They will be lost.'
+    if (!confirm(msg)) return
+
     const r = await window.api.setActiveAccount(id)
     if (r && !r.ok) alert(r.error || 'Could not switch account')
   }
@@ -1492,8 +1552,14 @@
     // Status for an account we don't know about yet (just added) — refetch
     if (Object.keys(s).some(id => !acctData.accounts.some(a => a.id === id))) { acctRefresh(); return }
     acctData.accounts.forEach(a => { a.status = s[a.id] || a.status })
+    // Capsules always refresh; the settings list only when its form is closed,
+    // so a status push cannot wipe out what is being typed.
+    renderCapsules()
     if (!document.getElementById('acct-form').innerHTML) acctRender()
   })
+
+  // Populate the header capsules at startup, not just when Settings is opened.
+  acctRefresh()
 
   function applyPdfMargin(key, input) {
     input.value = Math.min(50, Math.max(0, parseInt(input.value, 10) || 0))
@@ -2682,6 +2748,9 @@
   // ── Route Plan (Q8) ─────────────────────────────────────────────────────────
   const RP_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
   let rpRows = []   // [{origName, name, team, days:[bool x7]}]
+  // Route Plan edits live in memory until Save — the only unsaved state in the
+  // app, so an account switch has to warn about it before reloading.
+  let rpDirty = false
 
   function rpLoad() {
     const plan = window.api.getRoutePlan()
@@ -2691,6 +2760,7 @@
       days: RP_DAYS.map(d => (v.scheduleDays || []).includes(d))
     }))
     rpRows.sort((a, b) => a.name.localeCompare(b.name))
+    rpDirty = false
     document.getElementById('rp-status').textContent = ''
     rpRender()
   }
@@ -2711,14 +2781,17 @@
   function rpEdit(input) {
     const i = Number(input.dataset.i), f = input.dataset.f
     rpRows[i][f] = input.value.trim()
+    rpDirty = true
   }
 
   function rpToggleDay(cb) {
     const i = Number(cb.dataset.i), d = Number(cb.dataset.d)
     rpRows[i].days[d] = cb.checked
+    rpDirty = true
   }
 
   function rpAddMachine() {
+    rpDirty = true
     rpRows.push({ origName: null, name: '', team: '', mode: 'normal', days: RP_DAYS.map(() => false) })
     rpRender()
     const wrap = document.getElementById('rp-wrap')
@@ -2729,6 +2802,7 @@
 
   function rpDeleteRow(i) {
     rpRows.splice(i, 1)
+    rpDirty = true
     rpRender()
   }
 
