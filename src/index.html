@@ -1012,6 +1012,7 @@
         <span id="rp-status" style="font-size:11px;color:#6b7280;"></span>
         <select id="rp-bulk-mode" style="padding:2px 6px;border:1px solid #d1d5db;border-radius:6px;font-size:11px;color:#374151;background:#fff;margin-left:auto;"><option value="normal">+ Normal</option><option value="short">0 Short</option><option value="sembreak">− Sem Break</option></select>
         <button class="pick-icon-btn" onclick="rpApplyModeToVisible()" title="Set mode on all visible (filtered) rows — then press Save"><span class="icon">done_all</span></button>
+        <button id="rp-btn-import" class="pick-icon-btn" onclick="rpImportFromReport()" title="Add every machine in the latest report that is missing from this plan"><span class="icon">playlist_add</span></button>
         <button id="rp-btn-add" class="pick-icon-btn" onclick="rpAddMachine()" title="Add machine"><span class="icon">add</span></button>
         <button id="rp-btn-save" class="pick-icon-btn" onclick="rpSaveAll()" title="Save changes"><span class="icon">save</span></button>
       </div>
@@ -2001,7 +2002,16 @@
         : list
 
       listEl.innerHTML = ''
-      if (!displayList.length) { listEl.innerHTML = '<div class="pick-empty">Nothing to pick for this date.</div>'; pickDetailSet('', ''); return }
+      if (!displayList.length) {
+        // An account with no route plan yet (a newly added one) produces an
+        // empty list for every date — say so, instead of implying today is
+        // simply a quiet day.
+        const noPlan = !Object.keys((window.api.getRoutePlan().machines) || {}).length
+        listEl.innerHTML = noPlan
+          ? '<div class="pick-empty">This account has no route plan yet.<br><br>Open <b>Route Plan</b> and use <b>Add from report</b> to bring in the machines this account scans, then set team and mode and press Save.</div>'
+          : '<div class="pick-empty">Nothing to pick for this date.</div>'
+        pickDetailSet('', ''); return
+      }
       let curTeam = null
       displayList.forEach(m => {
         if (m.team !== curTeam) { curTeam = m.team; const h=document.createElement('div'); h.className='pick-team-hd'; h.textContent='Team '+m.team; listEl.appendChild(h) }
@@ -2810,6 +2820,30 @@
     const i = Number(cb.dataset.i), d = Number(cb.dataset.d)
     rpRows[i].days[d] = cb.checked
     rpDirty = true
+  }
+
+  // A newly added account has a report but no route plan, so the Picking List
+  // — the app's main screen — starts empty with nothing to act on. This seeds
+  // the plan from the machines the account's own report actually contains.
+  // Also useful on an established account when new machines appear.
+  function rpImportFromReport() {
+    if (!lastFilePath) { alert('No report loaded yet — wait for the scan to finish.'); return }
+    const rows = window.api.parseExcel(lastFilePath)
+    const inReport = [...new Set(rows.slice(1).map(r => String(r[0] ?? '')).filter(Boolean))]
+    const known = new Set(rpRows.map(r => r.name.trim()))
+    const missing = inReport.filter(m => !known.has(m)).sort((a, b) => a.localeCompare(b))
+    if (!missing.length) { alert('Every machine in the latest report is already in this route plan.'); return }
+    if (!confirm(`Add ${missing.length} machine${missing.length > 1 ? 's' : ''} from the latest report?\n\n` +
+      missing.slice(0, 12).join('\n') + (missing.length > 12 ? `\n…and ${missing.length - 12} more` : '') +
+      '\n\nThey are added as UNASSIGNED / Normal — set team and mode, then press Save.')) return
+    missing.forEach(name => rpRows.push({
+      origName: null, name, team: '', mode: 'normal', days: RP_DAYS.map(() => false)
+    }))
+    rpDirty = true
+    rpRender()
+    const statusEl = document.getElementById('rp-status')
+    statusEl.textContent = `${missing.length} machine${missing.length > 1 ? 's' : ''} added — press Save to keep them`
+    statusEl.style.color = '#b45309'
   }
 
   function rpAddMachine() {
