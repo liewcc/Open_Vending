@@ -48,6 +48,8 @@ contextBridge.exposeInMainWorld('api', {
   getSettings:        ()           => ipcRenderer.invoke('get-settings'),
   setSetting:         (key, val)   => ipcRenderer.send('set-setting', { key, val }),
   onDownloadStarted:  cb => ipcRenderer.on('download-started',  ()         => cb()),
+  onScanStatus:       cb => ipcRenderer.on('scan-status',       (_, s)     => cb(s)),
+  getScanStatus:      ()                                                   => ipcRenderer.invoke('get-scan-status'),
   launchBrowser:        ()               => ipcRenderer.send('launch-browser'),
   closeBrowser:         ()               => ipcRenderer.send('close-browser'),
   onBrowserState:       cb => ipcRenderer.on('browser-state', (_, state) => cb(state)),

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, safeStorage, Tray, Menu, globalShortcut, Notification, dialog } = require('electron')
+const { app, BrowserWindow, ipcMain, safeStorage, Tray, Menu, globalShortcut, Notification, dialog, shell } = require('electron')
 const { spawn } = require('child_process')
 const path = require('path')
 const fs   = require('fs')
@@ -83,6 +83,14 @@ const vendingDb       = a => path.join(dataDir(a), 'vending.db')
 const dataDb          = vendingDb
 const salesDetailDb   = vendingDb
 const salesForecastDb = vendingDb
+
+// Create the tables an account's DB needs. Runs at startup for the active
+// account, and again whenever the active account changes — a window reload
+// does not re-run app.whenReady().
+function initAccount(acct) {
+  spawnPy([PICKING_HISTORY, 'init'], null, { OV_DATA_DIR: dataDir(acct) })
+  spawnPy([BUFFER_STOCK, 'init', vendingDb(acct)], null, { OV_DATA_DIR: dataDir(acct) })
+}
 
 const LOCAL_VERSION  = require('../package.json').version
 const xlsx = require(path.join(__dirname, '..', 'node_modules', 'xlsx'))
@@ -257,72 +265,130 @@ function setupAutoDownload() {
   if (autoDownloadTimer) { clearInterval(autoDownloadTimer); autoDownloadTimer = null }
   if (!settings.autoDownload || !(settings.autoDownloadInterval > 0)) return
   autoDownloadTimer = setInterval(() => {
-    if (cachedCreds && !isDownloading) runDownload(cachedCreds)
+    if (!isDownloading) runScanQueue(accountsToScan())
   }, settings.autoDownloadInterval * 60 * 1000)
 }
 
 // ── Download ──────────────────────────────────────────────────────────────────
+// One Python process per account, run sequentially. Separate processes mean
+// separate browsers and therefore separate cookie jars, so a live session from
+// the previous account cannot leak into the next one's login. It also binds the
+// output folder to the process at spawn time, so a scan that finishes after the
+// user switches accounts still writes where it started.
 
-function runDownload(creds) {
-  if (isDownloading) return
+// acctId -> { state: 'running' | 'ok' | 'err', at: ISO, reason? }
+let scanStatus = {}
+
+function pushScanStatus() {
+  if (win && !win.isDestroyed()) win.webContents.send('scan-status', scanStatus)
+}
+
+function scanAccount(acct) {
+  return new Promise(resolve => {
+    const creds = loadCredentials(acct.id)
+    if (!creds) {
+      scanStatus[acct.id] = { state: 'err', at: new Date().toISOString(), reason: 'no credentials' }
+      win.webContents.send('py-out', `ERROR: [${acct.label || acct.id}] no credentials saved`)
+      pushScanStatus()
+      return resolve(false)
+    }
+
+    const isActive = acct.id === activeAccount().id
+    const label    = acct.label || acct.id
+    const tag      = isActive ? '' : `[${label}] `
+    const outDir   = dataDir(acct)
+
+    scanStatus[acct.id] = { state: 'running', at: new Date().toISOString() }
+    pushScanStatus()
+
+    const pythonExe = path.join(ROOT, 'python', 'python.exe')
+    const script    = path.join(ROOT, 'open_vending.py')
+    const args = settings.headedBrowser ? [script] : [script, '--headless']
+    const proc = spawn(pythonExe, args, {
+      windowsHide: !settings.showConsole,
+      env: {
+        ...process.env,
+        PLAYWRIGHT_BROWSERS_PATH: path.join(ROOT, 'browsers'),
+        PYTHONNOUSERSITE: '1',
+        PYTHONPATH: '',
+        OV_USERNAME: creds.username,
+        OV_PASSWORD: creds.password,
+        OV_LANDING_URL: acct.landingUrl || settings.landingUrl || '',
+        OV_DATA_DIR: outDir
+      }
+    })
+
+    proc.stdout.on('data', data => {
+      data.toString().trim().split('\n').forEach(line => {
+        line = line.trim()
+        if (!line) return
+        if (line.startsWith('DIFFS: ')) {
+          let diffs = []
+          try { diffs = JSON.parse(line.slice(7)) } catch { diffs = [] }
+          try { fs.writeFileSync(lastDiffsFile(acct), JSON.stringify(diffs)) } catch { }
+          // Only the active account drives the Changing List in the UI
+          if (isActive) lastDiffs = diffs
+          if (settings.notifyChanges && diffs.length > 0) {
+            const notif = new Notification({
+              title: 'Open Vending — Restock Changes',
+              body: `${label}: ${diffs.length} restock change${diffs.length > 1 ? 's' : ''} detected`,
+              icon: ICON_PNG
+            })
+            notif.on('click', () => { win.show(); win.focus() })
+            notif.show()
+          }
+          return
+        }
+        win.webContents.send('py-out', tag + line)
+        // Never swap the visible report to a background account's file
+        const m = line.match(/^FILE: (.+)$/)
+        if (m && isActive) win.webContents.send('file-ready', m[1].trim())
+      })
+    })
+
+    proc.stderr.on('data', data => {
+      win.webContents.send('py-out', `ERROR: ${tag}` + data.toString().trim())
+    })
+
+    // 'error' and 'close' can both fire for one process — settle only once, or
+    // a spawn failure would be overwritten by the close status.
+    let settled = false
+    const finish = (ok, reason) => {
+      if (settled) return
+      settled = true
+      scanStatus[acct.id] = { state: ok ? 'ok' : 'err', at: new Date().toISOString(), ...(reason ? { reason } : {}) }
+      pushScanStatus()
+      resolve(ok)
+    }
+
+    proc.on('error', err => {
+      win.webContents.send('py-out', `ERROR: ${tag}` + err.message)
+      finish(false, err.message)
+    })
+    proc.on('close', code => finish(code === 0))
+  })
+}
+
+// Accounts kept fresh on startup and on the interval timer, active one first so
+// the visible account is usable soonest. An unchecked account is not scanned —
+// it keeps its last-scanned data until you switch to it or re-download.
+function accountsToScan() {
+  const act = activeAccount()
+  const due = accounts.accounts.filter(a => a.scan)
+  return due.some(a => a.id === act.id) ? [act, ...due.filter(a => a.id !== act.id)] : due
+}
+
+async function runScanQueue(accts) {
+  if (isDownloading || !accts.length) return
   isDownloading = true
   win.webContents.send('download-started')
-  const pythonExe = path.join(ROOT, 'python', 'python.exe')
-  const script    = path.join(ROOT, 'open_vending.py')
-
-  const args = settings.headedBrowser ? [script] : [script, '--headless']
-  const proc = spawn(pythonExe, args, {
-    windowsHide: !settings.showConsole,
-    env: {
-      ...process.env,
-      PLAYWRIGHT_BROWSERS_PATH: path.join(ROOT, 'browsers'),
-      PYTHONNOUSERSITE: '1',
-      PYTHONPATH: '',
-      OV_USERNAME: creds.username,
-      OV_PASSWORD: creds.password,
-      OV_LANDING_URL: settings.landingUrl || '',
-      OV_DATA_DIR: dataDir()
-    }
-  })
-
-  proc.stdout.on('data', data => {
-    data.toString().trim().split('\n').forEach(line => {
-      line = line.trim()
-      if (!line) return
-      if (line.startsWith('DIFFS: ')) {
-        try { lastDiffs = JSON.parse(line.slice(7)) } catch { lastDiffs = [] }
-        try { fs.writeFileSync(lastDiffsFile(), JSON.stringify(lastDiffs)) } catch { }
-        if (settings.notifyChanges && lastDiffs.length > 0) {
-          const notif = new Notification({
-            title: 'Open Vending — Restock Changes',
-            body: `${lastDiffs.length} restock change${lastDiffs.length > 1 ? 's' : ''} detected`,
-            icon: ICON_PNG
-          })
-          notif.on('click', () => { win.show(); win.focus() })
-          notif.show()
-        }
-        return
-      }
-      win.webContents.send('py-out', line)
-      const m = line.match(/^FILE: (.+)$/)
-      if (m) win.webContents.send('file-ready', m[1].trim())
-    })
-  })
-
-  proc.stderr.on('data', data => {
-    win.webContents.send('py-out', 'ERROR: ' + data.toString().trim())
-  })
-
-  proc.on('error', err => {
-    isDownloading = false
-    win.webContents.send('py-out', 'ERROR: ' + err.message)
-    win.webContents.send('py-done', false)
-  })
-
-  proc.on('close', code => {
-    isDownloading = false
-    win.webContents.send('py-done', code === 0)
-  })
+  let allOk = true
+  for (const acct of accts) {
+    const ok = await scanAccount(acct)
+    if (!ok) allOk = false
+  }
+  isDownloading = false
+  win.webContents.send('py-done', allOk)
 }
 
 // ── Login-only browser ────────────────────────────────────────────────────────
@@ -340,7 +406,7 @@ function launchBrowser(creds) {
       PYTHONPATH: '',
       OV_USERNAME: creds.username,
       OV_PASSWORD: creds.password,
-      OV_LANDING_URL: settings.landingUrl || '',
+      OV_LANDING_URL: activeAccount().landingUrl || settings.landingUrl || '',
       OV_DATA_DIR: dataDir()
     }
   })
@@ -376,9 +442,9 @@ app.whenReady().then(() => {
   settings = loadSettings()
   accounts = loadAccounts()
   createWindow()
-  spawnPy([PICKING_HISTORY, 'init'], null)
-  spawnPy([BUFFER_STOCK, 'init', dataDb()], null)
-  spawnPy([DB_BACKUP], null)  // daily rotating backup (skips if done today)
+  initAccount(activeAccount())
+  // Daily rotating backup per account (each skips if already done today)
+  for (const a of accounts.accounts) spawnPy([DB_BACKUP], null, { OV_DATA_DIR: dataDir(a) })
 
   tray = new Tray(ICON_PNG)
   tray.setToolTip(`Open Vending v${LOCAL_VERSION}`)
@@ -395,6 +461,11 @@ app.whenReady().then(() => {
   win.webContents.once('did-finish-load', () => {
     cachedCreds = loadCredentials()
 
+    // Make the resolved account and folder visible every launch, so a wrong
+    // path is obvious in the Log card instead of silently producing odd data.
+    win.webContents.send('py-out', `Account: ${activeAccount().label} — data: ${dataDir()}`)
+    prunePdfExports()
+
     // restore last known state before new scan starts
     if (fs.existsSync(lastReport())) {
       win.webContents.send('file-ready', lastReport())
@@ -406,7 +477,7 @@ app.whenReady().then(() => {
     }
 
     if (cachedCreds) {
-      runDownload(cachedCreds)
+      runScanQueue(accountsToScan())
     } else {
       win.webContents.send('needs-credentials')
     }
@@ -423,7 +494,9 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })
 
-function spawnPy(args, stdinData) {
+// extraEnv targets a specific account (see initAccount / the backup loop);
+// without it the call runs against the active account.
+function spawnPy(args, stdinData, extraEnv) {
   return new Promise(resolve => {
     const pythonExe = path.join(ROOT, 'python', 'python.exe')
     const proc = spawn(pythonExe, args, {
@@ -431,7 +504,7 @@ function spawnPy(args, stdinData) {
       // UTF-8 stdio: Node writes UTF-8, but Python on Windows defaults to
       // the locale codepage (cp1252) and mangles non-ASCII (e.g. the "→"
       // in replacement product names) on the way into the DB
-      env: { ...process.env, PYTHONNOUSERSITE: '1', PYTHONPATH: '', PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8', OV_DATA_DIR: dataDir() }
+      env: { ...process.env, PYTHONNOUSERSITE: '1', PYTHONPATH: '', PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8', OV_DATA_DIR: dataDir(), ...extraEnv }
     })
     let out = ''
     if (stdinData !== null && stdinData !== undefined) {
@@ -449,11 +522,13 @@ function spawnPy(args, stdinData) {
 ipcMain.on('save-credentials', (_, { username, password }) => {
   saveCredentials(username, password)
   cachedCreds = { username, password }
-  runDownload(cachedCreds)
+  runScanQueue([activeAccount()])
 })
 
+// Manual re-download always refreshes the account you are looking at, whether
+// or not it is checked for periodic scanning.
 ipcMain.on('start-download', () => {
-  if (cachedCreds) runDownload(cachedCreds)
+  runScanQueue([activeAccount()])
 })
 
 ipcMain.on('do-update', () => doUpdate())
@@ -464,6 +539,8 @@ ipcMain.handle('get-settings', () => settings)
 // Synchronous: preload needs the active account's folder at load time, before
 // it reads route_plan.json (see src/preload.js).
 ipcMain.on('get-data-dir', e => { e.returnValue = dataDir() })
+
+ipcMain.handle('get-scan-status', () => scanStatus)
 
 ipcMain.on('set-setting', (_, { key, val }) => {
   settings[key] = val
@@ -529,6 +606,57 @@ ipcMain.handle('mark-done',              (_, machines) => spawnPy([PICKING_HISTO
 ipcMain.handle('get-history-dates',      ()         => spawnPy([PICKING_HISTORY, 'get-history-dates'], null))
 ipcMain.handle('get-history-by-date',    (_, date)  => spawnPy([PICKING_HISTORY, 'get-history-by-date', date], null))
 ipcMain.handle('get-week-summary',       (_, r)    => spawnPy([PICKING_HISTORY, 'get-week-summary', r.from, r.to], null))
+
+// ── Exported PDF cleanup ──────────────────────────────────────────────────────
+// Exports go wherever the save dialog is pointed (usually the Desktop), so the
+// app cannot safely scan a folder for old PDFs — it would find the user's own
+// files. Instead every export this app writes is recorded here, and cleanup only
+// ever considers those exact paths. Removal goes to the Recycle Bin, so even a
+// wrong call is recoverable. The ledger is shared across accounts, so a PDF
+// exported under one account is still pruned while another is active.
+
+const PDF_LEDGER  = path.join(ROOT, 'db', 'pdf_exports.json')
+const PDF_KEEP_MS = 7 * 24 * 60 * 60 * 1000
+
+function readPdfLedger() {
+  try {
+    const l = JSON.parse(fs.readFileSync(PDF_LEDGER, 'utf8'))
+    return Array.isArray(l) ? l : []
+  } catch { return [] }
+}
+
+function recordPdfExport(filePath) {
+  try {
+    const led = readPdfLedger().filter(e => e && e.path !== filePath)
+    led.push({ path: filePath, at: Date.now() })
+    fs.writeFileSync(PDF_LEDGER, JSON.stringify(led))
+  } catch { /* the ledger is a convenience — never fail an export over it */ }
+}
+
+async function prunePdfExports() {
+  const led = readPdfLedger()
+  if (!led.length) return
+  const cutoff = Date.now() - PDF_KEEP_MS
+  const keep = []
+  let trashed = 0
+  for (const e of led) {
+    if (!e || !e.path) continue
+    if (!(e.at > 0) || e.at > cutoff) { keep.push(e); continue }
+    try {
+      // Already gone (moved or deleted by hand) — just drop the entry
+      if (!fs.existsSync(e.path)) continue
+      // Something newer now sits at that path — not the file we exported
+      if (fs.statSync(e.path).mtimeMs > e.at + 60000) { keep.push(e); continue }
+      await shell.trashItem(e.path)
+      trashed++
+    } catch { keep.push(e) }   // locked, permission denied, etc — try again later
+  }
+  try { fs.writeFileSync(PDF_LEDGER, JSON.stringify(keep)) } catch { }
+  if (trashed && win && !win.isDestroyed()) {
+    win.webContents.send('py-out',
+      `Cleaned up ${trashed} exported PDF${trashed > 1 ? 's' : ''} older than 7 days (moved to Recycle Bin)`)
+  }
+}
 
 // Layout derived from the PDF Export settings — shared by every printToPDF export.
 const PAPER_MM = { A4: [210, 297], A5: [148, 210], Letter: [215.9, 279.4], Legal: [215.9, 355.6] }
@@ -652,6 +780,7 @@ ipcMain.handle('print-all-picking-lists', async (_, { data, pages }) => {
   printWin.destroy()
 
   fs.writeFileSync(filePath, pdfBuffer)
+  recordPdfExport(filePath)
   settings.lastPdfPath = filePath
   saveSettings()
   return { ok: true, filePath }
@@ -737,6 +866,7 @@ ipcMain.handle('print-slow-movers', async (_, { rows, dateRange }) => {
   const pdfBuffer = await printWin.webContents.printToPDF(L.printOpts)
   printWin.destroy()
   fs.writeFileSync(filePath, pdfBuffer)
+  recordPdfExport(filePath)
   return { ok: true, filePath }
 })
 
@@ -906,6 +1036,7 @@ ipcMain.handle('export-queue-pdf', async (_, { rows, pages, date }) => {
   const pdfBuffer = await printWin.webContents.printToPDF(L.printOpts)
   printWin.destroy()
   fs.writeFileSync(filePath, pdfBuffer)
+  recordPdfExport(filePath)
   return { ok: true, filePath }
 })
 

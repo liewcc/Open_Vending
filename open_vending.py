@@ -244,10 +244,12 @@ async def login(page):
     await page.goto(LOGIN_URL)
     await page.wait_for_load_state("domcontentloaded")
 
+    filled_user = False
     for sel in ["#txtUsername", "input[name='txtUsername']", "input[type='text']"]:
         loc = page.locator(sel).first
         if await loc.count() > 0:
             await loc.fill(USERNAME)
+            filled_user = True
             break
 
     for sel in ["#txtPassword", "input[name='txtPassword']", "input[type='password']"]:
@@ -256,14 +258,29 @@ async def login(page):
             await loc.fill(PASSWORD)
             break
 
+    clicked = False
     for sel in ["#btnLogin", "input[value='Login']", "input[type='submit']", "button[type='submit']"]:
         loc = page.locator(sel).first
         if await loc.count() > 0:
             await loc.click()
+            clicked = True
             break
 
+    # If the login form was absent, the portal redirected us to the dashboard
+    # because a previous account's session cookie was still live. Continuing
+    # would export THAT account's report under this account's name — silently.
+    # Each account is scanned in its own process (so its own cookie jar), so
+    # this should be unreachable; fail loudly rather than write wrong data.
+    if not filled_user or not clicked:
+        (LOG_DIR / "login_fail.html").write_text(await page.content(), encoding="utf-8")
+        raise RuntimeError(
+            "login form not found — an existing session was already authenticated. "
+            "Refusing to export: the report would belong to the previous account. "
+            "Page saved to log/login_fail.html"
+        )
+
     await page.wait_for_url("**/SPDashboard.aspx", timeout=15000)
-    status("Login successful")
+    status(f"Login successful ({USERNAME})")
 
 
 async def export_excel(page):
@@ -342,7 +359,10 @@ async def main():
 
         await browser.close()
 
-        if not HEADLESS and not LOGIN_ONLY:
+        # Only prompt on a real terminal. Spawned from the app with the console
+        # hidden there is nobody to press Enter, and the wait would stall every
+        # remaining account in the scan queue behind this one.
+        if not HEADLESS and not LOGIN_ONLY and sys.stdin and sys.stdin.isatty():
             input("\nPress Enter to exit...")
 
     if xlsx_path:
