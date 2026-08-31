@@ -1465,6 +1465,15 @@
     }).join('')
   }
 
+  // Screens whose edits live in memory until an explicit Save. Pick-edit rows
+  // are not here: they autosave, and acctSwitch flushes the pending timer.
+  function acctUnsaved() {
+    const out = []
+    if (rpDirty) out.push('Route Plan')
+    if (Object.values(bufEdits || {}).some(m => m && Object.keys(m).length)) out.push('Buffer Stock')
+    return out
+  }
+
   async function acctSwitch(id) {
     const a = acctData && acctData.accounts.find(x => x.id === id)
     if (!a) return
@@ -1478,9 +1487,13 @@
       if (rows) { await window.api.savePickEdit(editMachine, d, rows); await syncQueueWithEdit(editMachine) }
     }
 
-    let msg = `Switch to "${a.label}"?\n\nThe window reloads and everything — picking list, queue, history — moves to that account.`
-    if (rpDirty) msg += '\n\nWARNING: the Route Plan editor has unsaved changes. They will be lost.'
-    if (!confirm(msg)) return
+    // Switching is not destructive in itself, so it happens without asking.
+    // Interrupt only when something would genuinely be lost.
+    const unsaved = acctUnsaved()
+    if (unsaved.length && !confirm(
+      `Unsaved changes in ${unsaved.join(' and ')}.\n\n` +
+      `Switching to "${a.label}" reloads the window and those changes will be lost.\n\nSwitch anyway?`
+    )) return
 
     const r = await window.api.setActiveAccount(id)
     if (r && !r.ok) alert(r.error || 'Could not switch account')
