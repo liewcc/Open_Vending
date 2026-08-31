@@ -551,6 +551,15 @@ ipcMain.on('get-data-dir', e => { e.returnValue = dataDir() })
 
 ipcMain.handle('get-scan-status', () => scanStatus)
 
+// The renderer pulls its report once it is ready, rather than relying only on
+// the push at did-finish-load. On first launch a missed push is masked by the
+// scan re-sending file-ready moments later; after an account switch no scan
+// runs, so that single push was the only chance the table had to populate.
+ipcMain.handle('get-current-report', () => {
+  const p = lastReport()
+  return fs.existsSync(p) ? p : null
+})
+
 // ── Account management ────────────────────────────────────────────────────────
 
 function slugify(s) {

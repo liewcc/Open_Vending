@@ -50,6 +50,7 @@ contextBridge.exposeInMainWorld('api', {
   onDownloadStarted:  cb => ipcRenderer.on('download-started',  ()         => cb()),
   onScanStatus:       cb => ipcRenderer.on('scan-status',       (_, s)     => cb(s)),
   getScanStatus:      ()                                                   => ipcRenderer.invoke('get-scan-status'),
+  getCurrentReport:   ()                                                   => ipcRenderer.invoke('get-current-report'),
   getAccounts:        ()      => ipcRenderer.invoke('get-accounts'),
   addAccount:         (a)     => ipcRenderer.invoke('add-account', a),
   updateAccount:      (a)     => ipcRenderer.invoke('update-account', a),

@@ -1235,7 +1235,8 @@
     startScanTimer()
   })
 
-  window.api.onFileReady(filePath => {
+  function loadReport(filePath) {
+    if (!filePath) return
     lastFilePath = filePath
     const rows = window.api.parseExcel(filePath)
     renderTable(rows)
@@ -1245,7 +1246,15 @@
       if (isEditMode && editMachine) updateReportMtime()
       else renderPicks()
     }
-  })
+  }
+
+  window.api.onFileReady(loadReport)
+
+  // Pull the active account's report as soon as the renderer is up. The push at
+  // did-finish-load can land before these listeners exist; after an account
+  // switch nothing re-sends it, which left the table blank until you switched
+  // again. Pulling is idempotent, so both paths can safely fire.
+  window.api.getCurrentReport().then(loadReport)
 
   // ── Config ──────────────────────────────────────────────────────────────────
   const configPanel = document.getElementById('config-panel')
