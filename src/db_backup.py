@@ -11,12 +11,15 @@ Run at app startup (fire-and-forget). Behavior:
 Usage: python db_backup.py [--force]
 """
 import json
+import os
 import sqlite3
 import sys
 from datetime import datetime
 from pathlib import Path
 
-DB_DIR     = Path(__file__).parent.parent / "db"
+# Active account's folder, supplied by main.js; falls back to the legacy db/.
+# Each account keeps its own backup/ rotation.
+DB_DIR     = Path(os.environ.get("OV_DATA_DIR") or (Path(__file__).parent.parent / "db"))
 VENDING_DB = DB_DIR / "vending.db"
 BACKUP_DIR = DB_DIR / "backup"
 KEEP = 14

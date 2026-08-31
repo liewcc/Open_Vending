@@ -1,8 +1,22 @@
 const { contextBridge, ipcRenderer, shell } = require('electron')
 const path = require('path')
+const fs   = require('fs')
 const xlsx = require(path.join(__dirname, '..', 'node_modules', 'xlsx'))
 const picking = require(path.join(__dirname, 'picking.js'))
-const routePlan = require(path.join(__dirname, '..', 'db', 'route_plan.json'))
+
+// Read (not require) the active account's route plan: require() caches JSON, so
+// after an account switch reloads the window a cached require would hand back
+// the previous account's plan. Reading keeps every exposed API synchronous.
+const DATA_DIR = ipcRenderer.sendSync('get-data-dir')
+// A missing handler is a bug, not a data condition — fail loudly rather than
+// silently degrade to an empty plan (which just looks like "no machines today").
+if (!DATA_DIR) throw new Error('get-data-dir returned nothing — main process handler missing')
+let routePlan
+try {
+  routePlan = JSON.parse(fs.readFileSync(path.join(DATA_DIR, 'route_plan.json'), 'utf8'))
+} catch {
+  routePlan = { machines: {} }   // new account — no plan yet
+}
 
 function parseRows(filePath) {
   const wb = xlsx.readFile(filePath)

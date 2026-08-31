@@ -7,8 +7,7 @@ const os   = require('os')
 const ROOT          = path.join(__dirname, '..')
 const CRED_FILE     = path.join(app.getPath('userData'), 'credentials.enc')
 const SETTINGS_FILE = path.join(app.getPath('userData'), 'settings.json')
-const LAST_REPORT   = path.join(ROOT, 'db', 'last_report.xlsx')
-const LAST_DIFFS    = path.join(ROOT, 'db', 'last_diffs.json')
+const ACCOUNTS_FILE = path.join(app.getPath('userData'), 'accounts.json')
 const DEFAULT_SETTINGS = { menuBar: false, showConsole: false, closeTray: false, notifyChanges: false, autoDownload: false, autoDownloadInterval: 30, headedBrowser: false, landingUrl: 'https://vendingportal.azurewebsites.net/SuperAdmin/SPLogin.aspx', restockMode: 'normal', q3ThresholdPct: 50, uiZoom: 100, pdfPaperSize: 'A4', pdfFontPct: 100, pdfMarginTop: 12, pdfMarginBottom: 12, pdfMarginLeft: 12, pdfMarginRight: 12, pdfPages: 1, showWeekBadges: true, pdfDuplex: true }
 const F9_TRIGGER    = path.join(ROOT, 'db', '.f9_trigger')
 const BROWSER_STOP  = path.join(ROOT, 'db', '.browser_stop')
@@ -31,6 +30,59 @@ function loadSettings() {
 function saveSettings() {
   fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings))
 }
+
+// ── Accounts ──────────────────────────────────────────────────────────────────
+// One account is active at a time; every data path resolves through dataDir().
+// The primary account keeps the original db/ folder (dir: null) so existing
+// installs are untouched — added accounts get db/accounts/<id>/.
+
+const PRIMARY_ID = 'dvends'
+let accounts = null
+
+function defaultAccounts() {
+  return {
+    active: PRIMARY_ID,
+    accounts: [{
+      id: PRIMARY_ID, label: 'Dvends', dir: null, scan: true,
+      landingUrl: DEFAULT_SETTINGS.landingUrl
+    }]
+  }
+}
+
+function loadAccounts() {
+  try {
+    const a = JSON.parse(fs.readFileSync(ACCOUNTS_FILE, 'utf8'))
+    if (a && Array.isArray(a.accounts) && a.accounts.length) return a
+  } catch { /* missing or corrupt — fall back to the primary-only default */ }
+  return defaultAccounts()
+}
+
+function saveAccounts() {
+  fs.writeFileSync(ACCOUNTS_FILE, JSON.stringify(accounts, null, 2))
+}
+
+// Lazy so it is safe to call before app.whenReady()
+function activeAccount() {
+  if (!accounts) accounts = loadAccounts()
+  return accounts.accounts.find(a => a.id === accounts.active) || accounts.accounts[0]
+}
+
+function dataDir(acct) {
+  const a = acct || activeAccount()
+  if (!a.dir) return path.join(ROOT, 'db')
+  const d = path.join(ROOT, 'db', a.dir)
+  fs.mkdirSync(d, { recursive: true })
+  return d
+}
+
+const lastReport      = a => path.join(dataDir(a), 'last_report.xlsx')
+const lastDiffsFile   = a => path.join(dataDir(a), 'last_diffs.json')
+const routePlanPath   = a => path.join(dataDir(a), 'route_plan.json')
+// One physical file; the three aliases keep each handler saying which layer it uses.
+const vendingDb       = a => path.join(dataDir(a), 'vending.db')
+const dataDb          = vendingDb
+const salesDetailDb   = vendingDb
+const salesForecastDb = vendingDb
 
 const LOCAL_VERSION  = require('../package.json').version
 const xlsx = require(path.join(__dirname, '..', 'node_modules', 'xlsx'))
@@ -119,23 +171,35 @@ Start-Process 'wscript.exe' -ArgumentList ('"{0}"' -f $vbs)
 
 // ── Credential helpers ────────────────────────────────────────────────────────
 
-function loadCredentials() {
+// credentials.enc holds one record per account id. A pre-multi-account file is a
+// bare { u, p } and belongs to the primary — it is read in place and only
+// rewritten in the keyed shape when a credential is actually saved.
+function loadCredentials(id) {
   if (!fs.existsSync(CRED_FILE)) return null
+  const acctId = id || activeAccount().id
   try {
-    const { u, p } = JSON.parse(fs.readFileSync(CRED_FILE, 'utf8'))
+    const raw = JSON.parse(fs.readFileSync(CRED_FILE, 'utf8'))
+    const rec = (raw.u && raw.p) ? (acctId === PRIMARY_ID ? raw : null) : raw[acctId]
+    if (!rec) return null
     return {
-      username: safeStorage.decryptString(Buffer.from(u, 'base64')),
-      password: safeStorage.decryptString(Buffer.from(p, 'base64'))
+      username: safeStorage.decryptString(Buffer.from(rec.u, 'base64')),
+      password: safeStorage.decryptString(Buffer.from(rec.p, 'base64'))
     }
   } catch { return null }
 }
 
-function saveCredentials(username, password) {
-  const data = {
+function saveCredentials(username, password, id) {
+  const acctId = id || activeAccount().id
+  let raw = {}
+  try {
+    const cur = JSON.parse(fs.readFileSync(CRED_FILE, 'utf8'))
+    raw = (cur.u && cur.p) ? { [PRIMARY_ID]: cur } : cur
+  } catch { /* first save — start empty */ }
+  raw[acctId] = {
     u: safeStorage.encryptString(username).toString('base64'),
     p: safeStorage.encryptString(password).toString('base64')
   }
-  fs.writeFileSync(CRED_FILE, JSON.stringify(data))
+  fs.writeFileSync(CRED_FILE, JSON.stringify(raw))
 }
 
 // ── Window ────────────────────────────────────────────────────────────────────
@@ -216,7 +280,8 @@ function runDownload(creds) {
       PYTHONPATH: '',
       OV_USERNAME: creds.username,
       OV_PASSWORD: creds.password,
-      OV_LANDING_URL: settings.landingUrl || ''
+      OV_LANDING_URL: settings.landingUrl || '',
+      OV_DATA_DIR: dataDir()
     }
   })
 
@@ -226,7 +291,7 @@ function runDownload(creds) {
       if (!line) return
       if (line.startsWith('DIFFS: ')) {
         try { lastDiffs = JSON.parse(line.slice(7)) } catch { lastDiffs = [] }
-        try { fs.writeFileSync(LAST_DIFFS, JSON.stringify(lastDiffs)) } catch { }
+        try { fs.writeFileSync(lastDiffsFile(), JSON.stringify(lastDiffs)) } catch { }
         if (settings.notifyChanges && lastDiffs.length > 0) {
           const notif = new Notification({
             title: 'Open Vending — Restock Changes',
@@ -275,7 +340,8 @@ function launchBrowser(creds) {
       PYTHONPATH: '',
       OV_USERNAME: creds.username,
       OV_PASSWORD: creds.password,
-      OV_LANDING_URL: settings.landingUrl || ''
+      OV_LANDING_URL: settings.landingUrl || '',
+      OV_DATA_DIR: dataDir()
     }
   })
   win.webContents.send('browser-state', 'running')
@@ -308,9 +374,10 @@ app.on('second-instance', () => {
 
 app.whenReady().then(() => {
   settings = loadSettings()
+  accounts = loadAccounts()
   createWindow()
   spawnPy([PICKING_HISTORY, 'init'], null)
-  spawnPy([BUFFER_STOCK, 'init', DATA_DB], null)
+  spawnPy([BUFFER_STOCK, 'init', dataDb()], null)
   spawnPy([DB_BACKUP], null)  // daily rotating backup (skips if done today)
 
   tray = new Tray(ICON_PNG)
@@ -329,12 +396,12 @@ app.whenReady().then(() => {
     cachedCreds = loadCredentials()
 
     // restore last known state before new scan starts
-    if (fs.existsSync(LAST_REPORT)) {
-      win.webContents.send('file-ready', LAST_REPORT)
+    if (fs.existsSync(lastReport())) {
+      win.webContents.send('file-ready', lastReport())
     }
-    if (fs.existsSync(LAST_DIFFS)) {
+    if (fs.existsSync(lastDiffsFile())) {
       try {
-        lastDiffs = JSON.parse(fs.readFileSync(LAST_DIFFS, 'utf8'))
+        lastDiffs = JSON.parse(fs.readFileSync(lastDiffsFile(), 'utf8'))
       } catch { }
     }
 
@@ -364,7 +431,7 @@ function spawnPy(args, stdinData) {
       // UTF-8 stdio: Node writes UTF-8, but Python on Windows defaults to
       // the locale codepage (cp1252) and mangles non-ASCII (e.g. the "→"
       // in replacement product names) on the way into the DB
-      env: { ...process.env, PYTHONNOUSERSITE: '1', PYTHONPATH: '', PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8' }
+      env: { ...process.env, PYTHONNOUSERSITE: '1', PYTHONPATH: '', PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8', OV_DATA_DIR: dataDir() }
     })
     let out = ''
     if (stdinData !== null && stdinData !== undefined) {
@@ -394,6 +461,10 @@ ipcMain.on('quit-app',  () => app.quit())
 
 ipcMain.handle('get-settings', () => settings)
 
+// Synchronous: preload needs the active account's folder at load time, before
+// it reads route_plan.json (see src/preload.js).
+ipcMain.on('get-data-dir', e => { e.returnValue = dataDir() })
+
 ipcMain.on('set-setting', (_, { key, val }) => {
   settings[key] = val
   saveSettings()
@@ -420,17 +491,12 @@ const BUILD_SALES_FORECAST = path.join(__dirname, 'build_sales_forecast.py')
 const BUFFER_STOCK         = path.join(__dirname, 'buffer_stock.py')
 const REPL_SUGGEST         = path.join(__dirname, 'replacement_suggest.py')
 const MACHINE_SALES        = path.join(__dirname, 'machine_sales.py')
-// All data lives in the unified vending.db (see src/migrate_to_vending.py);
-// the three constants are kept so each handler still says which layer it uses.
-const VENDING_DB           = path.join(ROOT, 'db', 'vending.db')
-const SALES_DETAIL_DB      = VENDING_DB
-const SALES_FORECAST_DB    = VENDING_DB
-const DATA_DB              = VENDING_DB
+// All data lives in the unified vending.db (see src/migrate_to_vending.py),
+// now resolved per active account — see dataDb() / salesDetailDb() above.
 const DB_BACKUP            = path.join(__dirname, 'db_backup.py')
-const ROUTE_PLAN_PATH      = path.join(ROOT, 'db', 'route_plan.json')
 ipcMain.handle('save-route-plan', (_, data) => {
   try {
-    fs.writeFileSync(ROUTE_PLAN_PATH, JSON.stringify(data, null, 2))
+    fs.writeFileSync(routePlanPath(), JSON.stringify(data, null, 2))
     return { ok: true }
   } catch (e) {
     return { ok: false, error: e.message }
@@ -444,7 +510,7 @@ ipcMain.handle('get-restock-history', (_, { machine, lane }) =>
       // UTF-8 stdio: Node writes UTF-8, but Python on Windows defaults to
       // the locale codepage (cp1252) and mangles non-ASCII (e.g. the "→"
       // in replacement product names) on the way into the DB
-      env: { ...process.env, PYTHONNOUSERSITE: '1', PYTHONPATH: '', PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8' }
+      env: { ...process.env, PYTHONNOUSERSITE: '1', PYTHONPATH: '', PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8', OV_DATA_DIR: dataDir() }
     })
     let out = ''
     proc.stdout.on('data', d => out += d)
@@ -628,7 +694,7 @@ ipcMain.handle('analyze-slow-movers', (_, { productCsv, salesCsv, topN }) =>
 )
 
 ipcMain.handle('analyze-slow-machine', (_, machine) =>
-  spawnPy([SLOW_MOVERS, 'machine', SALES_DETAIL_DB, machine], null)
+  spawnPy([SLOW_MOVERS, 'machine', salesDetailDb(), machine], null)
 )
 
 ipcMain.handle('print-slow-movers', async (_, { rows, dateRange }) => {
@@ -852,47 +918,47 @@ ipcMain.handle('open-sales-csv-dialog', async () => {
 })
 
 ipcMain.handle('build-sales-detail-db', (_, { csvPath }) =>
-  spawnPy([BUILD_SALES_DETAIL, csvPath, SALES_DETAIL_DB], null)
+  spawnPy([BUILD_SALES_DETAIL, csvPath, salesDetailDb()], null)
 )
 
 ipcMain.handle('get-sales-detail-meta', () =>
-  spawnPy([BUILD_SALES_DETAIL, 'meta', SALES_DETAIL_DB], null)
+  spawnPy([BUILD_SALES_DETAIL, 'meta', salesDetailDb()], null)
 )
 
 ipcMain.handle('build-sales-forecast-db', () =>
-  spawnPy([BUILD_SALES_FORECAST, SALES_DETAIL_DB, SALES_FORECAST_DB], null)
+  spawnPy([BUILD_SALES_FORECAST, salesDetailDb(), salesForecastDb()], null)
 )
 
 ipcMain.handle('get-sales-forecast-meta', () =>
-  spawnPy([BUILD_SALES_FORECAST, 'meta', SALES_FORECAST_DB], null)
+  spawnPy([BUILD_SALES_FORECAST, 'meta', salesForecastDb()], null)
 )
 
 ipcMain.handle('get-forecast-by-weekday', (_, { weekday }) =>
-  spawnPy([BUILD_SALES_FORECAST, 'query', SALES_FORECAST_DB, String(weekday)], null)
+  spawnPy([BUILD_SALES_FORECAST, 'query', salesForecastDb(), String(weekday)], null)
 )
 
-ipcMain.handle('init-buffer-db',        ()       => spawnPy([BUFFER_STOCK, 'init',    DATA_DB], null))
-ipcMain.handle('get-buffer-settings',   ()       => spawnPy([BUFFER_STOCK, 'get',     DATA_DB], null))
-ipcMain.handle('set-buffer-qty',        (_, rows) => spawnPy([BUFFER_STOCK, 'set',    DATA_DB], rows))
-ipcMain.handle('calc-buffer-suggestions',()      => spawnPy([BUFFER_STOCK, 'suggest',     DATA_DB, SALES_DETAIL_DB, String(settings.bufLeadDays || 1), String(settings.bufSembreakFactor || 0.5), String(settings.bufMinOos ?? 2)], null))
-ipcMain.handle('load-buffer-suggestions',()      => spawnPy([BUFFER_STOCK, 'get_suggest',    DATA_DB], null))
-ipcMain.handle('get-lane-types',         ()      => spawnPy([BUFFER_STOCK, 'get_lane_types', DATA_DB], null))
-ipcMain.handle('get-replacement-data',   (_, machine) => spawnPy([REPL_SUGGEST, SALES_DETAIL_DB, settings.smProductPath || '', machine], null))
-ipcMain.handle('get-machine-sales', (_, { machine, days }) => spawnPy([MACHINE_SALES, SALES_DETAIL_DB, machine, String(days)], null))
+ipcMain.handle('init-buffer-db',        ()       => spawnPy([BUFFER_STOCK, 'init',    dataDb()], null))
+ipcMain.handle('get-buffer-settings',   ()       => spawnPy([BUFFER_STOCK, 'get',     dataDb()], null))
+ipcMain.handle('set-buffer-qty',        (_, rows) => spawnPy([BUFFER_STOCK, 'set',    dataDb()], rows))
+ipcMain.handle('calc-buffer-suggestions',()      => spawnPy([BUFFER_STOCK, 'suggest',     dataDb(), salesDetailDb(), String(settings.bufLeadDays || 1), String(settings.bufSembreakFactor || 0.5), String(settings.bufMinOos ?? 2)], null))
+ipcMain.handle('load-buffer-suggestions',()      => spawnPy([BUFFER_STOCK, 'get_suggest',    dataDb()], null))
+ipcMain.handle('get-lane-types',         ()      => spawnPy([BUFFER_STOCK, 'get_lane_types', dataDb()], null))
+ipcMain.handle('get-replacement-data',   (_, machine) => spawnPy([REPL_SUGGEST, salesDetailDb(), settings.smProductPath || '', machine], null))
+ipcMain.handle('get-machine-sales', (_, { machine, days }) => spawnPy([MACHINE_SALES, salesDetailDb(), machine, String(days)], null))
 
 ipcMain.handle('get-report-mtime', () => {
-  try { return fs.statSync(LAST_REPORT).mtime.toISOString() } catch { return null }
+  try { return fs.statSync(lastReport()).mtime.toISOString() } catch { return null }
 })
 
 ipcMain.handle('save-pick-edit', (_, { machine, date, rows }) => {
   const safe = machine.replace(/[^a-zA-Z0-9]/g, '_')
-  const fpath = path.join(ROOT, 'db', `pick_edit_${safe}_${date}.json`)
+  const fpath = path.join(dataDir(), `pick_edit_${safe}_${date}.json`)
   fs.writeFileSync(fpath, JSON.stringify({ machine, date, rows }, null, 2))
 })
 
 ipcMain.handle('load-pick-edit', (_, { machine, date }) => {
   const safe = machine.replace(/[^a-zA-Z0-9]/g, '_')
-  const fpath = path.join(ROOT, 'db', `pick_edit_${safe}_${date}.json`)
+  const fpath = path.join(dataDir(), `pick_edit_${safe}_${date}.json`)
   if (!fs.existsSync(fpath)) return null
   try { return { ...JSON.parse(fs.readFileSync(fpath, 'utf8')), _mtime: fs.statSync(fpath).mtime.toISOString() } } catch { return null }
 })

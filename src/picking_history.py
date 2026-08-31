@@ -1,7 +1,8 @@
-import sqlite3, json, sys
+import sqlite3, json, sys, os
 from pathlib import Path
 
-DB = Path(__file__).parent.parent / "db" / "vending.db"
+# Active account's folder, supplied by main.js; falls back to the legacy db/
+DB = Path(os.environ.get("OV_DATA_DIR") or (Path(__file__).parent.parent / "db")) / "vending.db"
 
 def get_conn():
     conn = sqlite3.connect(str(DB))

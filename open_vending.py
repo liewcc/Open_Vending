@@ -16,16 +16,20 @@ from playwright.async_api import async_playwright
 USERNAME = os.environ.get('OV_USERNAME', '')
 PASSWORD = os.environ.get('OV_PASSWORD', '')
 
-DB_DIR  = Path(__file__).parent / "db"
+# ROOT_DB_DIR holds files shared across accounts (browser control flags — only
+# one browser runs at a time). DB_DIR is the active account's data folder,
+# supplied by main.js; it falls back to the legacy db/ for a bare run.
+ROOT_DB_DIR = Path(__file__).parent / "db"
+DB_DIR  = Path(os.environ.get("OV_DATA_DIR") or ROOT_DB_DIR)
 LOG_DIR = Path(__file__).parent / "log"
-DB_DIR.mkdir(exist_ok=True)
+DB_DIR.mkdir(parents=True, exist_ok=True)
 LOG_DIR.mkdir(exist_ok=True)
 _log_file = open(LOG_DIR / "scan.log", "a", encoding="utf-8")
 
 HEADLESS   = "--headless" in sys.argv
 LOGIN_ONLY = "--login-only" in sys.argv
 
-BROWSER_STOP = DB_DIR / ".browser_stop"
+BROWSER_STOP = ROOT_DB_DIR / ".browser_stop"
 
 _DEFAULT_LOGIN_URL = "https://vendingportal.azurewebsites.net/SuperAdmin/SPLogin.aspx"
 LOGIN_URL  = os.environ.get('OV_LANDING_URL') or _DEFAULT_LOGIN_URL
@@ -220,7 +224,7 @@ def import_to_sqlite(xlsx_path):
 
 
 async def watch_f9(page, stop_event):
-    trigger = DB_DIR / ".f9_trigger"
+    trigger = ROOT_DB_DIR / ".f9_trigger"
     LOG_DIR.mkdir(exist_ok=True)
     while not stop_event.is_set():
         if trigger.exists():
