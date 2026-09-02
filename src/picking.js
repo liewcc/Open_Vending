@@ -72,8 +72,14 @@ function machineRestockPct(rows, pendingByLane, bufferByLane) {
     const laneSize = num(r[5]);
     const bal = num(r[4]);
     const restock = num(r[6]);
-    const actualRestock = Math.max(0, restock - (pendingByLane[laneNo] || 0));
-    const bufferQty = actualRestock === 0 ? 0 : Math.min(bufferByLane[laneNo] || 0, bal);
+    const laneInTransit = pendingByLane[laneNo] || 0;
+    const actualRestock = Math.max(0, restock - laneInTransit);
+    // A lane that needs nothing only because it is FULL still earns its buffer:
+    // buffer covers pick -> refill sales, which is exactly what frees the room.
+    // Only a lane already covered by an in-transit pick skips it (that pick
+    // carried the buffer already).
+    const bufferCovered = laneInTransit > 0 && actualRestock === 0;
+    const bufferQty = bufferCovered ? 0 : Math.min(bufferByLane[laneNo] || 0, bal);
     const space = Math.max(0, laneSize - bal); // free space at report time
     const capped = laneSize > 0 ? Math.min(actualRestock, space) : actualRestock;
     const withBuffer = capped + bufferQty;
@@ -364,8 +370,9 @@ function buildPickingList(reportRows, machine, pendingByLane, oosByLane, forecas
       continue;
     }
 
-    // Step B: zero-restock lanes stay visible (flagged) but never pick up
-    // forecast/buffer additions, so queue and print totals are unaffected
+    // Step B: zero-restock lanes stay visible (flagged) and never pick up
+    // forecast; buffer is gated separately in Step F (a full lane still earns
+    // the buffer the user set for it)
     const zeroRestock = (actualRestock === 0);
 
     // Step A: out of stock
@@ -384,7 +391,10 @@ function buildPickingList(reportRows, machine, pendingByLane, oosByLane, forecas
     // never exceed the lane's free space (laneSize - bal)
     const laneSize = num(row[5]);
     const space = Math.max(0, laneSize - bal); // free space at report time
-    const bufferQty = zeroRestock ? 0 : Math.min(bufferByLane[laneNo] || 0, bal);
+    // A full lane (report Restock 0 with nothing in transit) still earns its
+    // buffer — see machineRestockPct; only an in-transit-covered lane skips it.
+    const bufferCovered = laneInTransit > 0 && actualRestock === 0;
+    const bufferQty = bufferCovered ? 0 : Math.min(bufferByLane[laneNo] || 0, bal);
     // forecast and positive buffer both cover lead-time sales, which free extra
     // space by refill time, so both ride ABOVE free space: ceiling = space +
     // forecast + positive buffer
@@ -546,12 +556,28 @@ if (require.main === module) {
   assert.strictEqual(pickList.rows[2].bal, 5);
   assert.strictEqual(pickList.rows[2].restock, 3);
 
-  // zero-restock lane must ignore forecast and buffer (totals unchanged)
+  // zero-restock lane ignores forecast, but still carries its buffer
   const plZero = buildPickingList(mockReportList, 'MachX', {}, {}, { P1: 6 }, false, { '1': 2 });
   assert.strictEqual(plZero.rows[0].productId, 'P1');
-  assert.strictEqual(plZero.rows[0].restock, 0);
   assert.strictEqual(plZero.rows[0].forecastQty, 0);
-  assert.strictEqual(plZero.rows[0].bufferQty, 0);
+  assert.strictEqual(plZero.rows[0].bufferQty, 2);
+  assert.strictEqual(plZero.rows[0].restock, 2);
+
+  // FULL lane (report Restock 0 because bal === laneSize) still gets buffer
+  const mockReportFull = [
+    ['Machine','No.','Product ID','Product Name','Bal Qty','Lane Size','Restock'],
+    ['MachF', '1', 'P1', 'A', '4', '4', '0'],
+  ];
+  const plFull = buildPickingList(mockReportFull, 'MachF', {}, {}, {}, false, { '1': 1 });
+  assert.strictEqual(plFull.rows[0].bufferQty, 1);
+  assert.strictEqual(plFull.rows[0].restock, 1);        // free space 0 + buffer 1
+  assert.strictEqual(machineRestockPct([['MachF','1','P1','A','4','4','0']], {}, { '1': 1 }).restockSum, 1);
+  // ...unless an in-transit pick already covers the lane
+  const plFullIT = buildPickingList(
+    [['Machine','No.','Product ID','Product Name','Bal Qty','Lane Size','Restock'],
+     ['MachF', '1', 'P1', 'A', '1', '4', '3']], 'MachF', { '1': 3 }, {}, {}, false, { '1': 1 });
+  assert.strictEqual(plFullIT.rows[0].bufferQty, 0);
+  assert.strictEqual(plFullIT.rows[0].restock, 0);
 
   // buffer is capped by bal (lead-time sales can't exceed what's in the machine)
   const plBuf = buildPickingList(mockReportList, 'MachX', {}, {}, {}, false, { '3': 4, '4': 8 });

@@ -2506,6 +2506,7 @@
       const tr = td.closest('tr')
       if (live && tr) {
         tr.querySelectorAll('td')[7].textContent = live.restock
+        tr.classList.toggle('pick-zero', (Number(live.restock) || 0) === 0)
         tr.dispatchEvent(new Event('input', { bubbles: true }))
       }
     } else {
