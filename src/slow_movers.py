@@ -134,11 +134,14 @@ def analyze_machine(sales_detail_db, machine):
     machine; this only supplies sales counts.
     """
     from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).parent))
+    from daily_sales import canonical_machine
     if not Path(sales_detail_db).exists():
         print(json.dumps({'ok': False, 'error': 'vending.db not found — build it in Settings first'}))
         return
 
     conn = sqlite3.connect(sales_detail_db)
+    machine = canonical_machine(conn, machine)
     db_rows = conn.execute(
         "SELECT pid, SUM(qty), MAX(sale_date) FROM daily_sales WHERE machine=? GROUP BY pid",
         (machine,),

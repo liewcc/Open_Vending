@@ -23,6 +23,9 @@ import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).parent))
+from daily_sales import canonical_machine
+
 
 def fail(msg):
     print(json.dumps({"ok": False, "error": msg}))
@@ -65,6 +68,7 @@ def main():
         fail("daily_sales is empty — rebuild it (import sales CSV)")
     to_date = max_date[0][:10]
     from_date = (datetime.strptime(to_date, "%Y-%m-%d") - timedelta(days=30)).strftime("%Y-%m-%d")
+    machine = canonical_machine(conn, machine)
 
     machine_sales = dict(conn.execute(
         "SELECT pid, SUM(qty) FROM daily_sales "

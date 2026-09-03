@@ -57,6 +57,21 @@ def _optional(conn, sql, default):
         return default
 
 
+def canonical_machine(conn, machine):
+    """Sheet name -> canonical name, for anything reading daily_sales by machine.
+
+    The UI carries the Excel sheet name (truncated to 31 chars); daily_sales is
+    keyed by the canonical name. Unknown/already-canonical names pass through.
+    """
+    try:
+        row = conn.execute(
+            "SELECT canonical FROM machines WHERE sheet_alias=?", (machine,)
+        ).fetchone()
+    except sqlite3.OperationalError:
+        row = None          # no machines dimension yet (account with no snapshot)
+    return row[0] if row else machine
+
+
 def _txn_boundary(conn):
     """Newest date covered by authoritative snapshot data ('' if none)."""
     rows = _optional(conn, "SELECT value FROM sales_meta WHERE key='max_date'", [])
