@@ -213,11 +213,17 @@ set "OV_WD=%ROOT:~0,-1%"
   echo $s.WorkingDirectory = '%OV_WD%'
   echo $s.IconLocation = '%OV_ICO%'
   echo $s.Save^(^)
+  echo if ^(-not ^(Test-Path $s.FullName^)^) { exit 1 }
 ) > "%OV_PS1%"
 powershell -NoProfile -ExecutionPolicy Bypass -File "%OV_PS1%" >> "%LOG%" 2>&1
+if errorlevel 1 (
+    echo [WARN] Desktop shortcut NOT created - start the app with run.bat
+    echo [WARN] Desktop shortcut NOT created >> "%LOG%"
+) else (
+    echo [OK] Desktop shortcut created
+    echo [OK] Desktop shortcut created >> "%LOG%"
+)
 del "%OV_PS1%"
-echo [OK] Desktop shortcut created
-echo [OK] Desktop shortcut created >> "%LOG%"
 echo.
 echo  ============================================
 echo   Setup complete! Run run.bat to start.
