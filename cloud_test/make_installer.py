@@ -45,6 +45,15 @@ Write-Host '   Open Vending - new PC setup'
 Write-Host '  ============================================'
 Write-Host ''
 
+# 0 - do not clobber an existing install ---------------------------------------
+if ((Test-Path $AppDir) -and ((Get-ChildItem $AppDir -Force -ErrorAction SilentlyContinue | Measure-Object).Count -gt 0)) {{
+  Write-Host '  That folder already has files in it:' -ForegroundColor Yellow
+  Write-Host ('    ' + $AppDir)
+  Write-Host '  Continuing overwrites the app files there (db\ contents are kept).'
+  $ans = Read-Host '  Type yes to continue, anything else to cancel'
+  if ($ans -ne 'yes') {{ Write-Host '  Cancelled - nothing changed.'; exit 1 }}
+}}
+
 # 1 - app source ---------------------------------------------------------------
 Step 1 'Downloading the app...'
 $tmp = Join-Path $env:TEMP ('ov-install-' + (Get-Random))
