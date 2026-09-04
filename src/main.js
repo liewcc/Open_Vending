@@ -8,7 +8,7 @@ const ROOT          = path.join(__dirname, '..')
 const CRED_FILE     = path.join(app.getPath('userData'), 'credentials.enc')
 const SETTINGS_FILE = path.join(app.getPath('userData'), 'settings.json')
 const ACCOUNTS_FILE = path.join(app.getPath('userData'), 'accounts.json')
-const DEFAULT_SETTINGS = { menuBar: false, showConsole: false, closeTray: false, notifyChanges: false, autoDownload: false, autoDownloadInterval: 30, headedBrowser: false, landingUrl: 'https://vendingportal.azurewebsites.net/SuperAdmin/SPLogin.aspx', q3ThresholdPct: 50, uiZoom: 100, pdfPaperSize: 'A4', pdfFontPct: 100, pdfMarginTop: 12, pdfMarginBottom: 12, pdfMarginLeft: 12, pdfMarginRight: 12, pdfPages: 1, showWeekBadges: true, pdfDuplex: true }
+const DEFAULT_SETTINGS = { menuBar: false, showConsole: false, closeTray: false, notifyChanges: false, autoDownload: false, autoDownloadInterval: 30, headedBrowser: false, landingUrl: 'https://vendingportal.azurewebsites.net/SuperAdmin/SPLogin.aspx', q3ThresholdPct: 50, uiZoom: 100, pdfPaperSize: 'A4', pdfFontPct: 100, pdfMarginTop: 12, pdfMarginBottom: 12, pdfMarginLeft: 12, pdfMarginRight: 12, pdfPages: 1, showWeekBadges: true, pdfDuplex: true, remoteUrl: '', remoteToken: '' }
 const F9_TRIGGER    = path.join(ROOT, 'db', '.f9_trigger')
 const BROWSER_STOP  = path.join(ROOT, 'db', '.browser_stop')
 const ICON_PNG = path.join(ROOT, 'asset', 'image', 'icon_nobg.png')
@@ -513,7 +513,9 @@ function spawnPy(args, stdinData, extraEnv) {
       // UTF-8 stdio: Node writes UTF-8, but Python on Windows defaults to
       // the locale codepage (cp1252) and mangles non-ASCII (e.g. the "→"
       // in replacement product names) on the way into the DB
-      env: { ...process.env, PYTHONNOUSERSITE: '1', PYTHONPATH: '', PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8', OV_DATA_DIR: dataDir(), ...extraEnv }
+      // OV_REMOTE_* point picking_history and buffer_stock at the shared hosted
+      // DB. Blank (the default) leaves every script on the local file as before.
+      env: { ...process.env, PYTHONNOUSERSITE: '1', PYTHONPATH: '', PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8', OV_DATA_DIR: dataDir(), OV_REMOTE_URL: settings.remoteUrl || process.env.OV_REMOTE_URL || '', OV_REMOTE_TOKEN: settings.remoteToken || process.env.OV_REMOTE_TOKEN || '', ...extraEnv }
     })
     let out = ''
     if (stdinData !== null && stdinData !== undefined) {

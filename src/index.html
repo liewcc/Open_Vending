@@ -2174,8 +2174,18 @@
   async function markInTransitDone() {
     const checked = [...document.querySelectorAll('#in-transit-panel input[type=checkbox]:checked')].map(cb => cb.value)
     if (!checked.length) return
-    await window.api.markDone(checked)
+    if (!savedOk(await window.api.markDone(checked))) return
     renderPicks()
+  }
+  // Shared-DB writes can fail when there is no connection. There is no offline
+  // queue by design, so a failed save must stop the flow and say so rather than
+  // refresh the UI as though it had worked.
+  function savedOk(r) {
+    if (r && r.ok === false) {
+      alert(r.error || 'Could not save — no connection to the shared database.')
+      return false
+    }
+    return true
   }
   function pickDetailSet(hdHtml, bodyHtml) {
     document.getElementById('pick-detail-hd').innerHTML = hdHtml || ''
@@ -2342,7 +2352,7 @@
   async function confirmAndQueuePrint(machine) {
     const picks = await buildQueuePicks(machine)
     if (!picks.length) return
-    await window.api.savePicks({ replace_machines: [machine], picks })
+    if (!savedOk(await window.api.savePicks({ replace_machines: [machine], picks }))) return
     const pendingRaw = await window.api.getPendingInTransit()
     currentPending = pendingRaw || {}
     const qBtn = document.querySelector('#pick-detail .pick-hd .pick-icon-btn:last-child')
@@ -2355,7 +2365,7 @@
   async function syncQueueWithEdit(machine) {
     if (!currentPending[machine]) return
     const picks = await buildQueuePicks(machine)
-    await window.api.savePicks({ replace_machines: [machine], picks })
+    if (!savedOk(await window.api.savePicks({ replace_machines: [machine], picks }))) return
     const pendingRaw = await window.api.getPendingInTransit()
     currentPending = pendingRaw || {}
   }
@@ -2383,14 +2393,14 @@
     document.getElementById('queue-modal').style.display = 'flex'
   }
   async function deleteFromQueue(machine) {
-    await window.api.markDone([machine])
+    if (!savedOk(await window.api.markDone([machine]))) return
     await renderPicks()
     showQueueView()
   }
   async function deleteAllQueue() {
     const machines = Object.keys(currentPending)
     if (!machines.length) return
-    await window.api.markDone(machines)
+    if (!savedOk(await window.api.markDone(machines))) return
     await renderPicks()
     document.getElementById('queue-modal').style.display = 'none'
   }

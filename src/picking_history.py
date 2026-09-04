@@ -1,13 +1,25 @@
 import sqlite3, json, sys, os
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent))  # bundled python is embeddable: script dir is not on sys.path
+import remote_db
 
 # Active account's folder, supplied by main.js; falls back to the legacy db/
 DB = Path(os.environ.get("OV_DATA_DIR") or (Path(__file__).parent.parent / "db")) / "vending.db"
 
+# picking_history is shared between PCs, so it lives in the hosted DB when one
+# is configured. Unconfigured, this is the local file exactly as before.
 def get_conn():
-    conn = sqlite3.connect(str(DB))
-    conn.row_factory = sqlite3.Row
-    return conn
+    return remote_db.connect(DB)
+
+# A write that never reached the shared DB must not look like it succeeded —
+# there is no offline queue by design, so the UI has to be told.
+def _report_remote_failure(exc_type, exc, tb):
+    if isinstance(exc, remote_db.RemoteError):
+        print(json.dumps({"ok": False, "error": str(exc)}))
+    else:
+        sys.__excepthook__(exc_type, exc, tb)
+
+sys.excepthook = _report_remote_failure
 
 cmd = sys.argv[1] if len(sys.argv) > 1 else ''
 
@@ -40,7 +52,7 @@ elif cmd == 'auto-clear':
     print(json.dumps({"cleared": cur.rowcount}))
 
 elif cmd == 'get-pending':
-    if not DB.exists():
+    if not (remote_db.enabled() or DB.exists()):
         print(json.dumps({})); sys.exit(0)
     conn = get_conn()
     rows = conn.execute(
@@ -55,7 +67,7 @@ elif cmd == 'get-pending':
 elif cmd == 'get-pending-detail':
     # Full pending rows (incl. product names as saved at queue/edit time) so
     # queue exports render exactly what is in the queue, not the raw report.
-    if not DB.exists():
+    if not (remote_db.enabled() or DB.exists()):
         print(json.dumps({})); sys.exit(0)
     conn = get_conn()
     rows = conn.execute(
@@ -75,7 +87,7 @@ elif cmd == 'get-pending-detail':
     print(json.dumps(result))
 
 elif cmd == 'get-oos-counts':
-    if not DB.exists():
+    if not (remote_db.enabled() or DB.exists()):
         print(json.dumps({})); sys.exit(0)
     conn = get_conn()
     rows = conn.execute(
@@ -130,7 +142,7 @@ elif cmd == 'save-picks':
     print(json.dumps({"saved": saved}))
 
 elif cmd == 'get-history-dates':
-    if not DB.exists():
+    if not (remote_db.enabled() or DB.exists()):
         print(json.dumps([])); sys.exit(0)
     conn = get_conn()
     rows = conn.execute(
@@ -141,7 +153,7 @@ elif cmd == 'get-history-dates':
 
 elif cmd == 'get-history-by-date':
     date = sys.argv[2] if len(sys.argv) > 2 else ''
-    if not DB.exists() or not date:
+    if not (remote_db.enabled() or DB.exists()) or not date:
         print(json.dumps({})); sys.exit(0)
     conn = get_conn()
     rows = conn.execute(
@@ -169,7 +181,7 @@ elif cmd == 'get-week-summary':
     # day's pending row — accepted, rare).
     d_from = sys.argv[2] if len(sys.argv) > 2 else ''
     d_to   = sys.argv[3] if len(sys.argv) > 3 else ''
-    if not DB.exists() or not d_from or not d_to:
+    if not (remote_db.enabled() or DB.exists()) or not d_from or not d_to:
         print(json.dumps({})); sys.exit(0)
     conn = get_conn()
     rows = conn.execute(

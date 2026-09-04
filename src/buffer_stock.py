@@ -12,14 +12,33 @@ Commands:
 import sys, json, sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent))  # bundled python is embeddable: script dir is not on sys.path
+import remote_db
 
 WINDOW_DAYS = 30  # sales window for the daily average, anchored to newest sale_date
 
 
 def get_conn(db_path):
+    """Local vending.db — derived tables that each PC recomputes for itself
+    (buffer_suggestions) and the static product_lane_type dimension."""
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     return conn
+
+
+def get_shared(db_path):
+    """buffer_stock is edited on either PC, so it lives in the hosted DB when
+    one is configured; otherwise this is the same local file as before."""
+    return remote_db.connect(db_path)
+
+
+def _report_remote_failure(exc_type, exc, tb):
+    if isinstance(exc, remote_db.RemoteError):
+        print(json.dumps({'ok': False, 'error': str(exc)}))
+    else:
+        sys.__excepthook__(exc_type, exc, tb)
+
+sys.excepthook = _report_remote_failure
 
 
 def _migrate_suggestions_table(conn):
@@ -42,8 +61,8 @@ def _migrate_suggestions_table(conn):
 
 
 def cmd_init(db_path):
-    conn = get_conn(db_path)
-    conn.execute("""
+    shared = get_shared(db_path)
+    shared.execute("""
         CREATE TABLE IF NOT EXISTS buffer_stock (
             machine      TEXT NOT NULL,
             lane_no      TEXT NOT NULL,
@@ -53,6 +72,9 @@ def cmd_init(db_path):
             PRIMARY KEY (machine, lane_no)
         )
     """)
+    shared.commit()
+    shared.close()
+    conn = get_conn(db_path)
     conn.execute("""
         CREATE TABLE IF NOT EXISTS product_lane_type (
             pid          TEXT PRIMARY KEY,
@@ -87,14 +109,16 @@ def cmd_get_lane_types(db_path):
 
 
 def cmd_get(db_path):
-    if not Path(db_path).exists():
+    if not (remote_db.enabled() or Path(db_path).exists()):
         print(json.dumps({'ok': True, 'data': {}}))
         return
-    conn = get_conn(db_path)
+    conn = get_shared(db_path)
     try:
         rows = conn.execute(
             'SELECT machine, lane_no, pid, normal_qty, sembreak_qty FROM buffer_stock'
         ).fetchall()
+    except remote_db.RemoteError:
+        raise            # unreachable shared DB is reported, never read as "no buffers set"
     except Exception:
         print(json.dumps({'ok': True, 'data': {}}))
         conn.close()
@@ -115,7 +139,7 @@ def cmd_set(db_path):
     if not rows:
         print(json.dumps({'ok': True, 'saved': 0}))
         return
-    conn = get_conn(db_path)
+    conn = get_shared(db_path)
     conn.execute("""
         CREATE TABLE IF NOT EXISTS buffer_stock (
             machine TEXT NOT NULL, lane_no TEXT NOT NULL, pid TEXT,
@@ -181,10 +205,15 @@ def cmd_suggest(data_db, sales_detail_db, lead_days=1.0, sembreak_factor=0.5, mi
 
     # machine name canonicalization (Excel 31-char sheet truncation) —
     # current_state/picking_history use sheet names, daily_sales uses canonical
-    def read_grouped(sql):
+    # picking_history may live in the hosted DB while current_state stays local,
+    # so each read says which side it comes from. The two sides are combined in
+    # Python below, never joined in SQL — that is what lets them be split.
+    shared = get_shared(data_db)
+
+    def read_grouped(sql, src=None):
         out = {}
         try:
-            for m, pid, cnt in cur.execute(sql, (start,)):
+            for m, pid, cnt in (src or cur).execute(sql, (start,)):
                 key = (alias.get(m, m), pid)
                 out[key] = out.get(key, 0) + (cnt or 0)
         except sqlite3.OperationalError:
@@ -208,11 +237,11 @@ def cmd_suggest(data_db, sales_detail_db, lead_days=1.0, sembreak_factor=0.5, mi
     # sell-out count and pick count per (machine, pid) inside the window
     oos_counts = read_grouped(
         "SELECT machine, product_id, SUM(out_of_stock) FROM picking_history "
-        "WHERE pick_date >= ? GROUP BY machine, product_id"
+        "WHERE pick_date >= ? GROUP BY machine, product_id", shared
     )
     pick_counts = read_grouped(
         "SELECT machine, product_id, COUNT(*) FROM picking_history "
-        "WHERE pick_date >= ? GROUP BY machine, product_id"
+        "WHERE pick_date >= ? GROUP BY machine, product_id", shared
     )
     # total shelf capacity per (machine, pid) — physical spec, stable over time
     lane_caps = read_grouped(
@@ -251,6 +280,7 @@ def cmd_suggest(data_db, sales_detail_db, lead_days=1.0, sembreak_factor=0.5, mi
             'suggestion_sembreak_qty': sug_sembreak
         })
     sales_conn.close()
+    shared.close()
 
     # Save to buffer_suggestions in data_db (full refresh — stale rows for
     # products with no sales in the window must not survive a recalc)
