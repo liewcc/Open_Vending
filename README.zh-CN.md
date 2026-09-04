@@ -95,6 +95,16 @@
 
 ---
 
+## 数据库
+
+所有数据以 SQLite 格式存放在 `db/` 目录下。如果你要直接查看或修改数据，
+或者让 AI 助手（例如 Claude Code）来处理数据，请先阅读
+**[DATABASE.md](DATABASE.md)**。文档说明了每个表的用途、在 app 运行时如何
+安全查询，以及几条从 schema 看不出来的规则：拣货端与销售端的机器名称不同、
+product ID 是按账号区分的、以及 `vending.db` 绝对不能用 Drive 或 Dropbox 同步。
+
+---
+
 ## 自动更新
 
 每次启动时，程序会自动检查远端 `package.json` 是否有新版本。侧边栏的 <img src="asset/button img/update.png" width="16"> 图标在版本最新时为灰色，检测到新版本时会亮起。

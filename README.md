@@ -95,6 +95,18 @@ Click <img src="asset/button img/edit.png" width="16"> on any queued machine to 
 
 ---
 
+## Database
+
+All data is stored in SQLite under `db/`. If you want to inspect or change it
+directly — or point an AI assistant such as Claude Code at it — read
+**[DATABASE.md](DATABASE.md)** first. It covers what each table holds, how to
+query safely while the app is running, and several rules that are not obvious
+from the schema: machine names differ between the picking and sales sides,
+product IDs are account-scoped, and `vending.db` must never be synced through
+Drive or Dropbox.
+
+---
+
 ## Auto-update
 
 On every launch, the app checks the remote `package.json` for a newer version. The <img src="asset/button img/update.png" width="16"> icon in the side panel is grayed out while the app is up to date. When a newer version is detected, the icon lights up.
