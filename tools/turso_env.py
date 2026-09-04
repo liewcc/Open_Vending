@@ -1,4 +1,4 @@
-"""Load Turso credentials from cloud_test/turso.json into the environment.
+"""Load Turso credentials from tools/turso.json into the environment.
 
 Keeps the token out of command lines, shell history and terminal output — the
 scripts read the file themselves. turso.json is gitignored.
@@ -10,8 +10,8 @@ import os
 import sys
 from pathlib import Path
 
-HERE = Path(__file__).resolve().parent
-CREDS = HERE / "turso.json"
+ROOT = Path(__file__).resolve().parent.parent
+CREDS = ROOT / "turso.json"
 
 
 def load(required=True):
@@ -32,7 +32,7 @@ def load(required=True):
     os.environ["OV_REMOTE_URL"] = url
     os.environ["OV_REMOTE_TOKEN"] = token
     # src/ holds remote_db and the app scripts
-    sys.path.insert(0, str(HERE.parent / "src"))
+    sys.path.insert(0, str(ROOT / "src"))
     return True
 
 

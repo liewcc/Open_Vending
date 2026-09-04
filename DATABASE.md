@@ -190,7 +190,7 @@ It is switched on by two settings in `%APPDATA%\open-vending\settings.json`:
 Check which mode this PC is in:
 
 ```bash
-./python/python.exe cloud_test/enable_shared.py --status
+./python/python.exe tools/enable_shared.py --status
 ```
 
 With those blank, everything is local and behaves exactly as a single-PC install.

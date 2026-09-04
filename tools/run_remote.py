@@ -2,15 +2,15 @@
 
 Keeps the token off the command line and out of shell history.
 
-  python cloud_test/run_remote.py picking_history.py get-pending
-  python cloud_test/run_remote.py buffer_stock.py get <db>
+  python tools/run_remote.py picking_history.py get-pending
+  python tools/run_remote.py buffer_stock.py get <db>
 """
 import runpy
 import sys
 from pathlib import Path
 
-HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE))
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "tools"))
 import turso_env  # noqa: E402
 
 turso_env.load()
@@ -18,7 +18,7 @@ turso_env.load()
 if len(sys.argv) < 2:
     sys.exit(__doc__)
 
-script = HERE.parent / "src" / sys.argv[1]
+script = ROOT / "src" / sys.argv[1]
 if not script.exists():
     sys.exit("no such script: {}".format(script))
 

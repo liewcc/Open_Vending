@@ -4,11 +4,11 @@ The Drive API is plain HTTPS + JSON, so this needs nothing added to the app's
 bundled python. Scope is drive.file: this app can only ever see files it
 created itself, never the rest of the user's Drive.
 
-  python cloud_test/drive_sync.py auth            one-time consent, saves token.json
-  python cloud_test/drive_sync.py init            create the "open vending db" folder
-  python cloud_test/drive_sync.py push <file>     upload (resumable, replaces by name)
-  python cloud_test/drive_sync.py list            what's in the folder
-  python cloud_test/drive_sync.py pull <name> <dest>
+  python tools/drive_sync.py auth            one-time consent, saves token.json
+  python tools/drive_sync.py init            create the "open vending db" folder
+  python tools/drive_sync.py push <file>     upload (resumable, replaces by name)
+  python tools/drive_sync.py list            what's in the folder
+  python tools/drive_sync.py pull <name> <dest>
 
 Needs client_secret.json (OAuth client ID, type "Desktop app") beside this file.
 token.json and client_secret.json are gitignored — never commit them.
@@ -26,10 +26,10 @@ import urllib.request
 import webbrowser
 from pathlib import Path
 
-HERE     = Path(__file__).resolve().parent
-SECRET   = HERE / "client_secret.json"
-TOKEN    = HERE / "token.json"
-STATE    = HERE / "drive_state.json"
+ROOT     = Path(__file__).resolve().parent.parent
+SECRET   = ROOT / "client_secret.json"
+TOKEN    = ROOT / "token.json"
+STATE    = ROOT / "drive_state.json"
 FOLDER   = "open vending db"
 SCOPE    = "https://www.googleapis.com/auth/drive.file"
 PORT     = 8765
@@ -116,7 +116,7 @@ def auth():
 
 def access_token():
     if not TOKEN.exists():
-        sys.exit("not authorised yet — run: python cloud_test/drive_sync.py auth")
+        sys.exit("not authorised yet — run: python tools/drive_sync.py auth")
     cid, csec = _client()
     tok = json.loads(TOKEN.read_text())
     fresh = _form("https://oauth2.googleapis.com/token", {
@@ -161,7 +161,7 @@ def init():
 
 def _folder_id():
     return _saved_folder() or sys.exit(
-        "no folder yet — run: python cloud_test/drive_sync.py init")
+        "no folder yet — run: python tools/drive_sync.py init")
 
 
 def _find(name):

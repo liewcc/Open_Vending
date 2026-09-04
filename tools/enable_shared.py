@@ -1,11 +1,11 @@
 """Point this PC's app at the shared hosted DB (or back to local).
 
-Copies the url/token from cloud_test/turso.json into the app's settings.json,
+Copies the url/token from tools/turso.json into the app's settings.json,
 so the token is never typed on a command line or left in shell history.
 
-  python cloud_test/enable_shared.py            turn the shared DB on
-  python cloud_test/enable_shared.py --status   show which DB the app will use
-  python cloud_test/enable_shared.py --disable  go back to the local file
+  python tools/enable_shared.py            turn the shared DB on
+  python tools/enable_shared.py --status   show which DB the app will use
+  python tools/enable_shared.py --disable  go back to the local file
 
 Restart the app afterwards — main.js reads settings only at startup.
 """
@@ -14,8 +14,8 @@ import os
 import sys
 from pathlib import Path
 
-HERE = Path(__file__).resolve().parent
-TURSO = HERE / "turso.json"
+ROOT = Path(__file__).resolve().parent.parent
+TURSO = ROOT / "turso.json"
 SETTINGS = Path(os.environ.get("APPDATA", "")) / "open-vending" / "settings.json"
 
 

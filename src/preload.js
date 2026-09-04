@@ -39,7 +39,7 @@ contextBridge.exposeInMainWorld('api', {
   onFileReady:        cb => ipcRenderer.on('file-ready',        (_, p)  => cb(p)),
   onNeedsCredentials: cb => ipcRenderer.on('needs-credentials', ()      => cb()),
   startDownload:      ()           => ipcRenderer.send('start-download'),
-  saveCredentials:    (u, p)       => ipcRenderer.send('save-credentials', { username: u, password: p }),
+  saveCredentials:    (u, p, code) => ipcRenderer.send('save-credentials', { username: u, password: p, setupCode: code || '' }),
   doUpdate:           ()           => ipcRenderer.send('do-update'),
   quitApp:            ()           => ipcRenderer.send('quit-app'),
   onUpdateStatus:     cb => ipcRenderer.on('update-status',   (_, d) => cb(d)),

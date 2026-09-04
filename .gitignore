@@ -30,9 +30,9 @@ __pycache__/
 Thumbs.db
 desktop.ini
 sandbox/
-cloud_test/work/
-cloud_test/token.json
-cloud_test/client_secret.json
-cloud_test/drive_state.json
-cloud_test/turso.json
-cloud_test/install_office.ps1
+# Operator credentials — never commit (the GitHub repo is public)
+turso.json
+token.json
+client_secret.json
+drive_state.json
+tools/work/

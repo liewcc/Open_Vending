@@ -1,12 +1,12 @@
 """Stand up the shared hosted DB: connectivity, schema, data migration, checks.
 
-  python cloud_test/setup_shared.py check     can we reach it, and what version
-  python cloud_test/setup_shared.py init      create picking_history + buffer_stock
-  python cloud_test/setup_shared.py migrate   copy existing rows up (idempotent)
-  python cloud_test/setup_shared.py verify    compare local vs remote row counts
-  python cloud_test/setup_shared.py all       check -> init -> migrate -> verify
+  python tools/setup_shared.py check     can we reach it, and what version
+  python tools/setup_shared.py init      create picking_history + buffer_stock
+  python tools/setup_shared.py migrate   copy existing rows up (idempotent)
+  python tools/setup_shared.py verify    compare local vs remote row counts
+  python tools/setup_shared.py all       check -> init -> migrate -> verify
 
-Credentials come from cloud_test/turso.json (see turso_env.py). Reads the local
+Credentials come from tools/turso.json (see turso_env.py). Reads the local
 vending.db read-only; never writes to it.
 """
 import sqlite3

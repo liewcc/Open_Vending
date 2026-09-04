@@ -13,7 +13,8 @@ time. If you have done it before, the three-step version in the
 | **Windows 10 or 11, 64-bit** | Windows only. The launcher, the setup script and the encrypted credential store all use Windows-specific features. There is no macOS or Linux build. |
 | **An internet connection** | Setup downloads about 500 MB. |
 | **About 2 GB free disk space** | Roughly 600 MB stays after install. |
-| **Your DVends portal username and password** | The app signs in as you to download your replenishment report. |
+| **Your vending portal username and password** | The app signs in as you to download your replenishment report. |
+| **A setup code — only if you were given one** | One long line of text. It joins this PC to a shared picking database and downloads the starter data. Without it the install is standalone, which is normal for a single PC. |
 
 You do **not** need to install Python, Node.js or a browser first. Setup
 downloads its own private copies into the project folder. Nothing is installed
@@ -52,7 +53,7 @@ and run:
 git clone https://github.com/liewcc/Open_Vending.git C:\Apps\Open_Vending
 ```
 
-Updating later is then one command (see [section 6](#6-updating-later)).
+Updating later is then one command (see [section 7](#7-updating-later)).
 
 ### Option B — Download the ZIP
 
@@ -109,16 +110,29 @@ The full detail of the failure is in `setup.log` in the project folder.
 Double-click the **Open Vending** shortcut on your Desktop (or `run.vbs` inside
 the project folder — both do the same thing).
 
-1. A **Welcome to Open Vending** box asks for your DVends username and password.
-   Enter them and click **Save & Connect**.
-   They are encrypted with Windows DPAPI and stored in
+1. A **Welcome to Open Vending** box asks for three things:
+
+   | Field | What to enter |
+   |---|---|
+   | Username | Your vending portal username |
+   | Password | Your portal password |
+   | Setup code | Paste it if you were given one. **Leave blank otherwise** — a blank code means a standalone install, which is the normal single-PC setup. |
+
+   Click **Save & Connect**. Credentials are encrypted with Windows DPAPI into
    `%APPDATA%\open-vending\credentials.enc`. That file is tied to this Windows
-   user on this PC — copying it to another machine will not work, so every PC
-   needs its login entered once.
-2. The app signs in to the portal and downloads today's replenishment report.
-   The first scan takes a few minutes. Watch the status line at the bottom.
-3. When the scan finishes the main table fills in, and `db\vending.db` is created
-   in the project folder.
+   user on this PC — copying it elsewhere will not work, so every PC needs its
+   login entered once.
+
+2. If you pasted a setup code, the app joins the shared picking database and
+   downloads the starter database (about 46 MB), reporting progress in the Log
+   card. This happens once. An existing database is never overwritten.
+
+3. The app then signs in to the portal and downloads today's replenishment
+   report. The first scan takes a few minutes. Watch the status line at the
+   bottom.
+
+4. When the scan finishes the main table fills in, and `db\vending.db` is in
+   place in the project folder.
 
 ---
 
@@ -144,7 +158,32 @@ Open the **Picking List** afterwards; it should now list your machines.
 
 ---
 
-## 6. Updating later
+## 6. Joining a shared database later
+
+Skipped the setup code, or were given one after installing? The welcome box only
+appears on the very first run, so joining afterwards is a two-step job:
+
+1. Put the `turso.json` you were given in the **project root** (next to
+   `setup.bat`). It is gitignored and never leaves this PC.
+2. From the project folder:
+
+```bash
+.\python\python.exe tools\enable_shared.py
+```
+
+Restart the app — settings are read only at startup. Check which database it
+will use at any time with:
+
+```bash
+.\python\python.exe tools\enable_shared.py --status
+```
+
+This only moves picks and buffer stock to the shared database. It does not fetch
+the starter sales history; see [DATABASE.md](DATABASE.md) for that.
+
+---
+
+## 7. Updating later
 
 Pick one lane and stick to it:
 
@@ -161,7 +200,7 @@ files, so `git status` will show modified files afterwards.
 
 ---
 
-## 7. When something goes wrong
+## 8. When something goes wrong
 
 | Symptom | What to do |
 |---|---|
@@ -171,6 +210,8 @@ files, so `git status` will show modified files afterwards.
 | Message box: *"Setup not complete. Please run setup.bat first."* | `setup.bat` never finished (usually step 6). Run it again and read `setup.log`. |
 | No Desktop shortcut | Harmless — launch `run.vbs` in the project folder instead. |
 | App opens but the table stays empty, log says *no credentials* | Open **Settings**, then the **Accounts** card, edit the account and re-enter the password. |
+| Log says *"Setup code not understood"* | The code was mistyped or truncated — it is one long unbroken line. The install continues standalone; ask for the code again and see [section 6](#6-joining-a-shared-database-later). |
+| Log says *"Starter database failed"* | The seed link is unreachable or was revoked. Everything else still works; the PC just starts with no sales history. |
 | Scan stops at *"Exporting Excel…"* | The portal failed to build the export. Look at `log\scan.log` and the saved page in `log\export_fail.html` / `.png`, then press **Re-download**. |
 | Scan fails and you cannot tell why | Turn on **Headed Browser** in Settings and re-run — you will see the portal as the app sees it, and **F9** saves the current page. |
 | Everything is broken and you want a clean slate | Delete `python\`, `node\`, `browsers\` and `node_modules\`, then run `setup.bat` again. Your data in `db\` is untouched. |
@@ -180,7 +221,7 @@ both in the project folder.
 
 ---
 
-## 8. Next steps
+## 9. Next steps
 
 - [README](README.md) — what every button does
 - [DATABASE.md](DATABASE.md) — read this before touching the data directly, or

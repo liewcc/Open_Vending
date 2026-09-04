@@ -701,14 +701,22 @@
 <div id="cred-overlay">
   <div id="cred-card">
     <h2>Welcome to Open Vending</h2>
-    <p>Enter your DVends portal credentials. They are encrypted and stored locally on this machine only.</p>
+    <p>Enter your vending portal credentials. They are encrypted and stored locally on this machine only.</p>
     <div class="field">
       <label>Username</label>
-      <input id="inp-user" type="text" placeholder="DVends username" autocomplete="username">
+      <input id="inp-user" type="text" placeholder="Portal username" autocomplete="username">
     </div>
     <div class="field">
       <label>Password</label>
-      <input id="inp-pass" type="password" placeholder="DVends password" autocomplete="current-password">
+      <input id="inp-pass" type="password" placeholder="Portal password" autocomplete="current-password">
+    </div>
+    <div class="field">
+      <label>Setup code <span style="color:#9ca3af;font-weight:400">(optional)</span></label>
+      <input id="inp-code" type="text" placeholder="Paste if you were given one" autocomplete="off" spellcheck="false">
+      <div style="font-size:11px;color:#6b7280;margin-top:4px">
+        Joins this PC to a shared picking database and downloads the starter data.
+        Leave blank to run standalone.
+      </div>
     </div>
     <div id="cred-error"></div>
     <button id="btn-save" onclick="saveCredentials()">Save & Connect</button>
@@ -1210,7 +1218,7 @@
       return
     }
     document.getElementById('cred-overlay').classList.remove('show')
-    window.api.saveCredentials(u, p)
+    window.api.saveCredentials(u, p, document.getElementById('inp-code').value.trim())
   }
 
   document.getElementById('inp-pass').addEventListener('keydown', e => {
