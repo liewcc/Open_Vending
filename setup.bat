@@ -13,6 +13,11 @@ set "NODE_ZIP=node-v%NODE_VERSION%-win-x64.zip"
 set "NODE_URL=https://nodejs.org/dist/v%NODE_VERSION%/%NODE_ZIP%"
 set "PYTHONNOUSERSITE=1"
 set "PYTHONPATH="
+REM Windows PowerShell 5.1 still negotiates TLS 1.0/1.1 by default on some PCs,
+REM and python.org, nodejs.org and pypi all refuse those - the download then
+REM fails with "Could not create SSL/TLS secure channel". Every download below
+REM opts in to TLS 1.2 first.
+set "TLS=[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12;"
 set "PYTHON_VERSION=3.12.7"
 set "PYTHON_ZIP=python-%PYTHON_VERSION%-embed-amd64.zip"
 set "PYTHON_URL=https://www.python.org/ftp/python/%PYTHON_VERSION%/%PYTHON_ZIP%"
@@ -36,7 +41,7 @@ if exist "%PY%" (
 
 echo [1/7] Downloading Python %PYTHON_VERSION%...
 echo [1/7] Downloading Python >> "%LOG%"
-powershell -NoProfile -Command "Invoke-WebRequest -Uri '%PYTHON_URL%' -OutFile '%ROOT%%PYTHON_ZIP%' -UseBasicParsing" >> "%LOG%" 2>&1
+powershell -NoProfile -Command "%TLS%Invoke-WebRequest -Uri '%PYTHON_URL%' -OutFile '%ROOT%%PYTHON_ZIP%' -UseBasicParsing" >> "%LOG%" 2>&1
 if not exist "%ROOT%%PYTHON_ZIP%" (
     echo [ERROR] Python download failed >> "%LOG%"
     echo [ERROR] Python download failed. See setup.log for details.
@@ -60,7 +65,7 @@ if exist "%PYTHON_DIR%\Lib\site-packages\pip" (
 
 echo [2/7] Installing pip...
 echo [2/7] Installing pip >> "%LOG%"
-powershell -NoProfile -Command "Invoke-WebRequest -Uri 'https://bootstrap.pypa.io/get-pip.py' -OutFile '%ROOT%get-pip.py' -UseBasicParsing" >> "%LOG%" 2>&1
+powershell -NoProfile -Command "%TLS%Invoke-WebRequest -Uri 'https://bootstrap.pypa.io/get-pip.py' -OutFile '%ROOT%get-pip.py' -UseBasicParsing" >> "%LOG%" 2>&1
 if not exist "%ROOT%get-pip.py" (
     echo [ERROR] pip download failed >> "%LOG%"
     echo [ERROR] pip download failed. See setup.log for details.
@@ -113,7 +118,7 @@ if exist "%NPM%" (
 
 echo [5/7] Downloading Node.js v%NODE_VERSION%...
 echo [5/7] Downloading Node.js >> "%LOG%"
-powershell -NoProfile -Command "Invoke-WebRequest -Uri '%NODE_URL%' -OutFile '%ROOT%%NODE_ZIP%' -UseBasicParsing" >> "%LOG%" 2>&1
+powershell -NoProfile -Command "%TLS%Invoke-WebRequest -Uri '%NODE_URL%' -OutFile '%ROOT%%NODE_ZIP%' -UseBasicParsing" >> "%LOG%" 2>&1
 if not exist "%ROOT%%NODE_ZIP%" (
     echo [ERROR] Node.js download failed >> "%LOG%"
     echo [ERROR] Node.js download failed. See setup.log for details.
@@ -167,6 +172,7 @@ set "FONT_PS1=%TEMP%\ov_font.ps1"
   echo if ^(-not ^(Test-Path $fontDir^)^) { New-Item -ItemType Directory -Path $fontDir -Force ^| Out-Null }
   echo $url = "https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200^&display=block"
   echo $ua = "Mozilla/5.0 ^(Windows NT 10.0; Win64; x64^) AppleWebKit/537.36 ^(KHTML, like Gecko^) Chrome/120.0.0.0 Safari/537.36"
+  echo [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
   echo $css = Invoke-RestMethod -Uri $url -UserAgent $ua
   echo $matches = [regex]::Matches^($css, 'url\^(^(https://[^^^)]+\.woff2^)\^)'^)
   echo foreach ^($m in $matches^) {
