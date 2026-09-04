@@ -6,9 +6,21 @@
 
 ## Installation
 
+> First time installing this? Follow **[INSTALL.md](INSTALL.md)** instead — the
+> same three steps, spelled out, plus where to put the folder, what to do on
+> first launch, and what to check when something fails.
+
 ### Step 1 — Download
 
-Download or clone this repository to your computer.
+Clone the repository, or download it as a ZIP from
+<https://github.com/liewcc/Open_Vending> and extract it.
+
+```bash
+git clone https://github.com/liewcc/Open_Vending.git C:\Apps\Open_Vending
+```
+
+Do not put the folder inside OneDrive, Google Drive or Dropbox — see
+[DATABASE.md](DATABASE.md).
 
 ### Step 2 — Run setup
 

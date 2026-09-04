@@ -6,9 +6,19 @@
 
 ## 安装
 
+> 第一次安装？请改看 **[INSTALL.zh-CN.md](INSTALL.zh-CN.md)** —— 同样是三步，
+> 但写得更细：文件夹放哪里、首次启动要做什么、出错时怎么查。
+
 ### 第一步 — 下载
 
-将本项目下载或克隆到你的电脑。
+克隆本项目，或从 <https://github.com/liewcc/Open_Vending> 下载 ZIP 后解压。
+
+```bash
+git clone https://github.com/liewcc/Open_Vending.git C:\Apps\Open_Vending
+```
+
+不要把文件夹放在 OneDrive、Google Drive 或 Dropbox 里 —— 原因见
+[DATABASE.md](DATABASE.md)。
 
 ### 第二步 — 运行安装程序
 
