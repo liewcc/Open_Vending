@@ -153,6 +153,7 @@ Git 克隆同样可以用应用内更新按钮，但它会覆盖被版本控制�
 |---|---|
 | 双击 `setup.bat` 没反应 | 文件被锁定。右键 → 属性 → **解除锁定**。或在该目录打开 PowerShell 运行 `.\setup.bat`。 |
 | `[ERROR] ... download failed` | 网络或代理问题。看 `setup.log` 最后几行，然后重新运行 `setup.bat`。 |
+| `setup.log` 出现 *"Could not create SSL/TLS secure channel"* | 这台电脑的 PowerShell 仍在使用 TLS 1.0/1.1，而 python.org 和 nodejs.org 拒绝这些协议。新版本已修复 —— `git pull`（或重新下载 ZIP）后再运行一次 `setup.bat`。 |
 | 弹窗 *"Setup not complete. Please run setup.bat first."* | `setup.bat` 没跑完（通常卡在第 6 步）。重新运行并查看 `setup.log`。 |
 | 桌面没有快捷方式 | 不影响使用 —— 直接运行项目目录里的 `run.vbs`。 |
 | 程序打开但表格空白，日志显示 *no credentials* | 打开**设定** → **Accounts** 卡片，编辑账号重新输入密码。 |

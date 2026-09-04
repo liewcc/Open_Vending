@@ -167,6 +167,7 @@ files, so `git status` will show modified files afterwards.
 |---|---|
 | Double-clicking `setup.bat` does nothing | The file is blocked. Right-click, Properties, **Unblock**. Or open PowerShell in the folder and run `.\setup.bat`. |
 | `[ERROR] ... download failed` | Network or proxy problem. Check the last lines of `setup.log`, then run `setup.bat` again. |
+| `setup.log` says *"Could not create SSL/TLS secure channel"* | This PC's PowerShell is still negotiating TLS 1.0/1.1, which python.org and nodejs.org refuse. Fixed in the current version — `git pull` (or download the ZIP again) and re-run `setup.bat`. |
 | Message box: *"Setup not complete. Please run setup.bat first."* | `setup.bat` never finished (usually step 6). Run it again and read `setup.log`. |
 | No Desktop shortcut | Harmless — launch `run.vbs` in the project folder instead. |
 | App opens but the table stays empty, log says *no credentials* | Open **Settings**, then the **Accounts** card, edit the account and re-enter the password. |
