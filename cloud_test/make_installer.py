@@ -59,9 +59,11 @@ Write-Host '        app files in place'
 
 # 2 - runtime (python, node, chromium, electron) -------------------------------
 Step 2 'Installing the runtime (several minutes, about 300MB)...'
-Push-Location $AppDir
-& cmd.exe /c 'setup.bat' | Out-Null
-Pop-Location
+# Start-Process with an explicit path and working directory: passing the batch
+# file through `cmd.exe /c` fails here, PowerShell mangles the quoted argument
+# and cmd reports 'setup.bat is not recognized'.
+$setup = Join-Path $AppDir 'setup.bat'
+Start-Process -FilePath $setup -WorkingDirectory $AppDir -Wait -NoNewWindow
 if (-not (Test-Path (Join-Path $AppDir 'python\python.exe'))) {{
   throw 'setup.bat did not produce python - check setup.log in the app folder'
 }}
