@@ -381,6 +381,20 @@ function accountsToScan() {
   return due.some(a => a.id === act.id) ? [act, ...due.filter(a => a.id !== act.id)] : due
 }
 
+// Buffer suggestions are derived from the sales history a scan just replaced,
+// so they are stale the moment one lands. Recalculating per account here keeps
+// them true without anyone remembering the button — and without it a second PC
+// silently shows whatever it last computed. Skipped when the scan failed:
+// recomputing off data that did not arrive would only bake in the old numbers.
+function calcSuggestions(acct) {
+  return spawnPy(
+    [BUFFER_STOCK, 'suggest', dataDb(acct), salesDetailDb(acct),
+     String(settings.bufLeadDays || 1),
+     String(settings.bufSembreakFactor || 0.5),
+     String(settings.bufMinOos ?? 2)],
+    null, { OV_DATA_DIR: dataDir(acct), OV_ACCOUNT: acct.id })
+}
+
 async function runScanQueue(accts) {
   if (isDownloading || !accts.length) return
   isDownloading = true
@@ -389,6 +403,7 @@ async function runScanQueue(accts) {
   for (const acct of accts) {
     const ok = await scanAccount(acct)
     if (!ok) allOk = false
+    else await calcSuggestions(acct)
   }
   isDownloading = false
   win.webContents.send('py-done', allOk)
@@ -1310,7 +1325,7 @@ ipcMain.handle('get-forecast-by-weekday', (_, { weekday }) =>
 ipcMain.handle('init-buffer-db',        ()       => spawnPy([BUFFER_STOCK, 'init',    dataDb()], null))
 ipcMain.handle('get-buffer-settings',   ()       => spawnPy([BUFFER_STOCK, 'get',     dataDb()], null))
 ipcMain.handle('set-buffer-qty',        (_, rows) => spawnPy([BUFFER_STOCK, 'set',    dataDb()], rows))
-ipcMain.handle('calc-buffer-suggestions',()      => spawnPy([BUFFER_STOCK, 'suggest',     dataDb(), salesDetailDb(), String(settings.bufLeadDays || 1), String(settings.bufSembreakFactor || 0.5), String(settings.bufMinOos ?? 2)], null))
+ipcMain.handle('calc-buffer-suggestions',()      => calcSuggestions(activeAccount()))
 ipcMain.handle('load-buffer-suggestions',()      => spawnPy([BUFFER_STOCK, 'get_suggest',    dataDb()], null))
 ipcMain.handle('get-lane-types',         ()      => spawnPy([BUFFER_STOCK, 'get_lane_types', dataDb()], null))
 ipcMain.handle('get-replacement-data',   (_, machine) => spawnPy([REPL_SUGGEST, salesDetailDb(), settings.smProductPath || '', machine], null))
