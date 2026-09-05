@@ -6,6 +6,12 @@ so the token is never typed on a command line or left in shell history.
   python tools/enable_shared.py            turn the shared DB on
   python tools/enable_shared.py --status   show which DB the app will use
   python tools/enable_shared.py --disable  go back to the local file
+  python tools/enable_shared.py --code     apply a setup code (reads stdin)
+
+--code exists because the welcome box only appears on a PC's very first run.
+An install that joined the shared DB some other way has the url and token but
+no profile catalogue, so adding a profile there would find no data to restore.
+Pipe the code in:  Get-Clipboard | python tools/enable_shared.py --code
 
 Restart the app afterwards — main.js reads settings only at startup.
 """
@@ -43,9 +49,45 @@ def status():
         "SHARED hosted DB" if (u and t) else "LOCAL db/vending.db"))
 
 
+def apply_code(raw):
+    """Decode a setup code into settings: shared DB credentials plus the
+    catalogue that tells a restored profile which data is its own."""
+    import base64
+    code = "".join(raw.split())        # codes arrive wrapped by whatever carried them
+    if not code:
+        sys.exit("no setup code given — pipe it in, or pass it after --code")
+    try:
+        cfg = json.loads(base64.urlsafe_b64decode(code))
+    except Exception as e:
+        sys.exit("that does not decode as a setup code: {}".format(e))
+    if not cfg.get("remoteUrl") or not cfg.get("remoteToken"):
+        sys.exit("no shared database in that code")
+
+    d = load_settings()
+    d["remoteUrl"] = cfg["remoteUrl"]
+    d["remoteToken"] = cfg["remoteToken"]
+    profiles = cfg.get("profiles") or {}
+    d["seedProfiles"] = profiles
+    save_settings(d)
+
+    print("shared DB on — {}".format(cfg["remoteUrl"].split("//")[-1]))
+    if profiles:
+        print("profiles this PC can now restore:")
+        for v in profiles.values():
+            print("  {:8} id={}".format(v.get("label", "?"), v.get("id", "?")))
+    else:
+        print("WARNING: that code carries no profile catalogue — regenerate it "
+              "with setup_code.bat on the source PC")
+
+
 def main():
     if "--status" in sys.argv:
         return status()
+
+    if "--code" in sys.argv:
+        i = sys.argv.index("--code")
+        inline = " ".join(sys.argv[i + 1:]).strip()
+        return apply_code(inline or sys.stdin.read())
 
     d = load_settings()
     if "--disable" in sys.argv:

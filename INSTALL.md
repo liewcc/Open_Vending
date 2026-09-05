@@ -167,15 +167,26 @@ Open the **Picking List** afterwards; it should now list your machines.
 ## 6. Joining a shared database later
 
 Skipped the setup code, or were given one after installing? The welcome box only
-appears on the very first run, so joining afterwards is a two-step job:
+appears on the very first run, so apply the code from the project folder instead.
+Copy it on the source PC with `setup_code.bat`, then on this PC:
 
-1. Put the `turso.json` you were given in the **project root** (next to
-   `setup.bat`). It is gitignored and never leaves this PC.
-2. From the project folder:
+```bash
+Get-Clipboard | .\python\python.exe tools\enable_shared.py --code
+```
+
+It prints the profiles this PC can then restore. Do this **before** adding any
+profile: without the catalogue a profile cannot find its own data in the cloud,
+and it would be created under the wrong identity.
+
+If you were given a `turso.json` rather than a setup code, put it in the project
+root (next to `setup.bat` — it is gitignored and never leaves this PC) and run:
 
 ```bash
 .\python\python.exe tools\enable_shared.py
 ```
+
+That joins the shared database but carries no catalogue, so added profiles start
+empty. Prefer the setup code.
 
 Restart the app — settings are read only at startup. Check which database it
 will use at any time with:
