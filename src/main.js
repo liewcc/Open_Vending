@@ -763,7 +763,12 @@ ipcMain.handle('add-account', (_, { label, username, password, landingUrl }) => 
   username = String(username || '').trim()
   if (!label || !username || !password) return { ok: false, error: 'Name, login ID and password are all required' }
 
-  const id = accountId(username)
+  // A login the setup code has data for keeps the id it has on the source PC:
+  // the shared tables are scoped by id, so minting a fresh one here would read
+  // empty buffers and empty pick history despite the rows existing. Its own
+  // primary id is never adopted — that would collide with this PC's primary.
+  const entry = seedEntryFor(username)
+  const id = (entry && entry.id && entry.id !== PRIMARY_ID) ? entry.id : accountId(username)
   const clash = accounts.accounts.find(a => a.id === id)
   if (clash) return { ok: false, error: `That portal login is already added as "${clash.label}"` }
   const acct = {
@@ -779,7 +784,7 @@ ipcMain.handle('add-account', (_, { label, username, password, landingUrl }) => 
   // new PC then shows what the source PC shows, not an empty table.
   // Fetch its first report after that, so the account is usable without a
   // restart and any credential mistake surfaces immediately.
-  seedAccount(acct, (settings.seedProfiles || {})[id]).then(() => runScanQueue([acct]))
+  seedAccount(acct, entry).then(() => runScanQueue([acct]))
   return { ok: true, id, accounts: publicAccounts() }
 })
 

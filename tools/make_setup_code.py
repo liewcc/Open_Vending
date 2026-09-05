@@ -56,7 +56,10 @@ def main():
     if MANIFEST.exists():
         for prof in json.loads(MANIFEST.read_text(encoding="utf-8")):
             key = prof["key"]
-            entry = {"label": prof.get("label") or key}
+            # The source PC's own id travels with the entry: the hosted rows
+            # are scoped to it, so a new PC that minted its own id from the
+            # login would read empty buffers even with the data right there.
+            entry = {"label": prof.get("label") or key, "id": prof["id"]}
             db = public.get("seed-{}.db.gz".format(key))
             rep = public.get("report-{}.xlsx".format(key))
             if db:
