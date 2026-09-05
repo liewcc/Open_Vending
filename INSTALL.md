@@ -124,8 +124,14 @@ the project folder — both do the same thing).
    login entered once.
 
 2. If you pasted a setup code, the app joins the shared picking database and
-   downloads the starter database (about 46 MB), reporting progress in the Log
-   card. This happens once. An existing database is never overwritten.
+   downloads the starter data for the login you just entered — its sales history
+   and its current report — reporting progress in the Log card. This happens
+   once. An existing database is never overwritten.
+
+   The profile list starts empty beyond this first login. Add the other profiles
+   from Settings, entering each one's portal username and password; each pulls
+   down its own history automatically, so the PC ends up showing what the source
+   PC shows. The setup code never carries a username or a password.
 
 3. The app then signs in to the portal and downloads today's replenishment
    report. The first scan takes a few minutes. Watch the status line at the

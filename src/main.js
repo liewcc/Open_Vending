@@ -11,7 +11,7 @@ const ROOT          = path.join(__dirname, '..')
 const CRED_FILE     = path.join(app.getPath('userData'), 'credentials.enc')
 const SETTINGS_FILE = path.join(app.getPath('userData'), 'settings.json')
 const ACCOUNTS_FILE = path.join(app.getPath('userData'), 'accounts.json')
-const DEFAULT_SETTINGS = { menuBar: false, showConsole: false, closeTray: false, notifyChanges: false, autoDownload: false, autoDownloadInterval: 30, headedBrowser: false, landingUrl: 'https://vendingportal.azurewebsites.net/SuperAdmin/SPLogin.aspx', q3ThresholdPct: 50, uiZoom: 100, pdfPaperSize: 'A4', pdfFontPct: 100, pdfMarginTop: 12, pdfMarginBottom: 12, pdfMarginLeft: 12, pdfMarginRight: 12, pdfPages: 1, showWeekBadges: true, pdfDuplex: true, remoteUrl: '', remoteToken: '' }
+const DEFAULT_SETTINGS = { menuBar: false, showConsole: false, closeTray: false, notifyChanges: false, autoDownload: false, autoDownloadInterval: 30, headedBrowser: false, landingUrl: 'https://vendingportal.azurewebsites.net/SuperAdmin/SPLogin.aspx', q3ThresholdPct: 50, uiZoom: 100, pdfPaperSize: 'A4', pdfFontPct: 100, pdfMarginTop: 12, pdfMarginBottom: 12, pdfMarginLeft: 12, pdfMarginRight: 12, pdfPages: 1, showWeekBadges: true, pdfDuplex: true, remoteUrl: '', remoteToken: '', seedProfiles: {} }
 const F9_TRIGGER    = path.join(ROOT, 'db', '.f9_trigger')
 const BROWSER_STOP  = path.join(ROOT, 'db', '.browser_stop')
 const ICON_PNG = path.join(ROOT, 'asset', 'image', 'icon_nobg.png')
@@ -62,6 +62,30 @@ function loadAccounts() {
 
 function saveAccounts() {
   fs.writeFileSync(ACCOUNTS_FILE, JSON.stringify(accounts, null, 2))
+  writeProfileManifest()
+}
+
+// The seed publisher and the setup-code generator are Python, and Python cannot
+// read credentials.enc — safeStorage is Electron/DPAPI. So the app writes the
+// one fact they need: which portal login owns which profile, as the same hash
+// add-account derives an id from. A new PC can then match a typed login to the
+// right cloud seed without the code ever carrying a username or password.
+const MANIFEST = () => path.join(ROOT, 'db', 'profiles.json')
+
+function writeProfileManifest() {
+  try {
+    const rows = accounts.accounts.map(a => {
+      const c = loadCredentials(a.id)
+      return {
+        key:   c ? accountId(c.username) : a.id,   // no creds yet: id is the best we have
+        id:    a.id,
+        label: a.label || a.id,
+        dir:   a.dir || null
+      }
+    })
+    fs.mkdirSync(path.dirname(MANIFEST()), { recursive: true })
+    fs.writeFileSync(MANIFEST(), JSON.stringify(rows, null, 2))
+  } catch { /* advisory file — never block the app on it */ }
 }
 
 // Lazy so it is safe to call before app.whenReady()
@@ -502,6 +526,7 @@ app.whenReady().then(() => {
     firstLoad = false
 
     prunePdfExports()
+    writeProfileManifest()
 
     if (cachedCreds) {
       runScanQueue(accountsToScan())
@@ -562,12 +587,13 @@ function applySetupCode(code) {
   if (!cfg.remoteUrl || !cfg.remoteToken) throw new Error('no shared database in it')
   settings.remoteUrl   = cfg.remoteUrl
   settings.remoteToken = cfg.remoteToken
+  settings.seedProfiles = cfg.profiles || {}
   saveSettings()
   return cfg.seedUrl || ''
 }
 
 // Node's https does not follow redirects and the seed link does redirect.
-function fetchGunzip(url, dest, onProgress, depth = 0) {
+function fetchDownload(url, dest, gunzip, onProgress, depth = 0) {
   return new Promise((resolve, reject) => {
     if (depth > 5) return reject(new Error('too many redirects'))
     // Without this a stalled connection hangs first run forever: the scan only
@@ -575,54 +601,81 @@ function fetchGunzip(url, dest, onProgress, depth = 0) {
     const req = https.get(url, res => {
       if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
         res.resume()
-        return resolve(fetchGunzip(new URL(res.headers.location, url).href, dest, onProgress, depth + 1))
+        return resolve(fetchDownload(new URL(res.headers.location, url).href, dest, gunzip, onProgress, depth + 1))
       }
       if (res.statusCode !== 200) { res.resume(); return reject(new Error('HTTP ' + res.statusCode)) }
       const total = Number(res.headers['content-length'] || 0)
       let got = 0
       res.on('data', c => { got += c.length; onProgress(got, total) })
-      const gunzip = zlib.createGunzip()
-      const out    = fs.createWriteStream(dest)
-      res.pipe(gunzip).pipe(out)
+      const out = fs.createWriteStream(dest)
+      const zip = gunzip ? zlib.createGunzip() : null
+      if (zip) res.pipe(zip).pipe(out); else res.pipe(out)
       out.on('finish', resolve)
-      for (const s of [res, gunzip, out]) s.on('error', reject)
+      for (const st of [res, zip, out]) if (st) st.on('error', reject)
     }).on('error', reject)
     req.setTimeout(60000, () => req.destroy(new Error('timed out')))
   })
 }
 
+// The catalogue in the setup code is keyed by a hash of the portal login, so a
+// typed username finds its own data with no username or password in the code.
+function seedEntryFor(username) {
+  const cat = settings.seedProfiles || {}
+  return cat[accountId(username)] || null
+}
+
 // Never overwrites a database that already holds data — re-running first-run
 // setup on an established PC must not throw its history away.
-async function seedDatabase(url) {
-  const target = vendingDb()
-  if (fs.existsSync(target) && fs.statSync(target).size > 1_000_000) {
-    win.webContents.send('py-out', 'Starter database skipped — this account already has one.')
-    return
-  }
-  fs.mkdirSync(path.dirname(target), { recursive: true })
-  const tmp = target + '.seeding'
-  let lastMb = -1
-  win.webContents.send('py-out', 'Downloading starter database...')
-  try {
-    await fetchGunzip(url, tmp, (got, total) => {
-      const mb = Math.floor(got / 1048576)
-      if (mb === lastMb) return
-      lastMb = mb
+async function seedAccount(acct, entry) {
+  if (!entry) return
+  const label = acct.label || acct.id
+
+  const target = vendingDb(acct)
+  if (entry.db && fs.existsSync(target) && fs.statSync(target).size > 1_000_000) {
+    win.webContents.send('py-out', `Starter database skipped — ${label} already has one.`)
+  } else if (entry.db) {
+    fs.mkdirSync(path.dirname(target), { recursive: true })
+    const tmp = target + '.seeding'
+    let lastMb = -1
+    win.webContents.send('py-out', `Downloading ${label} database...`)
+    try {
+      await fetchDownload(entry.db, tmp, true, (got, total) => {
+        const mb = Math.floor(got / 1048576)
+        if (mb === lastMb) return
+        lastMb = mb
+        win.webContents.send('py-out',
+          `  ${mb} MB${total ? ' of ' + Math.round(total / 1048576) + ' MB' : ''}`)
+      })
+      fs.renameSync(tmp, target)
+      win.webContents.send('py-out', `${label} database ready.`)
+    } catch (e) {
+      fs.rmSync(tmp, { force: true })
       win.webContents.send('py-out',
-        `  ${mb} MB${total ? ' of ' + Math.round(total / 1048576) + ' MB' : ''}`)
-    })
-    fs.renameSync(tmp, target)
-    win.webContents.send('py-out', 'Starter database ready.')
-  } catch (e) {
-    fs.rmSync(tmp, { force: true })
-    win.webContents.send('py-out',
-      `Starter database failed (${e.message}) — starting empty, everything else still works.`)
+        `${label} database failed (${e.message}) — starting empty, everything else still works.`)
+    }
+  }
+
+  // The machine list, picking list and buffer screens render from this file,
+  // not from the database — without it a fully seeded profile shows an empty
+  // table until someone runs a scan.
+  if (entry.report) {
+    const rep = lastReport(acct)
+    const tmp = rep + '.seeding'
+    try {
+      await fetchDownload(entry.report, tmp, false, () => {})
+      fs.renameSync(tmp, rep)
+      win.webContents.send('py-out', `${label} report ready.`)
+    } catch (e) {
+      fs.rmSync(tmp, { force: true })
+      win.webContents.send('py-out', `${label} report failed (${e.message}).`)
+    }
   }
 }
 
 ipcMain.on('save-credentials', async (_, { username, password, setupCode }) => {
   saveCredentials(username, password)
   cachedCreds = { username, password }
+  writeProfileManifest()          // the primary's key is only knowable now
   if (setupCode) {
     let seedUrl = ''
     try {
@@ -633,7 +686,9 @@ ipcMain.on('save-credentials', async (_, { username, password, setupCode }) => {
       win.webContents.send('py-out',
         `Setup code not understood (${e.message}) — continuing as a standalone install.`)
     }
-    if (seedUrl) await seedDatabase(seedUrl)
+    // Legacy codes carry one bare seedUrl and no catalogue.
+    const entry = seedEntryFor(username) || (seedUrl ? { db: seedUrl } : null)
+    await seedAccount(activeAccount(), entry)
   }
   runScanQueue([activeAccount()])
 })
@@ -719,9 +774,12 @@ ipcMain.handle('add-account', (_, { label, username, password, landingUrl }) => 
   saveCredentials(username, password, id)   // also migrates a legacy cred file
   saveAccounts()
   initAccount(acct)                          // creates the folder + its tables
-  // Fetch its first report now, so the account is usable without a restart and
-  // any credential mistake surfaces immediately rather than at the next launch.
-  runScanQueue([acct])
+  // The account id and the catalogue key are the same hash of this login, so
+  // the profile's own history and report come down before the first scan — a
+  // new PC then shows what the source PC shows, not an empty table.
+  // Fetch its first report after that, so the account is usable without a
+  // restart and any credential mistake surfaces immediately.
+  seedAccount(acct, (settings.seedProfiles || {})[id]).then(() => runScanQueue([acct]))
   return { ok: true, id, accounts: publicAccounts() }
 })
 

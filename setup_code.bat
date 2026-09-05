@@ -19,11 +19,18 @@ if not exist "%PY%" (
     exit /b 1
 )
 
+echo  Publishing each profile's data to the cloud...
+echo  ^(first run uploads a few hundred MB and takes a while^)
+echo.
+"%PY%" "%~dp0tools\drive_sync.py" publish
+if errorlevel 1 goto :fail
+echo.
+
 "%PY%" "%~dp0tools\make_setup_code.py" --out "%TMPCODE%"
 if errorlevel 1 goto :fail
 if not exist "%TMPCODE%" goto :fail
 
-REM Straight to the clipboard - the code is ~750 characters and selecting it
+REM Straight to the clipboard - the code is ~1700 characters and selecting it
 REM out of a console window by hand is how it gets truncated.
 type "%TMPCODE%" | clip
 del "%TMPCODE%"

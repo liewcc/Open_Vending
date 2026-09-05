@@ -9,6 +9,7 @@ created itself, never the rest of the user's Drive.
   python tools/drive_sync.py push <file>     upload (resumable, replaces by name)
   python tools/drive_sync.py list            what's in the folder
   python tools/drive_sync.py pull <name> <dest>
+  python tools/drive_sync.py publish         push+share every profile's data
 
 Needs client_secret.json (OAuth client ID, type "Desktop app") beside this file.
 token.json and client_secret.json are gitignored — never commit them.
@@ -290,6 +291,60 @@ def unshare(name):
     print("revoked {} public link(s) on {}".format(removed, name))
 
 
+MANIFEST = ROOT / "db" / "profiles.json"
+
+
+def _profiles():
+    """Written by the app: which portal login owns which profile. Python cannot
+    read credentials.enc itself (Electron DPAPI), so this is the only link
+    between a login and its data."""
+    if not MANIFEST.exists():
+        sys.exit("no {} — start the app once so it can write the profile list".format(MANIFEST))
+    return json.loads(MANIFEST.read_text(encoding="utf-8"))
+
+
+def publish():
+    """Push and share every profile's database and last report.
+
+    A new PC needs both: the database carries the history, and last_report.xlsx
+    is what the machine list, picking list and buffer screens actually render
+    from — a seeded database alone still shows an empty table.
+    """
+    import gzip
+    import shutil
+    import tempfile
+
+    for prof in _profiles():
+        folder = ROOT / "db" if not prof.get("dir") else ROOT / "db" / prof["dir"]
+        key = prof["key"]
+        print("\n=== {} ({}) ===".format(prof.get("label") or key, key))
+
+        db = folder / "vending.db"
+        if db.exists():
+            gz = Path(tempfile.gettempdir()) / "seed-{}.db.gz".format(key)
+            print("  compressing {:.0f} MB ...".format(db.stat().st_size / 1e6))
+            with open(db, "rb") as fin, gzip.open(gz, "wb", compresslevel=6) as fout:
+                shutil.copyfileobj(fin, fout, 1 << 20)
+            print("  -> {:.0f} MB, uploading".format(gz.stat().st_size / 1e6))
+            push(str(gz))
+            share(gz.name)
+            gz.unlink(missing_ok=True)
+        else:
+            print("  no vending.db yet — skipped")
+
+        rep = folder / "last_report.xlsx"
+        if rep.exists():
+            named = Path(tempfile.gettempdir()) / "report-{}.xlsx".format(key)
+            shutil.copyfile(rep, named)
+            push(str(named))
+            share(named.name)
+            named.unlink(missing_ok=True)
+        else:
+            print("  no last_report.xlsx yet — skipped")
+
+    print("\nVERDICT  PASS — every profile published")
+
+
 def ls():
     url = API + "/files?" + urllib.parse.urlencode({
         "q": "'{}' in parents and trashed=false".format(_folder_id()),
@@ -323,6 +378,8 @@ if __name__ == "__main__":
         ls()
     elif cmd == "share":
         share(a[1] if len(a) > 1 else "seed.db.gz")
+    elif cmd == "publish":
+        publish()
     elif cmd == "unshare":
         unshare(a[1] if len(a) > 1 else "seed.db.gz")
     else:
