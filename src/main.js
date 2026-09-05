@@ -4,6 +4,7 @@ const path = require('path')
 const fs   = require('fs')
 const os   = require('os')
 const https = require('https')
+const crypto = require('crypto')
 const zlib  = require('zlib')
 
 const ROOT          = path.join(__dirname, '..')
@@ -650,8 +651,17 @@ ipcMain.handle('get-current-report', () => {
 
 // ── Account management ────────────────────────────────────────────────────────
 
-function slugify(s) {
-  return String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 24)
+// The account id scopes this profile's rows in the shared hosted DB, so it has
+// to mean the same thing on every PC and must never be handed to a different
+// portal account later. A label cannot do that: it is typed per machine, so two
+// PCs naming one account differently split it in two, naming two accounts alike
+// merges them, and a deleted name reissued to another account inherits its rows.
+// The portal login is the thing that actually identifies the account, and it is
+// already the same on both PCs — so derive the id from it and nothing travels.
+function accountId(username) {
+  return 'a' + crypto.createHash('sha256')
+    .update(String(username).trim().toLowerCase())
+    .digest('hex').slice(0, 10)
 }
 
 // Never includes passwords — those only leave main via reveal-credential, one
@@ -683,12 +693,9 @@ ipcMain.handle('add-account', (_, { label, username, password, landingUrl }) => 
   username = String(username || '').trim()
   if (!label || !username || !password) return { ok: false, error: 'Name, login ID and password are all required' }
 
-  let id = slugify(label) || 'account'
-  if (accounts.accounts.some(a => a.id === id)) {
-    let n = 2
-    while (accounts.accounts.some(a => a.id === `${id}-${n}`)) n++
-    id = `${id}-${n}`
-  }
+  const id = accountId(username)
+  const clash = accounts.accounts.find(a => a.id === id)
+  if (clash) return { ok: false, error: `That portal login is already added as "${clash.label}"` }
   const acct = {
     id, label, dir: `accounts/${id}`, scan: true,
     landingUrl: String(landingUrl || '').trim() || DEFAULT_SETTINGS.landingUrl
