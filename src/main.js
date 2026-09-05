@@ -626,12 +626,12 @@ function seedEntryFor(username) {
 
 // Never overwrites a database that already holds data — re-running first-run
 // setup on an established PC must not throw its history away.
-async function seedAccount(acct, entry) {
+async function seedAccount(acct, entry, force = false) {
   if (!entry) return
   const label = acct.label || acct.id
 
   const target = vendingDb(acct)
-  if (entry.db && fs.existsSync(target) && fs.statSync(target).size > 1_000_000) {
+  if (entry.db && !force && fs.existsSync(target) && fs.statSync(target).size > 1_000_000) {
     win.webContents.send('py-out', `Starter database skipped — ${label} already has one.`)
   } else if (entry.db) {
     fs.mkdirSync(path.dirname(target), { recursive: true })
@@ -750,6 +750,7 @@ function publicAccounts() {
         folder: dataDir(a),
         username: c ? c.username : '',
         hasPassword: !!c,
+        canRestore: !!(c && seedEntryFor(c.username)),
         status: scanStatus[a.id] || null
       }
     })
@@ -757,6 +758,28 @@ function publicAccounts() {
 }
 
 ipcMain.handle('get-accounts', () => publicAccounts())
+
+// Seeding otherwise only fires on the welcome screen or when a profile is
+// added, so a PC that joined the shared DB some other way — or was installed
+// before its profiles were published — can never pull its history down. This
+// is that path, run by hand from Settings when it is actually wanted.
+ipcMain.handle('restore-account-data', async (_, { id, force }) => {
+  const a = accounts.accounts.find(x => x.id === id)
+  if (!a) return { ok: false, error: 'Account not found.' }
+  const c = loadCredentials(a.id)
+  const entry = c ? seedEntryFor(c.username) : null
+  if (!entry) {
+    return { ok: false, error: 'No cloud copy for this profile’s login. Apply a current '
+      + 'setup code first, then try again.' }
+  }
+  // Replacing a database that already holds data throws away everything
+  // scanned here since the cloud copy was published — never silently.
+  const db = vendingDb(a)
+  const mb = fs.existsSync(db) ? fs.statSync(db).size / 1048576 : 0
+  if (!force && mb > 1) return { ok: false, needsConfirm: true, sizeMB: Math.round(mb) }
+  await seedAccount(a, entry, true)
+  return { ok: true }
+})
 
 ipcMain.handle('add-account', (_, { label, username, password, landingUrl }) => {
   label    = String(label || '').trim()

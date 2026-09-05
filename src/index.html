@@ -1425,6 +1425,8 @@
           <input type="checkbox" ${a.scan ? 'checked' : ''} onchange="acctSetScan('${acctEsc(a.id)}', this.checked)">
           <span class="slider"></span>
         </label>
+        ${a.canRestore ? `<button class="pick-icon-btn" onclick="acctRestore('${acctEsc(a.id)}')"
+          title="Download this profile's data from the cloud"><span class="icon">cloud_download</span></button>` : ''}
         <button class="pick-icon-btn" onclick="acctShowForm('${acctEsc(a.id)}')" title="Edit"><span class="icon">edit</span></button>
         <button class="pick-icon-btn" onclick="acctRemove('${acctEsc(a.id)}')" title="${
           a.id === acctData.primary ? 'The primary account cannot be removed' : 'Remove'}"
@@ -1434,6 +1436,25 @@
     // With one account the checkbox is meaningless — it always scans
     if (single) document.querySelectorAll('#acct-list .switch input').forEach(i => { i.disabled = true })
     renderCapsules()
+  }
+
+  // Pulls this profile's database and report down from the cloud. Progress goes
+  // to the Log card, same as a first-run seed.
+  async function acctRestore(id) {
+    let r = await window.api.restoreAccountData(id, false)
+    if (r && r.needsConfirm) {
+      const ok = confirm(
+        `This profile already has a ${r.sizeMB} MB database on this PC.
+
+` +
+        `Replacing it with the cloud copy discards anything scanned here since ` +
+        `that copy was published.
+
+Replace it?`)
+      if (!ok) return
+      r = await window.api.restoreAccountData(id, true)
+    }
+    if (r && !r.ok && !r.needsConfirm) alert(r.error || 'Restore failed.')
   }
 
   async function acctReveal(id) {
