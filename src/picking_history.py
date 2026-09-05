@@ -21,12 +21,14 @@ def _report_remote_failure(exc_type, exc, tb):
 
 sys.excepthook = _report_remote_failure
 
-cmd = sys.argv[1] if len(sys.argv) > 1 else ''
+# The hosted DB holds every account's picks in one table, so every statement
+# below is scoped to the active account — without it a second profile with the
+# same machine name would collide on UNIQUE(machine, lane_no, pick_date).
+ACCOUNT = remote_db.ACCOUNT
 
-if cmd == 'init':
-    conn = get_conn()
-    conn.execute("""CREATE TABLE IF NOT EXISTS picking_history (
+DDL = """CREATE TABLE IF NOT EXISTS picking_history (
         id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        account      TEXT    NOT NULL DEFAULT 'dvends',
         machine      TEXT    NOT NULL,
         lane_no      TEXT    NOT NULL,
         product_id   TEXT,
@@ -37,16 +39,27 @@ if cmd == 'init':
         status       TEXT    DEFAULT 'pending',
         created_at   TEXT    DEFAULT (datetime('now')),
         cleared_at   TEXT,
-        UNIQUE(machine, lane_no, pick_date)
-    )""")
-    conn.commit(); conn.close()
+        UNIQUE(account, machine, lane_no, pick_date)
+    )"""
+COLS = ["id", "machine", "lane_no", "product_id", "product_name", "picked_qty",
+        "out_of_stock", "pick_date", "status", "created_at", "cleared_at"]
+
+cmd = sys.argv[1] if len(sys.argv) > 1 else ''
+
+if cmd == 'init':
+    conn = get_conn()
+    conn.execute(DDL)
+    conn.commit()
+    remote_db.ensure_account_column(conn, "picking_history", DDL, COLS)
+    conn.close()
     print(json.dumps({"ok": True}))
 
 elif cmd == 'auto-clear':
     conn = get_conn()
     cur = conn.execute(
         "UPDATE picking_history SET status='auto_cleared', cleared_at=datetime('now') "
-        "WHERE status='pending' AND created_at < datetime('now', '-36 hours')"
+        "WHERE status='pending' AND created_at < datetime('now', '-36 hours') "
+        "AND account=?", (ACCOUNT,)
     )
     conn.commit(); conn.close()
     print(json.dumps({"cleared": cur.rowcount}))
@@ -56,7 +69,8 @@ elif cmd == 'get-pending':
         print(json.dumps({})); sys.exit(0)
     conn = get_conn()
     rows = conn.execute(
-        "SELECT machine, lane_no, picked_qty FROM picking_history WHERE status='pending'"
+        "SELECT machine, lane_no, picked_qty FROM picking_history "
+        "WHERE status='pending' AND account=?", (ACCOUNT,)
     ).fetchall()
     conn.close()
     result = {}
@@ -72,8 +86,8 @@ elif cmd == 'get-pending-detail':
     conn = get_conn()
     rows = conn.execute(
         "SELECT machine, lane_no, product_id, product_name, picked_qty "
-        "FROM picking_history WHERE status='pending' "
-        "ORDER BY machine, CAST(lane_no AS INTEGER)"
+        "FROM picking_history WHERE status='pending' AND account=? "
+        "ORDER BY machine, CAST(lane_no AS INTEGER)", (ACCOUNT,)
     ).fetchall()
     conn.close()
     result = {}
@@ -92,8 +106,8 @@ elif cmd == 'get-oos-counts':
     conn = get_conn()
     rows = conn.execute(
         "SELECT machine, lane_no, COUNT(*) as cnt FROM picking_history "
-        "WHERE out_of_stock=1 AND pick_date >= date('now', '-7 days') "
-        "GROUP BY machine, lane_no"
+        "WHERE out_of_stock=1 AND pick_date >= date('now', '-7 days') AND account=? "
+        "GROUP BY machine, lane_no", (ACCOUNT,)
     ).fetchall()
     conn.close()
     result = {}
@@ -119,22 +133,23 @@ elif cmd == 'save-picks':
     if replace_machines:
         placeholders = ','.join('?' * len(replace_machines))
         conn.execute(
-            f"DELETE FROM picking_history WHERE machine IN ({placeholders}) AND status='pending'",
-            replace_machines
+            f"DELETE FROM picking_history WHERE machine IN ({placeholders}) "
+            f"AND status='pending' AND account=?",
+            replace_machines + [ACCOUNT]
         )
     saved = 0
     for p in picks:
         # Clear stale pending if product changed in this lane
         conn.execute(
             "DELETE FROM picking_history WHERE machine=? AND lane_no=? "
-            "AND status='pending' AND product_id != ?",
-            (p['machine'], p['lane_no'], p.get('product_id', ''))
+            "AND status='pending' AND product_id != ? AND account=?",
+            (p['machine'], p['lane_no'], p.get('product_id', ''), ACCOUNT)
         )
         conn.execute(
             "INSERT OR REPLACE INTO picking_history "
-            "(machine, lane_no, product_id, product_name, picked_qty, out_of_stock, pick_date, status) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')",
-            (p['machine'], p['lane_no'], p.get('product_id',''), p.get('product_name',''),
+            "(account, machine, lane_no, product_id, product_name, picked_qty, out_of_stock, pick_date, status) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending')",
+            (ACCOUNT, p['machine'], p['lane_no'], p.get('product_id',''), p.get('product_name',''),
              p['picked_qty'], p.get('out_of_stock', 0), p['pick_date'])
         )
         saved += 1
@@ -146,7 +161,8 @@ elif cmd == 'get-history-dates':
         print(json.dumps([])); sys.exit(0)
     conn = get_conn()
     rows = conn.execute(
-        "SELECT DISTINCT pick_date FROM picking_history ORDER BY pick_date DESC"
+        "SELECT DISTINCT pick_date FROM picking_history WHERE account=? "
+        "ORDER BY pick_date DESC", (ACCOUNT,)
     ).fetchall()
     conn.close()
     print(json.dumps([r['pick_date'] for r in rows]))
@@ -158,8 +174,9 @@ elif cmd == 'get-history-by-date':
     conn = get_conn()
     rows = conn.execute(
         "SELECT machine, lane_no, product_id, product_name, picked_qty, out_of_stock, status "
-        "FROM picking_history WHERE pick_date=? ORDER BY machine, CAST(lane_no AS INTEGER)",
-        (date,)
+        "FROM picking_history WHERE pick_date=? AND account=? "
+        "ORDER BY machine, CAST(lane_no AS INTEGER)",
+        (date, ACCOUNT)
     ).fetchall()
     conn.close()
     result = {}
@@ -186,8 +203,8 @@ elif cmd == 'get-week-summary':
     conn = get_conn()
     rows = conn.execute(
         "SELECT DISTINCT machine, pick_date FROM picking_history "
-        "WHERE pick_date BETWEEN ? AND ? ORDER BY machine, pick_date",
-        (d_from, d_to)
+        "WHERE pick_date BETWEEN ? AND ? AND account=? ORDER BY machine, pick_date",
+        (d_from, d_to, ACCOUNT)
     ).fetchall()
     conn.close()
     result = {}
@@ -203,8 +220,8 @@ elif cmd == 'mark-done':
     placeholders = ','.join('?' * len(machines))
     cur = conn.execute(
         f"UPDATE picking_history SET status='done', cleared_at=datetime('now') "
-        f"WHERE machine IN ({placeholders}) AND status='pending'",
-        machines
+        f"WHERE machine IN ({placeholders}) AND status='pending' AND account=?",
+        machines + [ACCOUNT]
     )
     conn.commit(); conn.close()
     print(json.dumps({"done": cur.rowcount}))

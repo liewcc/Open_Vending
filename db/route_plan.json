@@ -24,7 +24,7 @@
     "Dewan Peperiksaan M2-5": {
       "team": "5530",
       "scheduleDays": [],
-      "mode": "sembreak"
+      "mode": "normal"
     },
     "ELKEN HQ GF M4 Single": {
       "team": "1126",
@@ -38,14 +38,7 @@
     },
     "KK 11C M5": {
       "team": "5530",
-      "scheduleDays": [
-        "Mon",
-        "Tue",
-        "Wed",
-        "Thu",
-        "Fri",
-        "Sat"
-      ],
+      "scheduleDays": [],
       "mode": "normal"
     },
     "KK 2F M5": {
@@ -116,7 +109,7 @@
     "KK8B M3": {
       "team": "5530",
       "scheduleDays": [],
-      "mode": "sembreak"
+      "mode": "short"
     },
     "KK9 M3": {
       "team": "5530",

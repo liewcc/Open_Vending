@@ -235,3 +235,36 @@ def connect(local_path):
         conn.row_factory = sqlite3.Row
         return conn
     return RemoteConn()
+
+
+# ── Account scoping ───────────────────────────────────────────────────────────
+# The hosted DB holds every account's rows in one table, so machine+lane is not
+# a unique key across accounts: two profiles with the same machine name would
+# overwrite each other. Every shared table carries the account id, supplied by
+# main.js; unset means the primary account, which is what the pre-account rows
+# already are.
+
+ACCOUNT = os.environ.get("OV_ACCOUNT") or "dvends"
+
+
+def ensure_account_column(conn, table, new_ddl, cols):
+    """Rebuild `table` with an account column if it predates account scoping.
+
+    Idempotent and safe on both connection types: a missing table is left to
+    the caller's CREATE, an already-migrated one is untouched. SQLite cannot
+    ALTER a primary key, hence the copy-drop-rename.
+    """
+    names = [r[1] for r in conn.execute(
+        "PRAGMA table_info({})".format(table)).fetchall()]
+    if not names or "account" in names:
+        return False
+    tmp = table + "_acct_new"
+    conn.execute("DROP TABLE IF EXISTS {}".format(tmp))
+    conn.execute(new_ddl.replace(table, tmp, 1))
+    conn.execute(
+        "INSERT INTO {} (account, {cols}) SELECT '{acct}', {cols} FROM {src}".format(
+            tmp, cols=", ".join(cols), acct=ACCOUNT, src=table))
+    conn.execute("DROP TABLE {}".format(table))
+    conn.execute("ALTER TABLE {} RENAME TO {}".format(tmp, table))
+    conn.commit()
+    return True

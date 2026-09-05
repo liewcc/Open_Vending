@@ -90,8 +90,8 @@ const salesForecastDb = vendingDb
 // account, and again whenever the active account changes — a window reload
 // does not re-run app.whenReady().
 function initAccount(acct) {
-  spawnPy([PICKING_HISTORY, 'init'], null, { OV_DATA_DIR: dataDir(acct) })
-  spawnPy([BUFFER_STOCK, 'init', vendingDb(acct)], null, { OV_DATA_DIR: dataDir(acct) })
+  spawnPy([PICKING_HISTORY, 'init'], null, { OV_DATA_DIR: dataDir(acct), OV_ACCOUNT: acct.id })
+  spawnPy([BUFFER_STOCK, 'init', vendingDb(acct)], null, { OV_DATA_DIR: dataDir(acct), OV_ACCOUNT: acct.id })
 }
 
 const LOCAL_VERSION  = require('../package.json').version
@@ -446,7 +446,7 @@ app.whenReady().then(() => {
   createWindow()
   initAccount(activeAccount())
   // Daily rotating backup per account (each skips if already done today)
-  for (const a of accounts.accounts) spawnPy([DB_BACKUP], null, { OV_DATA_DIR: dataDir(a) })
+  for (const a of accounts.accounts) spawnPy([DB_BACKUP], null, { OV_DATA_DIR: dataDir(a), OV_ACCOUNT: a.id })
 
   tray = new Tray(ICON_PNG)
   tray.setToolTip(`Open Vending v${LOCAL_VERSION}`)
@@ -517,7 +517,9 @@ function spawnPy(args, stdinData, extraEnv) {
       // in replacement product names) on the way into the DB
       // OV_REMOTE_* point picking_history and buffer_stock at the shared hosted
       // DB. Blank (the default) leaves every script on the local file as before.
-      env: { ...process.env, PYTHONNOUSERSITE: '1', PYTHONPATH: '', PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8', OV_DATA_DIR: dataDir(), OV_REMOTE_URL: settings.remoteUrl || process.env.OV_REMOTE_URL || '', OV_REMOTE_TOKEN: settings.remoteToken || process.env.OV_REMOTE_TOKEN || '', ...extraEnv }
+      // OV_ACCOUNT scopes the rows in those shared tables to one profile, so two
+      // accounts holding a same-named machine cannot overwrite each other.
+      env: { ...process.env, PYTHONNOUSERSITE: '1', PYTHONPATH: '', PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8', OV_DATA_DIR: dataDir(), OV_ACCOUNT: activeAccount().id, OV_REMOTE_URL: settings.remoteUrl || process.env.OV_REMOTE_URL || '', OV_REMOTE_TOKEN: settings.remoteToken || process.env.OV_REMOTE_TOKEN || '', ...extraEnv }
     })
     let out = ''
     if (stdinData !== null && stdinData !== undefined) {

@@ -15,6 +15,26 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))  # bundled python is embeddable: script dir is not on sys.path
 import remote_db
 
+BUFFER_DDL = """
+    CREATE TABLE IF NOT EXISTS buffer_stock (
+        account      TEXT NOT NULL DEFAULT 'dvends',
+        machine      TEXT NOT NULL,
+        lane_no      TEXT NOT NULL,
+        pid          TEXT,
+        normal_qty   INTEGER DEFAULT 0,
+        sembreak_qty INTEGER DEFAULT 0,
+        PRIMARY KEY (account, machine, lane_no)
+    )"""
+BUFFER_COLS = ["machine", "lane_no", "pid", "normal_qty", "sembreak_qty"]
+
+
+def ensure_buffer_table(conn):
+    """Create the table, then upgrade a pre-account-scoping one in place."""
+    conn.execute(BUFFER_DDL)
+    conn.commit()
+    remote_db.ensure_account_column(conn, "buffer_stock", BUFFER_DDL, BUFFER_COLS)
+
+
 WINDOW_DAYS = 30  # sales window for the daily average, anchored to newest sale_date
 
 
@@ -62,17 +82,7 @@ def _migrate_suggestions_table(conn):
 
 def cmd_init(db_path):
     shared = get_shared(db_path)
-    shared.execute("""
-        CREATE TABLE IF NOT EXISTS buffer_stock (
-            machine      TEXT NOT NULL,
-            lane_no      TEXT NOT NULL,
-            pid          TEXT,
-            normal_qty   INTEGER DEFAULT 0,
-            sembreak_qty INTEGER DEFAULT 0,
-            PRIMARY KEY (machine, lane_no)
-        )
-    """)
-    shared.commit()
+    ensure_buffer_table(shared)
     shared.close()
     conn = get_conn(db_path)
     conn.execute("""
@@ -115,7 +125,8 @@ def cmd_get(db_path):
     conn = get_shared(db_path)
     try:
         rows = conn.execute(
-            'SELECT machine, lane_no, pid, normal_qty, sembreak_qty FROM buffer_stock'
+            'SELECT machine, lane_no, pid, normal_qty, sembreak_qty '
+            'FROM buffer_stock WHERE account=?', (remote_db.ACCOUNT,)
         ).fetchall()
     except remote_db.RemoteError:
         raise            # unreachable shared DB is reported, never read as "no buffers set"
@@ -140,17 +151,13 @@ def cmd_set(db_path):
         print(json.dumps({'ok': True, 'saved': 0}))
         return
     conn = get_shared(db_path)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS buffer_stock (
-            machine TEXT NOT NULL, lane_no TEXT NOT NULL, pid TEXT,
-            normal_qty INTEGER DEFAULT 0, sembreak_qty INTEGER DEFAULT 0,
-            PRIMARY KEY (machine, lane_no)
-        )
-    """)
+    ensure_buffer_table(conn)
+    for r in rows:
+        r['account'] = remote_db.ACCOUNT
     conn.executemany(
-        """INSERT INTO buffer_stock (machine, lane_no, pid, normal_qty, sembreak_qty)
-           VALUES (:machine, :lane_no, :pid, :normal_qty, :sembreak_qty)
-           ON CONFLICT(machine, lane_no) DO UPDATE SET
+        """INSERT INTO buffer_stock (account, machine, lane_no, pid, normal_qty, sembreak_qty)
+           VALUES (:account, :machine, :lane_no, :pid, :normal_qty, :sembreak_qty)
+           ON CONFLICT(account, machine, lane_no) DO UPDATE SET
              pid=excluded.pid,
              normal_qty=excluded.normal_qty,
              sembreak_qty=excluded.sembreak_qty""",
@@ -210,10 +217,10 @@ def cmd_suggest(data_db, sales_detail_db, lead_days=1.0, sembreak_factor=0.5, mi
     # Python below, never joined in SQL — that is what lets them be split.
     shared = get_shared(data_db)
 
-    def read_grouped(sql, src=None):
+    def read_grouped(sql, src=None, params=None):
         out = {}
         try:
-            for m, pid, cnt in (src or cur).execute(sql, (start,)):
+            for m, pid, cnt in (src or cur).execute(sql, params or (start,)):
                 key = (alias.get(m, m), pid)
                 out[key] = out.get(key, 0) + (cnt or 0)
         except sqlite3.OperationalError:
@@ -235,13 +242,14 @@ def cmd_suggest(data_db, sales_detail_db, lead_days=1.0, sembreak_factor=0.5, mi
         "WHERE pid IS NOT NULL AND updated_at >= ? GROUP BY machine, pid"
     )
     # sell-out count and pick count per (machine, pid) inside the window
+    acct = (start, remote_db.ACCOUNT)
     oos_counts = read_grouped(
         "SELECT machine, product_id, SUM(out_of_stock) FROM picking_history "
-        "WHERE pick_date >= ? GROUP BY machine, product_id", shared
+        "WHERE pick_date >= ? AND account=? GROUP BY machine, product_id", shared, acct
     )
     pick_counts = read_grouped(
         "SELECT machine, product_id, COUNT(*) FROM picking_history "
-        "WHERE pick_date >= ? GROUP BY machine, product_id", shared
+        "WHERE pick_date >= ? AND account=? GROUP BY machine, product_id", shared, acct
     )
     # total shelf capacity per (machine, pid) — physical spec, stable over time
     lane_caps = read_grouped(
