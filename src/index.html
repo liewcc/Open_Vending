@@ -2018,7 +2018,12 @@ Replace it?`)
       }
 
       const bufferByMachine = buildBufferByMachine()
-      const list = window.api.getTodayPicks(lastFilePath, dateISO, currentPending, bufferByMachine)
+      // Same date rule as livePickList: only a FUTURE date deducts in-transit
+      // (planning view). On today a queued machine's own pending entry cancels
+      // its whole restock, which sank the badge to ~0% while the pick list
+      // still showed the full demand.
+      const pctPending = dateStr > todayStr ? currentPending : {}
+      const list = window.api.getTodayPicks(lastFilePath, dateISO, pctPending, bufferByMachine)
       document.getElementById('pick-count').textContent = `${list.length} machines to pick`
       currentPickList = list
 
@@ -2027,7 +2032,7 @@ Replace it?`)
 
       // In show-all mode, display every machine in the route plan
       const displayList = showAllMachines
-        ? window.api.getAllMachines(lastFilePath, currentPending, bufferByMachine)
+        ? window.api.getAllMachines(lastFilePath, pctPending, bufferByMachine)
         : list
 
       listEl.innerHTML = ''
