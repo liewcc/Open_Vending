@@ -2222,8 +2222,23 @@ Replace it?`)
     return true
   }
   function pickDetailSet(hdHtml, bodyHtml) {
+    // The header holds the search bar, so every re-render destroys it. Edit mode
+    // re-renders the same machine on its own (Sold window, Slow-% threshold —
+    // the latter fires its change on blur, i.e. the moment you click into the
+    // search box), which used to swallow the query and drop focus to <body>
+    // mid-typing. Carry the in-progress search across a same-machine re-render.
+    const prev = document.getElementById('pick-search-input')
+    const q = prev ? prev.value : ''
+    const hadFocus = prev === document.activeElement
+    const prevMach = document.querySelector('#pick-detail-hd .nm')?.textContent
     document.getElementById('pick-detail-hd').innerHTML = hdHtml || ''
     document.getElementById('pick-detail-body').innerHTML = bodyHtml || ''
+    const inp = document.getElementById('pick-search-input')
+    if (inp && q && document.querySelector('#pick-detail-hd .nm')?.textContent === prevMach) {
+      inp.value = q
+      filterPickTable(q)
+      if (hadFocus) inp.focus()
+    }
   }
   async function renderPickDetail(machine) {
     const detailEl = document.getElementById('pick-detail')
