@@ -2066,7 +2066,15 @@ Replace it?`)
         const mmode = window.api.modeOf(m.machine)
         const modeHtml = mmode === 'normal' ? '' : `<span class="pick-mode-badge ${mmode}" title="${mmode === 'short' ? 'Short break' : 'Sem Break'} mode">${mmode === 'short' ? '0' : 's'}</span>`
         row.innerHTML = `<span>${m.machine}</span>${wkHtml}${modeHtml}<span class="pick-badge ${badgeClass}">${badgeText}</span>`
-        row.onclick = () => { document.querySelectorAll('.pick-mach.active').forEach(e=>e.classList.remove('active')); row.classList.add('active'); renderPickDetail(m.machine) }
+        // Edit mode belongs to one machine: leave it (which saves it) before
+        // showing another, or its flags outlive its table and the next flush
+        // scrapes the wrong rows. Exiting rebuilds this list, so re-find the row.
+        row.onclick = async () => {
+          if (isEditMode && editMachine !== m.machine) await exitEditMode()
+          document.querySelectorAll('.pick-mach.active').forEach(e=>e.classList.remove('active'))
+          listEl.querySelector(`[data-machine="${m.machine}"]`)?.classList.add('active')
+          renderPickDetail(m.machine)
+        }
         listEl.appendChild(row)
       })
       if (currentDetailMachine) {
@@ -2351,8 +2359,8 @@ Replace it?`)
           tr.addEventListener('click', () => showChart(machine, tr.dataset.lane, `${machine} · Lane ${tr.dataset.lane}`))
         })
         document.getElementById('pick-detail-body').onscroll = null
-        currentDetailMachine = machine
       }
+      currentDetailMachine = machine
     } catch (err) {
       console.error(err)
       pickDetailSet('', `<div class="pick-empty" style="color:#e05c5c">Error loading detail: ${err.message || err}</div>`)
@@ -2600,7 +2608,9 @@ Replace it?`)
     const rows = []
     document.querySelectorAll('table.pick-tbl tbody tr').forEach(tr => {
       const tds = tr.querySelectorAll('td')
-      if (tds.length < 5) return
+      // Edit rows have 10 cells. Anything shorter is not the edit table (a
+      // read-only pick list has 7), and reading tds[7] off one throws.
+      if (tds.length < 10) return
       rows.push({ no: tds[0].textContent.trim(), productId: tr.dataset.pid || '', product: cleanProductName(tds[1]), bal: tds[3].textContent.trim(), lane: tds[4].textContent.trim(), restock: tds[7].textContent.trim(), replacement: tds[8]?.textContent.trim() || '', outOfStock: tr.classList.contains('pick-out'), fastMover: tr.classList.contains('pick-fast') })
     })
     return rows.length ? rows : null
