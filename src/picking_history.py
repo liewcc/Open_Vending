@@ -68,9 +68,11 @@ elif cmd == 'get-pending':
     if not (remote_db.enabled() or DB.exists()):
         print(json.dumps({})); sys.exit(0)
     conn = get_conn()
+    # Oldest queued first: the queue list keeps insertion order, so the team
+    # can see at a glance which machines were printed earlier.
     rows = conn.execute(
         "SELECT machine, lane_no, picked_qty FROM picking_history "
-        "WHERE status='pending' AND account=?", (ACCOUNT,)
+        "WHERE status='pending' AND account=? ORDER BY created_at, id", (ACCOUNT,)
     ).fetchall()
     conn.close()
     result = {}
@@ -87,7 +89,11 @@ elif cmd == 'get-pending-detail':
     rows = conn.execute(
         "SELECT machine, lane_no, product_id, product_name, picked_qty "
         "FROM picking_history WHERE status='pending' AND account=? "
-        "ORDER BY machine, CAST(lane_no AS INTEGER)", (ACCOUNT,)
+        # Machines in queue order (exports match the queue list), lanes in
+        # lane order within each machine. MIN(id) keeps a machine's rows
+        # together even when its insert batch straddles a second boundary.
+        "ORDER BY MIN(id) OVER (PARTITION BY machine), CAST(lane_no AS INTEGER)",
+        (ACCOUNT,)
     ).fetchall()
     conn.close()
     result = {}
