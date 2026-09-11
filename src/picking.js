@@ -397,9 +397,10 @@ function buildPickingList(reportRows, machine, pendingByLane, oosByLane, forecas
     const bufferQty = bufferCovered ? 0 : Math.min(bufferByLane[laneNo] || 0, bal);
     // forecast and positive buffer both cover lead-time sales, which free extra
     // space by refill time, so both ride ABOVE free space: ceiling = space +
-    // forecast + positive buffer
+    // forecast + positive buffer — but never past a full lane, since that is
+    // all the lane can physically hold even if it empties before the refill
     const withExtras = actualRestock + forecastQty + bufferQty;
-    const ceiling = space + forecastQty + Math.max(0, bufferQty);
+    const ceiling = Math.min(space + forecastQty + Math.max(0, bufferQty), laneSize);
     const finalRestock = Math.max(0, laneSize > 0 ? Math.min(withExtras, ceiling) : withExtras);
 
     visibleRows.push({
@@ -596,6 +597,17 @@ if (require.main === module) {
   const plLaneCap = buildPickingList(mockReportLaneCap, 'MachL', {}, {}, {}, false, { '1': 5 });
   assert.strictEqual(plLaneCap.rows[0].bufferQty, 5);        // bal 5 allows it
   assert.strictEqual(plLaneCap.rows[0].restock, 6);          // free space 1 + buffer 5
+
+  // ...but forecast + buffer together never push the load past a full lane
+  // (real case: KMS KK Canopus lane 28 — bal 5 / lane 7 / restock 2, buffer 5,
+  // Saturday forecast 2 gave 9 for a lane that holds 7)
+  const plOverfill = buildPickingList(
+    [['Machine','No.','Product ID','Product Name','Bal Qty','Lane Size','Restock'],
+     ['MachO', '28', 'P1', 'Milo', '5', '7', '2']],
+    'MachO', {}, {}, { P1: 2 }, false, { '28': 5 });
+  assert.strictEqual(plOverfill.rows[0].forecastQty, 2);
+  assert.strictEqual(plOverfill.rows[0].bufferQty, 5);
+  assert.strictEqual(plOverfill.rows[0].restock, 7);          // capped at lane size, not 2+2+5
 
   // negative (sem-break) buffer still reduces restock, floor at 0
   const plNeg = buildPickingList(mockReportLaneCap, 'MachL', {}, {}, {}, false, { '1': -5 });
