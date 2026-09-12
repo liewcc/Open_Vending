@@ -950,7 +950,7 @@
       <button id="btn-mode-short" class="pick-icon-btn restock-mode-btn" onclick="setRestockMode('short')" title="Short break — follow portal qty exactly">0</button>
       <button id="btn-mode-sembreak" class="pick-icon-btn restock-mode-btn" onclick="setRestockMode('sembreak')" title="Sem Break — negative buffer to draw down stock">−</button>
     </div>
-    <button id="btn-toggle-week" class="pick-icon-btn pick-flt-btn in-queue" onclick="toggleWeekBadges()" title="Show / hide day badges for machines with a list made this week (Mon–Sat)">Wk</button>
+    <button id="btn-toggle-week" class="pick-icon-btn pick-flt-btn in-queue" onclick="toggleWeekBadges()" title="Show / hide day badges for machines with a list made in the last 7 days">Wk</button>
     <button id="btn-show-all" class="pick-icon-btn" onclick="toggleShowAll()" title="Show all machines"><span class="icon">view_list</span></button>
     <button id="btn-queue-view" class="pick-icon-btn" onclick="showQueueView()" title="View Queue"><span class="icon">pending_actions</span></button>
   </div>
@@ -2004,17 +2004,16 @@ Replace it?`)
         itPanel.innerHTML = ''
       }
 
-      // Week badges: machines with any picking_history row in the week
-      // (Mon–Sat) containing the selected date. Purely derived — rolls over
-      // automatically on Monday, no storage, no cleanup.
+      // Day badges: machines with any picking_history row in the rolling 7 days
+      // ending on the selected date — not the calendar week, so Monday no
+      // longer wipes the badges; each new day simply pushes out the oldest one.
+      // 7 days is also the widest window where no weekday can appear twice.
       let weekDone = {}
       if (showWeekBadges) {
         const wd = new Date(dateStr + 'T12:00:00')
-        const dowW = (wd.getDay() + 6) % 7            // 0 = Mon
-        const mon = new Date(wd); mon.setDate(wd.getDate() - dowW)
-        const sat = new Date(mon); sat.setDate(mon.getDate() + 5)
+        const from = new Date(wd); from.setDate(wd.getDate() - 6)
         const fmtD = x => `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}`
-        weekDone = await window.api.getWeekSummary(fmtD(mon), fmtD(sat)) || {}
+        weekDone = await window.api.getWeekSummary(fmtD(from), fmtD(wd)) || {}
       }
 
       const bufferByMachine = buildBufferByMachine()
@@ -2061,8 +2060,11 @@ Replace it?`)
         }
         row.dataset.machine = m.machine
         const DAY_CH = ['一','二','三','四','五','六','日']
-        const wkDays = (weekDone[m.machine] || []).map(dt => DAY_CH[(new Date(dt + 'T12:00:00').getDay() + 6) % 7]).join(' ')
-        const wkHtml = wkDays ? `<span class="pick-week-badge">${wkDays}</span>` : ''
+        const wkDates = weekDone[m.machine] || []            // oldest first
+        const wkDays = wkDates.map(dt => DAY_CH[(new Date(dt + 'T12:00:00').getDay() + 6) % 7]).join(' ')
+        // The window now spans two calendar weeks, so the weekday alone no
+        // longer says which week it was — the dates go in the tooltip.
+        const wkHtml = wkDays ? `<span class="pick-week-badge" title="List made on ${wkDates.join(', ')}">${wkDays}</span>` : ''
         const mmode = window.api.modeOf(m.machine)
         const modeHtml = mmode === 'normal' ? '' : `<span class="pick-mode-badge ${mmode}" title="${mmode === 'short' ? 'Short break' : 'Sem Break'} mode">${mmode === 'short' ? '0' : 's'}</span>`
         row.innerHTML = `<span>${m.machine}</span>${wkHtml}${modeHtml}<span class="pick-badge ${badgeClass}">${badgeText}</span>`
@@ -2171,7 +2173,7 @@ Replace it?`)
     if (inp) { inp.value = ''; filterPickTable('') }
   }
 
-  let showWeekBadges = true   // sidebar: day badges for machines with a list made this week
+  let showWeekBadges = true   // sidebar: day badges for machines with a list made in the last 7 days
   function toggleWeekBadges() {
     showWeekBadges = !showWeekBadges
     document.getElementById('btn-toggle-week')?.classList.toggle('in-queue', showWeekBadges)
