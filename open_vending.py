@@ -200,6 +200,15 @@ def import_to_sqlite(xlsx_path):
     conn.commit()
     conn.close()
 
+    # forecast is derived from daily_sales, so it goes stale the moment the scan
+    # above adds a day. Rebuilt here (after the commit, on its own connection)
+    # rather than only on a manual CSV import, which left it months behind.
+    try:
+        import build_sales_forecast
+        build_sales_forecast.build(str(SQLITE_DB), str(SQLITE_DB))
+    except Exception as e:
+        status(f"forecast rebuild failed: {e}")
+
     # keep a persistent copy for next startup, then archive
     shutil.copy2(str(xlsx_path), str(DB_DIR / "last_report.xlsx"))
     tmp_dir = DB_DIR / "tmp"
