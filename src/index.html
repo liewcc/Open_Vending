@@ -2082,6 +2082,14 @@ Replace it?`)
       if (currentDetailMachine) {
         const activeRow = listEl.querySelector(`[data-machine="${currentDetailMachine}"]`)
         if (activeRow) activeRow.classList.add('active')
+        // The open machine's tick must follow the queue just reloaded above —
+        // deleting from the queue (or marking done) otherwise left it green.
+        const tick = document.getElementById('btn-queue-tick')
+        if (tick) {
+          const q = Object.keys(currentPending[currentDetailMachine] || {}).length > 0
+          tick.classList.toggle('in-queue', q)
+          tick.title = q ? 'Already in queue' : 'Add to Queue'
+        }
       } else {
         pickDetailSet('', '<div class="pick-empty">Select a machine to view its picking list.</div>')
       }
@@ -2340,7 +2348,7 @@ Replace it?`)
         const editByNo = {}
         if (savedView?.rows) savedView.rows.forEach(r => { editByNo[String(r.no)] = r })
         const hasEdit = savedView?.rows?.some(r => r.replacement)
-        let hdHtml = `<div class="pick-hd"><button class="pick-icon-btn" onclick="clearPickDetail()" title="Back to list"><span class="icon">home</span></button><div style="flex:1"><div class="nm">${machine}</div><div class="sub">Picking date ${dateStr} &nbsp;·&nbsp; Restock team ${team}</div></div><button id="btn-toggle-highbal" class="pick-icon-btn pick-flt-btn${showHighBal?' in-queue':''}" onclick="toggleHighBal()" title="Show / hide lanes with Bal &ge; 10">Bal&ge;10</button><button id="btn-toggle-zero" class="pick-icon-btn pick-flt-btn${showZeroRows?' in-queue':''}" onclick="toggleZeroRows()" title="Show / hide lanes with Restock = 0">R=0</button><button class="pick-icon-btn${hasEdit?' has-edit':''}" onclick="enterEditMode('${machine.replace(/'/g,"\\'")}')" title="Edit replacements"><span class="icon">edit</span></button><button class="pick-icon-btn" onclick="printCurrentMachine()" title="Print this machine"><span class="icon">picture_as_pdf</span></button><button class="pick-icon-btn${inQueue?' in-queue':''}" onclick="confirmAndQueuePrintCurrent()" title="${inQueue?'Already in queue':'Add to Queue'}"><span class="icon">check_box</span></button></div>`
+        let hdHtml = `<div class="pick-hd"><button class="pick-icon-btn" onclick="clearPickDetail()" title="Back to list"><span class="icon">home</span></button><div style="flex:1"><div class="nm">${machine}</div><div class="sub">Picking date ${dateStr} &nbsp;·&nbsp; Restock team ${team}</div></div><button id="btn-toggle-highbal" class="pick-icon-btn pick-flt-btn${showHighBal?' in-queue':''}" onclick="toggleHighBal()" title="Show / hide lanes with Bal &ge; 10">Bal&ge;10</button><button id="btn-toggle-zero" class="pick-icon-btn pick-flt-btn${showZeroRows?' in-queue':''}" onclick="toggleZeroRows()" title="Show / hide lanes with Restock = 0">R=0</button><button class="pick-icon-btn${hasEdit?' has-edit':''}" onclick="enterEditMode('${machine.replace(/'/g,"\\'")}')" title="Edit replacements"><span class="icon">edit</span></button><button class="pick-icon-btn" onclick="printCurrentMachine()" title="Print this machine"><span class="icon">picture_as_pdf</span></button><button id="btn-queue-tick" class="pick-icon-btn${inQueue?' in-queue':''}" onclick="confirmAndQueuePrintCurrent()" title="${inQueue?'Already in queue':'Add to Queue'}"><span class="icon">check_box</span></button></div>`
         hdHtml += `<div class="pick-search-bar"><input type="text" id="pick-search-input" placeholder="Search product…" oninput="filterPickTable(this.value)"><button onclick="clearPickSearch()">Clear</button></div>`
         let bodyHtml
         if (!pl.rows.length && !(pl.hiddenRows || []).length) { bodyHtml = '<div class="pick-empty">All lanes sufficiently stocked.</div>' }
@@ -2419,9 +2427,7 @@ Replace it?`)
     if (!savedOk(await window.api.savePicks({ replace_machines: [machine], picks }))) return
     const pendingRaw = await window.api.getPendingInTransit()
     currentPending = pendingRaw || {}
-    const qBtn = document.querySelector('#pick-detail .pick-hd .pick-icon-btn:last-child')
-    if (qBtn) { qBtn.classList.add('in-queue'); qBtn.title = 'Already in queue' }
-    await renderPicks()   // sidebar % must reflect the newly queued in-transit qty
+    await renderPicks()   // also lights the open machine's queue tick   // sidebar % must reflect the newly queued in-transit qty
   }
   // Keeps an already-queued machine in step with its latest saved edit: the
   // pending rows are replaced from the edit file, so the queue (and any
