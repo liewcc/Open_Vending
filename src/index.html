@@ -586,7 +586,7 @@
   .pick-mach:hover { background:#eef1f5; }
   .pick-mach.active { background:#fff; border:0.5px solid #185fa5; }
   .pick-badge { margin-left:auto; border-radius:8px; padding:1px 7px; font-size:9.5px; white-space:nowrap; }
-  .pick-week-badge{font-size:9.5px;color:#0e7490;background:#e0f2fe;border-radius:4px;padding:1px 5px;margin-right:5px;white-space:nowrap;flex-shrink:0}
+  .pick-week-badge{font-size:9.5px;color:#0e7490;background:#e0f2fe;border-radius:4px;padding:1px 4px;margin-right:5px;white-space:nowrap;flex-shrink:0;letter-spacing:1px;font-variant-numeric:tabular-nums}
   .pick-mode-badge{font-size:10px;font-weight:700;border-radius:4px;padding:0 5px;margin-right:5px;flex-shrink:0}
   .pick-mode-badge.short{color:#b45309;background:#fef3c7}
   .pick-mode-badge.sembreak{color:#b91c1c;background:#fee2e2}
@@ -2059,9 +2059,9 @@ Replace it?`)
           badgeText = m.reason==='25%' ? `${pctVal}%` : `${m.reason==='scheduled' ? 'Scheduled' : 'Daily'} (${pctVal}%)`
         }
         row.dataset.machine = m.machine
-        const DAY_CH = ['一','二','三','四','五','六','日']
         const wkDates = weekDone[m.machine] || []            // oldest first
-        const wkDays = wkDates.map(dt => DAY_CH[(new Date(dt + 'T12:00:00').getDay() + 6) % 7]).join(' ')
+        // Mon=1 … Sun=7; single digits need no separator, keeps the row narrow
+        const wkDays = wkDates.map(dt => (new Date(dt + 'T12:00:00').getDay() + 6) % 7 + 1).join('')
         // The window now spans two calendar weeks, so the weekday alone no
         // longer says which week it was — the dates go in the tooltip.
         const wkHtml = wkDays ? `<span class="pick-week-badge" title="List made on ${wkDates.join(', ')}">${wkDays}</span>` : ''
