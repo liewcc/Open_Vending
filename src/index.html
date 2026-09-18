@@ -2279,7 +2279,7 @@ Replace it?`)
           const savedNos = new Set(saved.rows.map(x => String(x.no)))
           rows = saved.rows.map(x => {
             const live = liveByNo[String(x.no)]
-            return { ...x, forecastQty: live ? live.forecastQty : 0, bufferQty: live ? live.bufferQty : 0, highBal: !!live?.highBal }
+            return { ...x, forecastQty: live ? live.forecastQty : 0, bufferQty: live ? live.bufferQty : 0, highBal: !!live?.highBal, liveRestock: live ? live.restock : x.restock }
           // pick_edit files saved before Bal>10 lanes became editable have none
           }).concat(rows.filter(x => !savedNos.has(String(x.no))))
         }
@@ -2320,7 +2320,7 @@ Replace it?`)
               ? `<td style="color:#c3c8d0">—</td>`
               : `<td class="buf-cell" contenteditable="true" spellcheck="false" data-lane="${laneNoStr}" title="Stored buffer setting — writes back to Buffer Stock on blur (applied today: ${r.bufferQty || 0})" onblur="onBufferCellEdit(this)">${bufStored || ''}</td>`
             const repl = r.replacement || ''
-            bodyHtml += `<tr class="${cls}" data-pid="${r.productId || ''}"><td>${r.no}</td><td contenteditable="true" spellcheck="false">${r.product}${tag}${ftag}${stag}${laneTypeBadge(r.productId)}</td>${soldTd}<td contenteditable="true" spellcheck="false">${r.bal}</td><td contenteditable="true" spellcheck="false">${r.lane}</td><td style="color:#6b7280">${r.forecastQty > 0 ? '+' + r.forecastQty : '—'}</td>${bufTd}<td contenteditable="true" spellcheck="false">${r.restock}</td><td contenteditable="true" spellcheck="false">${repl}</td><td style="white-space:nowrap">${sugBtn}<button class="pick-swap-btn" onclick="handleSwap(this)" title="Swap lane with another row">⇅</button></td></tr>`
+            bodyHtml += `<tr class="${cls}" data-pid="${r.productId || ''}" data-live-restock="${r.liveRestock ?? r.restock}"><td>${r.no}</td><td contenteditable="true" spellcheck="false">${r.product}${tag}${ftag}${stag}${laneTypeBadge(r.productId)}</td>${soldTd}<td contenteditable="true" spellcheck="false">${r.bal}</td><td contenteditable="true" spellcheck="false">${r.lane}</td><td style="color:#6b7280">${r.forecastQty > 0 ? '+' + r.forecastQty : '—'}</td>${bufTd}<td contenteditable="true" spellcheck="false">${r.restock}</td><td contenteditable="true" spellcheck="false">${repl}</td><td style="white-space:nowrap">${sugBtn}<button class="pick-swap-btn" onclick="handleSwap(this)" title="Swap lane with another row">⇅</button></td></tr>`
           })
           bodyHtml += '</tbody></table>'
         }
@@ -2359,7 +2359,7 @@ Replace it?`)
             const r = ed ? { ...live, bal: Number(ed.bal), lane: Number(ed.lane), restock: Number(ed.restock), outOfStock: Number(ed.bal) === 0 } : live
             const tag = r.outOfStock ? '<span class="pick-out-tag">OUT</span>' : ''
             const ftag = r.fastMover ? '<span class="pick-fast-tag">FAST</span>' : ''
-            const cls = [r.outOfStock?'pick-out':'', r.fastMover?'pick-fast':'', (Number(r.restock)||0)===0?'pick-zero':'', r.highBal?'pick-highbal':''].filter(Boolean).join(' ')
+            const cls = [r.outOfStock?'pick-out':'', r.fastMover?'pick-fast':'', (Number(r.restock)||0)===0?'pick-zero':'', r.highBal && !ed?.manual?'pick-highbal':''].filter(Boolean).join(' ')
             const bufCol = r.bufferQty ? `<span style="color:#0891b2">${r.bufferQty > 0 ? '+' : ''}${r.bufferQty}</span>` : '—'
             const replNote = ed?.replacement ? `<div class="pick-repl">→ ${ed.replacement}</div>` : ''
             bodyHtml += `<tr class="${cls}" data-lane="${r.no}"><td>${r.no}</td><td>${r.product}${tag}${ftag}${replNote}${laneTypeBadge(r.productId)}</td><td class="${r.outOfStock?'bal-out':''}">${r.bal}</td><td>${r.lane}</td><td style="color:#6b7280">${r.forecastQty > 0 ? '+' + r.forecastQty : '—'}</td><td>${bufCol}</td><td>${r.restock}</td></tr>`
@@ -2390,9 +2390,8 @@ Replace it?`)
     const saved = await loadPickEditFresh(machine, today)
     if (saved?.rows?.length) {
       return saved.rows
-        // exclude Bal >= 10 lanes (Step C) — collectEditRows saves them too;
-        // a keyed-in replacement always survives (product swap, even at restock 0)
-        .filter(r => r.replacement || ((Number(r.restock) || 0) > 0 && Number(r.bal) < 10))
+        // Bal >= 10 lanes only when hand-edited; a replacement always survives
+        .filter(isPrintableEditRow)
         .map(r => ({
           machine,
           lane_no:      String(r.no),
@@ -2617,6 +2616,11 @@ Replace it?`)
     await window.api.savePickEdit(machine, dateKey, rows)
     return { machine, date: dateKey, rows }
   }
+  // Bal >= 10 lanes (Step C) are saved too but only print when a replacement
+  // is keyed or their restock was hand-edited (manual); restock 0 never prints.
+  function isPrintableEditRow(r) {
+    return !!r.replacement || ((Number(r.restock) || 0) > 0 && (Number(r.bal) < 10 || !!r.manual))
+  }
   function collectEditRows() {
     const rows = []
     document.querySelectorAll('table.pick-tbl tbody tr').forEach(tr => {
@@ -2624,7 +2628,9 @@ Replace it?`)
       // Edit rows have 10 cells. Anything shorter is not the edit table (a
       // read-only pick list has 7), and reading tds[7] off one throws.
       if (tds.length < 10) return
-      rows.push({ no: tds[0].textContent.trim(), productId: tr.dataset.pid || '', product: cleanProductName(tds[1]), bal: tds[3].textContent.trim(), lane: tds[4].textContent.trim(), restock: tds[7].textContent.trim(), replacement: tds[8]?.textContent.trim() || '', outOfStock: tr.classList.contains('pick-out'), fastMover: tr.classList.contains('pick-fast') })
+      rows.push({ no: tds[0].textContent.trim(), productId: tr.dataset.pid || '', product: cleanProductName(tds[1]), bal: tds[3].textContent.trim(), lane: tds[4].textContent.trim(), restock: tds[7].textContent.trim(), replacement: tds[8]?.textContent.trim() || '', outOfStock: tr.classList.contains('pick-out'), fastMover: tr.classList.contains('pick-fast'),
+        // a Bal>=10 lane whose Restock was hand-keyed away from the report value prints anyway
+        manual: tr.classList.contains('pick-highbal') && tds[7].textContent.trim() !== String(tr.dataset.liveRestock) })
     })
     return rows.length ? rows : null
   }
@@ -3321,7 +3327,7 @@ function bufRenderMachineList(filter) {
       const saved = await loadPickEditFresh(m.machine, dateStr)
       let rows
       if (saved?.rows?.length) {
-        rows = saved.rows.filter(r => r.replacement || ((Number(r.restock) || 0) > 0 && Number(r.bal) < 10))
+        rows = saved.rows.filter(isPrintableEditRow)
       } else {
         const pl = window.api.getPickList(lastFilePath, m.machine, currentPending[m.machine] || {}, currentOos[m.machine] || {}, currentForecast[m.machine] || {}, window.api.modeOf(m.machine) !== 'normal', getBufferByLane(m.machine))
         rows = pl.rows.filter(r => (Number(r.restock) || 0) > 0).map(r => ({ ...r, replacement: '' }))
@@ -3351,7 +3357,7 @@ function bufRenderMachineList(filter) {
     const saved = await loadPickEditFresh(machine, dateStr)
     let rows
     if (saved?.rows?.length) {
-      rows = saved.rows.filter(r => r.replacement || ((Number(r.restock) || 0) > 0 && Number(r.bal) < 10))
+      rows = saved.rows.filter(isPrintableEditRow)
     } else {
       const oosByLane = (currentOos[machine]) || {}
       const todayStr = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` })()
